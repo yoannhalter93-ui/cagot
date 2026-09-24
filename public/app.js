@@ -1,5 +1,6 @@
 import { calculerTotaux } from "/calcul.js";
 import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
+import { demarrerPlateforme } from "/plateforme.js";
 
 // ---------------------------------------------------------------------------
 // Utilitaires
@@ -44,17 +45,58 @@ const local = {
   },
 };
 
+// Messages et confirmations dans la page (les fenêtres alert/confirm du navigateur
+// ne sont pas disponibles partout).
+function notifier(message, type = "info") {
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.setAttribute("role", "status");
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
 function erreur(message, err) {
   if (err) console.error(err);
-  alert(message);
+  notifier(message, "erreur");
+}
+
+function demander(message, { ok = "Confirmer", danger = false } = {}) {
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<div class="dialogue" role="dialog" aria-modal="true">
+      <p></p>
+      <div class="dialogue-actions">
+        <button type="button" class="annuler">Annuler</button>
+        <button type="button" class="valider ${danger ? "danger" : "btn-principal"}"></button>
+      </div></div>`;
+    fond.querySelector("p").textContent = message;
+    fond.querySelector(".valider").textContent = ok;
+    const fermer = (reponse) => {
+      fond.remove();
+      resolve(reponse);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(false);
+    fond.querySelector(".valider").onclick = () => fermer(true);
+    fond.onclick = (e) => e.target === fond && fermer(false);
+    document.body.appendChild(fond);
+    fond.querySelector(".valider").focus();
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const config = await fetch("/api/config").then((r) => r.json());
-$("#bandeau-demo").hidden = !config.demo;
-const sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+const plateforme = await demarrerPlateforme();
+const { sb } = plateforme;
+$("#bandeau-demo").hidden = !plateforme.demo;
+$("#bandeau-essai").hidden = !plateforme.essai;
+$("#carte-compte").hidden = plateforme.essai;
+$("#micro").hidden = !plateforme.dictee;
+$("#option-mains-libres").hidden = !plateforme.dictee;
+$("#imprimer").textContent = plateforme.libelleExport;
+$("#photo").closest("label").hidden = plateforme.photos === false;
 
 let utilisateur = null;
 let modeConnexion = "connexion";
@@ -106,7 +148,7 @@ $("#form-nouveau-mdp").onsubmit = async (e) => {
   e.preventDefault();
   const { error } = await sb.auth.updateUser({ password: e.target.mdp.value });
   if (error) return erreur(`Impossible de changer le mot de passe : ${error.message}`);
-  alert("Mot de passe modifié.");
+  notifier("Mot de passe modifié.");
   demarrerSession();
 };
 
@@ -190,7 +232,7 @@ let texteAvantDictee = "";
 
 function demarrerDictee({ envoiAuto = false } = {}) {
   if (!Reconnaissance) {
-    alert("La dictée vocale n'est pas disponible sur ce navigateur. Utilise Chrome (Android) ou Safari (iPhone), ou le micro du clavier.");
+    notifier("La dictée n'est pas disponible ici : utilise le micro de ton clavier.");
     return;
   }
   arreterParole();
@@ -210,7 +252,7 @@ function demarrerDictee({ envoiAuto = false } = {}) {
     $("#texte").value = texteAvantDictee + final + provisoire;
   };
   reco.onerror = (e) => {
-    if (e.error === "not-allowed") alert("Autorise l'accès au micro pour dicter.");
+    if (e.error === "not-allowed") erreur("Autorise l'accès au micro pour dicter.");
   };
   reco.onend = () => {
     $("#micro").classList.remove("ecoute");
@@ -337,19 +379,16 @@ async function envoyer() {
   const attente = bulle("ia attente", "Je réfléchis au chantier…");
 
   try {
-    const rep = await fetch("/api/discuter", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await jetonAcces()}` },
-      body: JSON.stringify({
+    const data = await plateforme.appelerIA(
+      {
         historique: conversation.historique.map(({ role, texte, brut, images }) => ({ role, texte, brut, images })),
         entreprise: { nom: profil.infos.nom, metiers: profil.metiers, franchise_tva: !!profil.infos.franchise_tva },
         tarifs: tarifs
           .filter((t) => t.designation)
           .map((t) => ({ corps_etat: t.corps_etat, designation: t.designation, unite: t.unite, prix: Number(t.prix) })),
-      }),
-    });
-    const data = await rep.json().catch(() => ({}));
-    if (!rep.ok) throw new Error(data.erreur || "Erreur serveur");
+      },
+      await jetonAcces(),
+    );
     attente.remove();
 
     const reponse = { role: "assistant", texte: data.message, questions: data.questions, brut: data.brut };
@@ -378,8 +417,8 @@ $("#saisie").onsubmit = (e) => {
   envoyer();
 };
 
-$("#nouveau").onclick = () => {
-  if (conversation.historique.length && !confirm("Commencer un nouveau chantier ? La conversation en cours sera effacée (les devis restent enregistrés).")) return;
+$("#nouveau").onclick = async () => {
+  if (conversation.historique.length && !(await demander("Commencer un nouveau chantier ? La conversation en cours sera effacée (les devis restent enregistrés).", { ok: "Nouveau chantier" }))) return;
   conversation = { historique: [], docId: null };
   sauverConversation();
   reafficherConversation();
@@ -651,11 +690,15 @@ function rendreDocument() {
 }
 
 $("#retour").onclick = () => afficherVue("documents");
-$("#imprimer").onclick = () => {
-  const avant = document.title;
-  document.title = `${docCourant.numero || "brouillon"} ${docCourant.contenu.client_nom || ""}`.trim();
-  window.print();
-  document.title = avant;
+$("#imprimer").onclick = async () => {
+  try {
+    await plateforme.exporterPdf({
+      titre: `${docCourant.numero || "brouillon"} ${docCourant.contenu.client_nom || ""}`.trim(),
+      document: $("#document"),
+    });
+  } catch (err) {
+    erreur("Export impossible.", err);
+  }
 };
 
 $("#partager").onclick = async () => {
@@ -664,20 +707,12 @@ $("#partager").onclick = async () => {
   const nom = d.type === "facture" ? "la facture" : "le devis";
   const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
   const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero ?? ""} – ${d.contenu.titre}`;
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: sujet, text: texte });
-      if (d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
-      return;
-    } catch (err) {
-      if (err.name === "AbortError") return;
-    }
-  }
-  location.href = `mailto:?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(`${texte}\n\n(Pense à joindre le PDF via « PDF / Imprimer ».)`)}`;
+  const envoye = await plateforme.partager({ sujet, texte, notifier });
+  if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
 
 $("#en-facture").onclick = async () => {
-  if (!confirm("Créer une facture (brouillon) à partir de ce devis ?")) return;
+  if (!(await demander("Créer une facture (brouillon) à partir de ce devis ?", { ok: "Créer la facture" }))) return;
   const contenu = { ...structuredClone(docCourant.contenu), hypotheses: [], devis_numero: docCourant.numero };
   const { data, error } = await sb
     .from("documents")
@@ -690,15 +725,15 @@ $("#en-facture").onclick = async () => {
 };
 
 $("#emettre").onclick = async () => {
-  if (!confirm("Émettre la facture ? Elle recevra son numéro définitif et ne pourra plus être modifiée.")) return;
+  if (!(await demander("Émettre la facture ? Elle recevra son numéro définitif et ne pourra plus être modifiée.", { ok: "Émettre" }))) return;
   const { data, error } = await sb.rpc("emettre_facture", { p_id: docCourant.id });
   if (error) return erreur("Émission impossible.", error);
   docCourant = data;
   rendreDocument();
 };
 
-$("#payee").onclick = () => {
-  if (confirm("Marquer cette facture comme payée ?")) changerStatut("payee");
+$("#payee").onclick = async () => {
+  if (await demander("Marquer cette facture comme payée ?", { ok: "Marquer payée" })) changerStatut("payee");
 };
 
 $("#modifier-ia").onclick = () => {
@@ -721,7 +756,7 @@ $("#modifier-ia").onclick = () => {
 };
 
 $("#supprimer").onclick = async () => {
-  if (!confirm(`Supprimer définitivement ${docCourant.numero || "ce brouillon"} ?`)) return;
+  if (!(await demander(`Supprimer définitivement ${docCourant.numero || "ce brouillon"} ?`, { ok: "Supprimer", danger: true }))) return;
   const { error } = await sb.from("documents").delete().eq("id", docCourant.id);
   if (error) return erreur("Suppression impossible.", error);
   if (conversation.docId === docCourant.id) {
@@ -758,7 +793,7 @@ $("#form-entreprise").onsubmit = async (ev) => {
   const { error } = await sb.from("entreprises").upsert({ user_id: utilisateur.id, infos, metiers, updated_at: new Date().toISOString() });
   if (error) return erreur("Informations non enregistrées.", error);
   profil = { infos, metiers };
-  alert("Informations enregistrées.");
+  notifier("Informations enregistrées.");
 };
 
 function optionsCorps(selection) {

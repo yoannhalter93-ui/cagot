@@ -43,12 +43,22 @@ pour tester l'interface.
 Sur téléphone : ouvre l'adresse du serveur dans Chrome (Android) ou Safari (iPhone), puis
 « Ajouter à l'écran d'accueil ». La dictée vocale demande une connexion **HTTPS** (ou localhost).
 
+## Version d'essai sur claude.ai
+
+`npm run essai` construit `dist/cagot-essai.html`, une page unique publiable sur claude.ai :
+l'IA passe par le compte Claude de la personne (pas de clé API), les données sont gardées dans la
+base privée de la page. Limites de cette version : dictée via le micro du clavier (le micro est bloqué
+dans ces pages), document téléchargé en HTML puis « Imprimer → PDF » depuis le navigateur.
+Le fichier `public/plateforme.js` (serveur) y est remplacé par `scripts/essai/plateforme-essai.js`.
+
 ## Organisation du code
 
 | Fichier | Rôle |
 |---|---|
 | `server.js` | Serveur Express : API `/api/discuter`, fichiers de l'interface |
-| `src/ia.js` | Prompt et appel à Claude (sortie JSON structurée : questions ou devis) |
+| `src/ia.js` | Appel à Claude côté serveur (sortie JSON structurée : questions ou devis) |
+| `src/prompt.js` | Instructions de l'IA (partagées serveur / version d'essai) |
+| `public/plateforme.js` | Accès aux données (Supabase), à l'IA, export et partage |
 | `src/calcul.js` | Calcul des totaux HT / TVA / TTC (partagé serveur + navigateur) |
 | `src/corps-etat.js` | Corps d'état et points à vérifier par l'IA |
 | `supabase/migrations/` | Schéma de la base, règles de sécurité (RLS), numérotation des factures |

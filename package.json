@@ -1,13 +1,14 @@
 {
   "name": "cagot",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Devis et factures pour les artisans du bâtiment, rédigés par l'IA à partir de notes ou d'une dictée",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "essai": "node scripts/construire-essai.mjs"
   },
   "engines": {
     "node": ">=20"

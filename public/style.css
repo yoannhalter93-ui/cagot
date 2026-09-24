@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bleu: #1f4e79;
   --bleu-clair: #e8f0f8;
   --fond: #f4f6f8;
@@ -7,6 +8,11 @@
   --bord: #d7dde4;
   --rouge: #b3261e;
   --blanc: #fff;
+  --surface: #fff;
+  --jaune: #fff4d6;
+  --jaune-texte: #6a4b00;
+  --estime: #fff8db;
+  --section: #e8f0f8;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--texte);
 }
@@ -16,7 +22,7 @@ body { margin: 0; background: var(--fond); }
 button, input, textarea { font: inherit; }
 
 .barre {
-  position: sticky; top: 0; z-index: 10;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 16px; background: var(--bleu); color: var(--blanc);
 }
@@ -27,7 +33,7 @@ button, input, textarea { font: inherit; }
 }
 .barre nav button.actif { background: rgba(255,255,255,.15); color: var(--blanc); font-weight: 600; }
 
-.bandeau { background: #fff4d6; color: #6a4b00; padding: 8px 16px; font-size: .9rem; }
+.bandeau { background: var(--jaune); color: var(--jaune-texte); padding: 8px 16px; font-size: .9rem; }
 
 .vue[hidden] { display: none !important; }
 .vue { max-width: 900px; margin: 0 auto; padding: 16px; }
@@ -39,7 +45,7 @@ button, input, textarea { font: inherit; }
   max-width: 88%; padding: 10px 14px; border-radius: 14px; line-height: 1.4;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.bulle.ia { background: var(--blanc); border: 1px solid var(--bord); align-self: flex-start; }
+.bulle.ia { background: var(--surface); border: 1px solid var(--bord); align-self: flex-start; }
 .bulle.moi { background: var(--bleu); color: var(--blanc); align-self: flex-end; }
 .bulle.erreur { background: #fde8e7; color: var(--rouge); align-self: center; }
 .bulle ol { margin: 6px 0 0; padding-left: 20px; white-space: normal; }
@@ -56,11 +62,12 @@ button, input, textarea { font: inherit; }
 }
 .saisie textarea {
   flex: 1; min-width: 0; resize: vertical; padding: 10px; border-radius: 12px; border: 1px solid var(--bord);
+  background: var(--surface); color: var(--texte);
 }
 .btn-icone {
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--bord);
-  background: var(--blanc); font-size: 1.2rem; cursor: pointer; flex: none;
+  background: var(--surface); font-size: 1.2rem; cursor: pointer; flex: none;
 }
 #micro.ecoute { background: var(--rouge); border-color: var(--rouge); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { transform: scale(1.08); } }
@@ -73,16 +80,16 @@ button, input, textarea { font: inherit; }
 .lien { background: none; border: 0; color: var(--bleu); text-decoration: underline; cursor: pointer; padding: 6px 0; }
 
 /* --- Listes & cartes --- */
-.carte { background: var(--blanc); border: 1px solid var(--bord); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+.carte { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
 .carte h2 { margin-top: 0; font-size: 1.1rem; }
 .carte label { display: block; margin-bottom: 10px; font-size: .9rem; color: var(--gris); }
 .carte label input:not([type=checkbox]), .carte label textarea {
-  display: block; width: 100%; margin-top: 4px; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; color: var(--texte);
+  display: block; width: 100%; margin-top: 4px; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; color: var(--texte); background: var(--surface);
 }
 .aide { color: var(--gris); font-size: .9rem; }
 .element-liste {
   display: flex; justify-content: space-between; gap: 12px; align-items: center;
-  background: var(--blanc); border: 1px solid var(--bord); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
 }
 .element-liste small { color: var(--gris); display: block; }
 .pastille { font-size: .75rem; padding: 2px 8px; border-radius: 99px; background: var(--bleu-clair); color: var(--bleu); font-weight: 600; }
@@ -90,21 +97,24 @@ button, input, textarea { font: inherit; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .actions button:not(.lien) {
-  background: var(--blanc); border: 1px solid var(--bord); border-radius: 10px; padding: 8px 12px; cursor: pointer;
+  background: var(--surface); color: var(--texte); border: 1px solid var(--bord); border-radius: 10px; padding: 8px 12px; cursor: pointer;
 }
 .actions button.danger { color: var(--rouge); }
-#deconnexion { background: var(--blanc); border: 1px solid var(--bord); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
-.hypotheses { background: #fff4d6; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: .9rem; }
+#deconnexion { color: var(--texte); background: var(--surface); border: 1px solid var(--bord); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+.hypotheses { background: var(--jaune); color: var(--jaune-texte); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: .9rem; }
 .hypotheses ul { margin: 4px 0 0; padding-left: 20px; }
 
 .tarifs { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .tarifs td, .tarifs th { padding: 4px; text-align: left; }
-.tarifs input { width: 100%; padding: 6px; border: 1px solid var(--bord); border-radius: 6px; }
+.tarifs input { width: 100%; padding: 6px; border: 1px solid var(--bord); border-radius: 6px; background: var(--surface); color: var(--texte); }
 .tarifs td:nth-child(2) { width: 80px; }
 .tarifs td:nth-child(3) { width: 80px; }
 
 /* --- Document devis / facture (format A4) --- */
 .document {
+  /* Toujours une feuille blanche, même en thème sombre */
+  --texte: #1c2430; --gris: #6b7684; --bord: #d7dde4; --bleu-clair: #e8f0f8; --surface: #fff;
+  color: var(--texte); color-scheme: light;
   background: var(--blanc); border: 1px solid var(--bord); border-radius: 4px;
   padding: 28px; font-size: 13px; line-height: 1.4; overflow-x: auto;
 }
@@ -167,3 +177,32 @@ button, input, textarea { font: inherit; }
 .doc-table tr.estime td { background: #fff8db; }
 .badge-estime { font-size: 10px; font-weight: 600; color: #6a4b00; background: #ffe9a8; border-radius: 99px; padding: 1px 6px; }
 @media print { .doc-table tr.estime td { background: none; } }
+
+/* --- Messages et confirmations --- */
+.toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 50;
+  max-width: calc(100% - 32px); background: var(--texte); color: var(--fond); padding: 10px 16px; border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.2);
+}
+.toast.erreur { background: var(--rouge); color: #fff; }
+.dialogue-fond { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.4); display: grid; place-items: center; padding: 16px; }
+.dialogue { background: var(--surface); color: var(--texte); border-radius: 14px; padding: 18px; max-width: 380px; width: 100%; }
+.dialogue p { margin-top: 0; line-height: 1.4; }
+.dialogue-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialogue-actions button { border-radius: 10px; padding: 8px 14px; border: 1px solid var(--bord); background: var(--surface); color: var(--texte); cursor: pointer; }
+.dialogue-actions .danger { background: var(--rouge); border-color: var(--rouge); color: #fff; }
+.dialogue-actions .btn-principal { background: var(--bleu); border-color: var(--bleu); color: #fff; }
+
+/* --- Thème sombre (l'aperçu du document reste blanc, comme sur papier) --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --fond: #11161d; --texte: #e3e8ee; --gris: #9aa6b4; --bord: #2c3642; --surface: #1a212b;
+    --bleu-clair: #1c2c3d; --jaune: #3a3017; --jaune-texte: #f1d58a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fond: #11161d; --texte: #e3e8ee; --gris: #9aa6b4; --bord: #2c3642; --surface: #1a212b;
+  --bleu-clair: #1c2c3d; --jaune: #3a3017; --jaune-texte: #f1d58a;
+}
