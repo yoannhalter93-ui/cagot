@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f4e79">
+  <meta name="referrer" content="no-referrer">
   <title>Cagot – Devis & Factures</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
@@ -11,7 +12,7 @@
 <body>
   <header class="barre no-print">
     <h1>Cagot</h1>
-    <nav>
+    <nav id="navigation" hidden>
       <button data-vue="chantier" class="actif">Chantier</button>
       <button data-vue="documents">Documents</button>
       <button data-vue="parametres">Réglages</button>
@@ -22,8 +23,33 @@
     Mode démo : aucune clé API configurée, l'IA renvoie un exemple fixe.
   </div>
 
+  <!-- ===== Connexion ===== -->
+  <main id="vue-connexion" class="vue" hidden>
+    <form id="form-connexion" class="carte connexion">
+      <h2 id="titre-connexion">Connexion</h2>
+      <p class="aide">Tes devis et factures sont sauvegardés en ligne et protégés : toi seul y as accès.</p>
+      <label>E-mail <input name="email" type="email" autocomplete="email" required></label>
+      <label id="champ-mdp">Mot de passe <input name="mdp" type="password" autocomplete="current-password" minlength="10"></label>
+      <p id="message-connexion" class="message" hidden></p>
+      <button id="btn-connexion" class="btn-principal">Se connecter</button>
+      <div class="liens-connexion">
+        <button type="button" class="lien" id="vers-inscription">Créer un compte</button>
+        <button type="button" class="lien" id="vers-oubli">Mot de passe oublié</button>
+      </div>
+    </form>
+  </main>
+
+  <!-- ===== Nouveau mot de passe (après lien reçu par e-mail) ===== -->
+  <main id="vue-nouveau-mdp" class="vue" hidden>
+    <form id="form-nouveau-mdp" class="carte connexion">
+      <h2>Nouveau mot de passe</h2>
+      <label>Nouveau mot de passe (10 caractères minimum) <input name="mdp" type="password" autocomplete="new-password" minlength="10" required></label>
+      <button class="btn-principal">Enregistrer</button>
+    </form>
+  </main>
+
   <!-- ===== Vue chantier : conversation avec l'IA ===== -->
-  <main id="vue-chantier" class="vue">
+  <main id="vue-chantier" class="vue" hidden>
     <div id="fil" class="fil">
       <div class="bulle ia">Salut ! Décris-moi le chantier : dicte-le avec le micro 🎤, tape tes notes, ou prends en photo tes notes papier 📷. Je te pose des questions s'il me manque quelque chose, puis je rédige le devis.</div>
     </div>
@@ -34,7 +60,7 @@
       <label class="btn-icone" title="Photo de mes notes">
         📷<input id="photo" type="file" accept="image/*" capture="environment" multiple hidden>
       </label>
-      <textarea id="texte" rows="2" placeholder="Ex : chambre 3,50 × 4,20, hauteur 2,50, papier peint à enlever, ratisser, poncer, peindre murs et plafond…"></textarea>
+      <textarea id="texte" rows="2" placeholder="Ex : salle de bain 2 × 2,50, tout casser, douche italienne, carrelage sol et murs, WC suspendu…"></textarea>
       <button type="button" id="micro" class="btn-icone" title="Dicter">🎤</button>
       <button type="submit" id="envoyer" class="btn-principal">Envoyer</button>
     </form>
@@ -55,10 +81,13 @@
       <button id="retour" class="lien">← Retour</button>
       <button id="imprimer">PDF / Imprimer</button>
       <button id="partager">Envoyer</button>
-      <button id="en-facture">Transformer en facture</button>
+      <button id="en-facture">Créer la facture</button>
+      <button id="emettre" class="btn-principal">Émettre la facture</button>
+      <button id="payee">Marquer payée</button>
       <button id="modifier-ia">Modifier avec l'IA</button>
       <button id="supprimer" class="danger">Supprimer</button>
     </div>
+    <div id="info-statut" class="info no-print" hidden></div>
     <div id="hypotheses" class="hypotheses no-print" hidden></div>
     <article id="document" class="document"></article>
   </main>
@@ -67,36 +96,43 @@
   <main id="vue-parametres" class="vue" hidden>
     <form id="form-entreprise" class="carte">
       <h2>Mon entreprise</h2>
-      <label>Nom / raison sociale <input name="nom"></label>
-      <label>Métier <input name="metier" placeholder="Peintre, plaquiste, carreleur…"></label>
-      <label>Adresse <textarea name="adresse" rows="2"></textarea></label>
-      <label>Téléphone <input name="telephone" type="tel"></label>
-      <label>E-mail <input name="email" type="email"></label>
-      <label>SIRET <input name="siret"></label>
-      <label>N° TVA intracommunautaire <input name="tva_intra"></label>
+      <label>Nom / raison sociale <input name="nom" maxlength="200"></label>
+      <label>Adresse <textarea name="adresse" rows="2" maxlength="500"></textarea></label>
+      <label>Téléphone <input name="telephone" type="tel" maxlength="30"></label>
+      <label>E-mail <input name="email" type="email" maxlength="200"></label>
+      <label>SIRET <input name="siret" maxlength="20"></label>
+      <label>N° TVA intracommunautaire <input name="tva_intra" maxlength="20"></label>
       <label><input type="checkbox" name="franchise_tva"> Auto-entrepreneur (TVA non applicable, art. 293 B du CGI)</label>
-      <label>Assurance décennale (assureur, n° de contrat, zone) <textarea name="assurance" rows="2"></textarea></label>
-      <label>IBAN (affiché sur les factures) <input name="iban"></label>
-      <label>Validité des devis (jours) <input name="validite" type="number" value="30"></label>
-      <label>Acompte demandé à la signature (%) <input name="acompte" type="number" value="30"></label>
-      <label>Délai de paiement des factures (jours) <input name="delai_paiement" type="number" value="30"></label>
+      <label>Assurance décennale (assureur, n° de contrat, zone) <textarea name="assurance" rows="2" maxlength="500"></textarea></label>
+      <label>IBAN (affiché sur les factures) <input name="iban" maxlength="40"></label>
+      <label>Validité des devis (jours) <input name="validite" type="number" min="1" value="30"></label>
+      <label>Acompte demandé à la signature (%) <input name="acompte" type="number" min="0" max="100" value="30"></label>
+      <label>Délai de paiement des factures (jours) <input name="delai_paiement" type="number" min="0" value="30"></label>
+
+      <h2>Mes métiers</h2>
+      <p class="aide">L'IA te prévient quand des travaux sortent de tes métiers (sous-traitance).</p>
+      <div id="liste-metiers" class="metiers"></div>
+
       <button class="btn-principal">Enregistrer</button>
     </form>
 
     <div class="carte">
       <h2>Ma grille de prix (HT)</h2>
-      <p class="aide">L'IA chiffre en priorité avec ces prix. Mets les tiens pour des devis justes.</p>
-      <table id="table-tarifs" class="tarifs">
-        <thead><tr><th>Prestation</th><th>Unité</th><th>Prix €</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <p class="aide">L'IA chiffre avec tes prix. Quand un prix manque, elle l'estime et le signale sur le devis : tu peux alors l'ajouter à ta grille en un clic.</p>
+      <div id="grille-tarifs"></div>
       <div class="actions">
-        <button id="ajouter-tarif">+ Ajouter</button>
-        <button id="reinit-tarifs" class="lien">Remettre les prix par défaut</button>
+        <button id="ajouter-tarif">+ Ajouter un prix</button>
       </div>
+    </div>
+
+    <div class="carte">
+      <h2>Mon compte</h2>
+      <p class="aide">Connecté en tant que <strong id="email-compte"></strong></p>
+      <button id="deconnexion">Se déconnecter</button>
     </div>
   </main>
 
+  <script src="/vendor/supabase.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

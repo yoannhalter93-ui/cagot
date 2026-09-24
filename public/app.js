@@ -1,41 +1,5 @@
 import { calculerTotaux } from "/calcul.js";
-
-// ---------------------------------------------------------------------------
-// Stockage local (MVP : tout reste sur le téléphone)
-// ---------------------------------------------------------------------------
-const stock = {
-  lire(cle, defaut) {
-    try {
-      const v = localStorage.getItem(`cagot.${cle}`);
-      return v === null ? defaut : JSON.parse(v);
-    } catch {
-      return defaut;
-    }
-  },
-  ecrire(cle, valeur) {
-    try {
-      localStorage.setItem(`cagot.${cle}`, JSON.stringify(valeur));
-    } catch (e) {
-      alert("Impossible d'enregistrer sur cet appareil (mémoire pleine ?).");
-      console.error(e);
-    }
-  },
-};
-
-let tarifsParDefaut = [];
-const entreprise = () => stock.lire("entreprise", { validite: 30, acompte: 30, delai_paiement: 30 });
-const tarifs = () => stock.lire("tarifs", null) ?? tarifsParDefaut;
-const documents = () => stock.lire("documents", []);
-const sauverDocuments = (docs) => stock.ecrire("documents", docs);
-
-function prochainNumero(type) {
-  const annee = new Date().getFullYear();
-  const compteurs = stock.lire("compteurs", {});
-  const cle = `${type}-${annee}`;
-  compteurs[cle] = (compteurs[cle] ?? 0) + 1;
-  stock.ecrire("compteurs", compteurs);
-  return `${type === "devis" ? "DEV" : "FAC"}-${annee}-${String(compteurs[cle]).padStart(3, "0")}`;
-}
+import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 
 // ---------------------------------------------------------------------------
 // Utilitaires
@@ -52,6 +16,156 @@ const ajouterJours = (iso, jours) => {
   d.setDate(d.getDate() + Number(jours || 0));
   return d.toISOString();
 };
+
+// Préférences de l'appareil uniquement (voix, brouillon de conversation).
+// Les devis, factures, prix et infos entreprise sont dans la base en ligne.
+const local = {
+  lire(cle, defaut) {
+    try {
+      const v = localStorage.getItem(`cagot.${cle}`);
+      return v === null ? defaut : JSON.parse(v);
+    } catch {
+      return defaut;
+    }
+  },
+  ecrire(cle, valeur) {
+    try {
+      localStorage.setItem(`cagot.${cle}`, JSON.stringify(valeur));
+    } catch {
+      /* stockage local indisponible : sans conséquence */
+    }
+  },
+  effacer(cle) {
+    try {
+      localStorage.removeItem(`cagot.${cle}`);
+    } catch {
+      /* idem */
+    }
+  },
+};
+
+function erreur(message, err) {
+  if (err) console.error(err);
+  alert(message);
+}
+
+// ---------------------------------------------------------------------------
+// Connexion (Supabase Auth)
+// ---------------------------------------------------------------------------
+const config = await fetch("/api/config").then((r) => r.json());
+$("#bandeau-demo").hidden = !config.demo;
+const sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+
+let utilisateur = null;
+let modeConnexion = "connexion";
+
+function afficherModeConnexion(mode) {
+  modeConnexion = mode;
+  const titres = { connexion: "Connexion", inscription: "Créer un compte", oubli: "Mot de passe oublié" };
+  const boutons = { connexion: "Se connecter", inscription: "Créer mon compte", oubli: "Recevoir un lien par e-mail" };
+  $("#titre-connexion").textContent = titres[mode];
+  $("#btn-connexion").textContent = boutons[mode];
+  $("#champ-mdp").hidden = mode === "oubli";
+  $("#form-connexion [name=mdp]").required = mode !== "oubli";
+  $("#form-connexion [name=mdp]").autocomplete = mode === "inscription" ? "new-password" : "current-password";
+  $("#vers-inscription").textContent = mode === "connexion" ? "Créer un compte" : "J'ai déjà un compte";
+  $("#message-connexion").hidden = true;
+}
+$("#vers-inscription").onclick = () => afficherModeConnexion(modeConnexion === "connexion" ? "inscription" : "connexion");
+$("#vers-oubli").onclick = () => afficherModeConnexion("oubli");
+
+function messageConnexion(texte) {
+  $("#message-connexion").textContent = texte;
+  $("#message-connexion").hidden = false;
+}
+
+$("#form-connexion").onsubmit = async (e) => {
+  e.preventDefault();
+  const email = e.target.email.value.trim();
+  const password = e.target.mdp.value;
+  $("#btn-connexion").disabled = true;
+  try {
+    if (modeConnexion === "connexion") {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) messageConnexion("E-mail ou mot de passe incorrect (ou compte pas encore confirmé).");
+    } else if (modeConnexion === "inscription") {
+      if (password.length < 10) return messageConnexion("Le mot de passe doit faire au moins 10 caractères.");
+      const { error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin } });
+      if (error) messageConnexion(`Inscription impossible : ${error.message}`);
+      else messageConnexion("Compte créé ! Clique sur le lien reçu par e-mail pour l'activer, puis connecte-toi.");
+    } else {
+      await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin });
+      messageConnexion("Si ce compte existe, un e-mail avec un lien pour changer le mot de passe vient d'être envoyé.");
+    }
+  } finally {
+    $("#btn-connexion").disabled = false;
+  }
+};
+
+$("#form-nouveau-mdp").onsubmit = async (e) => {
+  e.preventDefault();
+  const { error } = await sb.auth.updateUser({ password: e.target.mdp.value });
+  if (error) return erreur(`Impossible de changer le mot de passe : ${error.message}`);
+  alert("Mot de passe modifié.");
+  demarrerSession();
+};
+
+$("#deconnexion").onclick = async () => {
+  if (utilisateur) local.effacer(`conversation.${utilisateur.id}`);
+  await sb.auth.signOut();
+};
+
+sb.auth.onAuthStateChange((evenement, session) => {
+  // Laisser la main à l'appli hors du callback (recommandation Supabase).
+  setTimeout(() => {
+    if (evenement === "PASSWORD_RECOVERY") return afficherVue("nouveau-mdp");
+    if (session?.user) {
+      if (utilisateur?.id !== session.user.id) {
+        utilisateur = session.user;
+        demarrerSession();
+      }
+    } else {
+      utilisateur = null;
+      $("#navigation").hidden = true;
+      afficherModeConnexion("connexion");
+      afficherVue("connexion");
+    }
+  }, 0);
+});
+
+async function jetonAcces() {
+  const { data } = await sb.auth.getSession();
+  return data.session?.access_token;
+}
+
+// ---------------------------------------------------------------------------
+// Données de l'artisan
+// ---------------------------------------------------------------------------
+let profil = { infos: { validite: 30, acompte: 30, delai_paiement: 30 }, metiers: [] };
+let tarifs = [];
+
+async function chargerProfil() {
+  const [ent, tar] = await Promise.all([
+    sb.from("entreprises").select("infos, metiers").maybeSingle(),
+    sb.from("tarifs").select("*").order("corps_etat").order("designation"),
+  ]);
+  if (ent.error || tar.error) throw ent.error || tar.error;
+  if (ent.data) profil = { infos: { ...profil.infos, ...ent.data.infos }, metiers: ent.data.metiers ?? [] };
+  tarifs = tar.data;
+}
+
+async function demarrerSession() {
+  $("#navigation").hidden = false;
+  $("#email-compte").textContent = utilisateur.email;
+  try {
+    await chargerProfil();
+  } catch (err) {
+    erreur("Impossible de charger tes données. Vérifie ta connexion internet.", err);
+  }
+  conversation = local.lire(`conversation.${utilisateur.id}`, { historique: [], docId: null });
+  reafficherConversation();
+  afficherVue(profil.infos.nom ? "chantier" : "parametres");
+}
 
 // ---------------------------------------------------------------------------
 // Navigation
@@ -127,12 +241,12 @@ function arreterParole() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
-const prefs = stock.lire("prefs", { voix: true, mainsLibres: false });
+const prefs = local.lire("prefs", { voix: true, mainsLibres: false });
 $("#voix").checked = prefs.voix;
 $("#mains-libres").checked = prefs.mainsLibres;
 $("#voix").onchange = $("#mains-libres").onchange = () => {
   if ($("#mains-libres").checked) $("#voix").checked = true;
-  stock.ecrire("prefs", { voix: $("#voix").checked, mainsLibres: $("#mains-libres").checked });
+  local.ecrire("prefs", { voix: $("#voix").checked, mainsLibres: $("#mains-libres").checked });
 };
 
 // ---------------------------------------------------------------------------
@@ -166,15 +280,19 @@ $("#photo").onchange = async (e) => {
 // ---------------------------------------------------------------------------
 // Conversation avec l'IA
 // ---------------------------------------------------------------------------
-// Les photos restent en mémoire pendant la session mais ne sont pas stockées (trop lourdes).
-let conversation = stock.lire("conversation", { historique: [], docId: null });
+// Les photos restent en mémoire pendant la session mais ne sont pas sauvegardées (trop lourdes).
+let conversation = { historique: [], docId: null };
+
+const historiqueSansPhotos = (historique) =>
+  historique.map(({ images, ...m }) =>
+    images?.length ? { ...m, texte: `${m.texte}\n[${images.length} photo(s) de notes]` } : m,
+  );
 
 function sauverConversation() {
-  stock.ecrire("conversation", {
+  if (!utilisateur) return;
+  local.ecrire(`conversation.${utilisateur.id}`, {
     docId: conversation.docId,
-    historique: conversation.historique.map(({ images, ...m }) =>
-      images?.length ? { ...m, texte: `${m.texte}\n[${images.length} photo(s) de notes]` } : m,
-    ),
+    historique: historiqueSansPhotos(conversation.historique),
   });
 }
 
@@ -221,16 +339,22 @@ async function envoyer() {
   try {
     const rep = await fetch("/api/discuter", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ historique: conversation.historique, entreprise: entreprise(), tarifs: tarifs() }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await jetonAcces()}` },
+      body: JSON.stringify({
+        historique: conversation.historique.map(({ role, texte, brut, images }) => ({ role, texte, brut, images })),
+        entreprise: { nom: profil.infos.nom, metiers: profil.metiers, franchise_tva: !!profil.infos.franchise_tva },
+        tarifs: tarifs
+          .filter((t) => t.designation)
+          .map((t) => ({ corps_etat: t.corps_etat, designation: t.designation, unite: t.unite, prix: Number(t.prix) })),
+      }),
     });
-    const data = await rep.json();
+    const data = await rep.json().catch(() => ({}));
     if (!rep.ok) throw new Error(data.erreur || "Erreur serveur");
     attente.remove();
 
     const reponse = { role: "assistant", texte: data.message, questions: data.questions, brut: data.brut };
-    if (data.statut === "devis" && data.devis) reponse.docId = enregistrerDevis(data.devis);
     conversation.historique.push(reponse);
+    if (data.statut === "devis" && data.devis) reponse.docId = await enregistrerDevis(data.devis);
     sauverConversation();
     bulleIa(reponse);
 
@@ -239,8 +363,10 @@ async function envoyer() {
     parler(aDire, relancer ? () => demarrerDictee({ envoiAuto: true }) : undefined);
   } catch (err) {
     attente.remove();
-    conversation.historique.pop(); // on laisse l'artisan renvoyer le même message
-    $("#texte").value = texte;
+    if (conversation.historique.at(-1) === message) {
+      conversation.historique.pop(); // on laisse l'artisan renvoyer le même message
+      $("#texte").value = texte;
+    }
     bulle("erreur", esc(err.message));
   } finally {
     $("#envoyer").disabled = false;
@@ -259,33 +385,61 @@ $("#nouveau").onclick = () => {
   reafficherConversation();
 };
 
-function enregistrerDevis(devis) {
-  const docs = documents();
-  const existant = conversation.docId && docs.find((d) => d.id === conversation.docId && d.type === "devis");
-  if (existant) {
-    existant.devis = { ...devis, client_nom: devis.client_nom || existant.devis.client_nom, client_adresse: devis.client_adresse || existant.devis.client_adresse };
-    existant.modifie = new Date().toISOString();
-  } else {
-    const id = crypto.randomUUID();
-    docs.unshift({ id, type: "devis", numero: prochainNumero("devis"), date: new Date().toISOString(), devis });
-    conversation.docId = id;
+async function enregistrerDevis(devis) {
+  const histo = historiqueSansPhotos(conversation.historique);
+  if (conversation.docId) {
+    const { data: existant } = await sb.from("documents").select("contenu").eq("id", conversation.docId).eq("type", "devis").maybeSingle();
+    if (existant) {
+      const contenu = {
+        ...devis,
+        client_nom: devis.client_nom || existant.contenu.client_nom,
+        client_adresse: devis.client_adresse || existant.contenu.client_adresse,
+      };
+      const { error } = await sb.from("documents").update({ contenu, conversation: histo }).eq("id", conversation.docId);
+      if (error) throw new Error("Le devis n'a pas pu être enregistré.");
+      return conversation.docId;
+    }
   }
-  sauverDocuments(docs);
-  return conversation.docId;
+  const { data, error } = await sb
+    .from("documents")
+    .insert({ type: "devis", contenu: devis, conversation: histo })
+    .select("id")
+    .single();
+  if (error) throw new Error("Le devis n'a pas pu être enregistré.");
+  conversation.docId = data.id;
+  return data.id;
 }
 
 // ---------------------------------------------------------------------------
 // Liste des documents
 // ---------------------------------------------------------------------------
-function afficherListe() {
-  const docs = documents();
+const LIBELLES_STATUT = {
+  brouillon: "brouillon",
+  envoye: "envoyé",
+  accepte: "accepté",
+  refuse: "refusé",
+  emise: "émise",
+  payee: "payée",
+};
+
+async function afficherListe() {
+  $("#liste-documents").innerHTML = `<p class="aide">Chargement…</p>`;
+  const { data: docs, error } = await sb
+    .from("documents")
+    .select("id, type, statut, numero, date_document, contenu")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error) {
+    $("#liste-documents").innerHTML = `<p class="aide">Impossible de charger les documents (connexion ?).</p>`;
+    return;
+  }
   $("#liste-documents").innerHTML = docs.length
     ? docs
         .map(
           (d) => `<div class="element-liste" data-id="${esc(d.id)}">
-            <div><strong>${esc(d.numero)}</strong> — ${esc(d.devis.titre)}
-              <small>${dateFr(d.date)}${d.devis.client_nom ? ` · ${esc(d.devis.client_nom)}` : ""}</small></div>
-            <div><span class="pastille ${d.type}">${d.type}</span><br><strong>${euros(d.devis.total_ttc)}</strong></div>
+            <div><strong>${esc(d.numero || "Facture brouillon")}</strong> — ${esc(d.contenu.titre)}
+              <small>${dateFr(d.date_document)}${d.contenu.client_nom ? ` · ${esc(d.contenu.client_nom)}` : ""}</small></div>
+            <div class="droite"><span class="pastille ${d.type}">${d.type} · ${LIBELLES_STATUT[d.statut]}</span><br><strong>${euros(d.contenu.total_ttc)}</strong></div>
           </div>`,
         )
         .join("")
@@ -298,53 +452,90 @@ function afficherListe() {
 // ---------------------------------------------------------------------------
 let docCourant = null;
 
-function ouvrirDocument(id) {
-  docCourant = documents().find((d) => d.id === id);
-  if (!docCourant) return;
+async function ouvrirDocument(id) {
+  const { data, error } = await sb.from("documents").select("*").eq("id", id).maybeSingle();
+  if (error || !data) return erreur("Document introuvable.", error);
+  docCourant = data;
   afficherVue("document");
   rendreDocument();
 }
 
-function majDocument(modif) {
-  modif(docCourant);
-  docCourant.devis = calculerTotaux(docCourant.devis);
-  docCourant.modifie = new Date().toISOString();
-  sauverDocuments(documents().map((d) => (d.id === docCourant.id ? docCourant : d)));
+const estVerrouille = (d) => d.type === "facture" && d.statut !== "brouillon";
+
+async function majDocument(modif) {
+  const contenu = structuredClone(docCourant.contenu);
+  modif(contenu);
+  const recalcule = calculerTotaux(contenu);
+  const { data, error } = await sb.from("documents").update({ contenu: recalcule }).eq("id", docCourant.id).select("*").single();
+  if (error) {
+    erreur("Modification non enregistrée.", error);
+  } else docCourant = data;
+  rendreDocument();
+}
+
+async function changerStatut(statut) {
+  const { data, error } = await sb.from("documents").update({ statut }).eq("id", docCourant.id).select("*").single();
+  if (error) return erreur("Statut non modifié.", error);
+  docCourant = data;
   rendreDocument();
 }
 
 function rendreDocument() {
   const d = docCourant;
-  const v = d.devis;
-  const e = entreprise();
+  const v = d.contenu;
+  const e = profil.infos;
   const facture = d.type === "facture";
+  const verrouille = estVerrouille(d);
+  const editable = verrouille ? "" : "contenteditable";
   const franchise = e.franchise_tva;
 
   $("#en-facture").hidden = facture;
   $("#modifier-ia").hidden = facture;
+  $("#emettre").hidden = !(facture && d.statut === "brouillon");
+  $("#payee").hidden = !(facture && d.statut === "emise");
+  $("#supprimer").hidden = verrouille;
 
-  const hyp = v.hypotheses ?? [];
-  $("#hypotheses").hidden = hyp.length === 0;
+  const info = $("#info-statut");
+  if (facture) {
+    info.hidden = false;
+    info.innerHTML =
+      d.statut === "brouillon"
+        ? "Facture en <strong>brouillon</strong> : vérifie-la puis clique « Émettre la facture ». Elle recevra alors son numéro définitif et ne pourra plus être modifiée."
+        : `Facture <strong>${LIBELLES_STATUT[d.statut]}</strong> : elle est verrouillée (obligation légale). Pour corriger, il faudra faire un avoir.`;
+  } else {
+    info.hidden = false;
+    info.innerHTML = `Statut du devis : <select id="statut-devis">${["brouillon", "envoye", "accepte", "refuse"]
+      .map((s) => `<option value="${s}" ${s === d.statut ? "selected" : ""}>${LIBELLES_STATUT[s]}</option>`)
+      .join("")}</select>`;
+    $("#statut-devis").onchange = (ev) => changerStatut(ev.target.value);
+  }
+
+  const estimes = v.sections.flatMap((s) => s.lignes).filter((l) => l.prix_source === "estime").length;
+  const hyp = [...(v.hypotheses ?? [])];
+  if (estimes && !verrouille) hyp.unshift(`${estimes} prix estimé(s) par l'IA (surlignés en jaune) : vérifie-les et ajoute-les à ta grille.`);
+  $("#hypotheses").hidden = hyp.length === 0 || verrouille;
   $("#hypotheses").innerHTML = `<strong>À vérifier avant d'envoyer :</strong><ul>${hyp.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`;
 
   const lignes = v.sections
     .map(
       (s, si) => `
-      <tr class="section"><td colspan="5" contenteditable data-champ="section" data-s="${si}">${esc(s.titre)}</td></tr>
+      <tr class="section"><td colspan="5" ${editable} data-champ="section" data-s="${si}">${esc(s.titre)}</td></tr>
       ${s.lignes
-        .map(
-          (l, li) => `<tr>
-            <td><div contenteditable data-champ="designation" data-s="${si}" data-l="${li}">${esc(l.designation)}</div>
-              ${l.detail ? `<div class="detail" contenteditable data-champ="detail" data-s="${si}" data-l="${li}">${esc(l.detail)}</div>` : ""}
-              ${l.calcul ? `<div class="calcul">${esc(l.calcul)}</div>` : ""}</td>
-            <td class="num" contenteditable data-champ="quantite" data-s="${si}" data-l="${li}">${nombre(l.quantite)}</td>
-            <td contenteditable data-champ="unite" data-s="${si}" data-l="${li}">${esc(l.unite)}</td>
-            <td class="num" contenteditable data-champ="prix_unitaire_ht" data-s="${si}" data-l="${li}">${nombre(l.prix_unitaire_ht)}</td>
-            <td class="num">${euros(l.total_ht)} <button class="suppr-ligne" data-suppr="${si}-${li}" title="Supprimer la ligne">✕</button></td>
-          </tr>`,
-        )
+        .map((l, li) => {
+          const estime = l.prix_source === "estime" && !verrouille;
+          return `<tr${estime ? ' class="estime"' : ""}>
+            <td><div ${editable} data-champ="designation" data-s="${si}" data-l="${li}">${esc(l.designation)}</div>
+              ${l.detail ? `<div class="detail" ${editable} data-champ="detail" data-s="${si}" data-l="${li}">${esc(l.detail)}</div>` : ""}
+              ${l.calcul ? `<div class="calcul">${esc(l.calcul)}</div>` : ""}
+              ${estime ? `<div class="no-print"><span class="badge-estime">prix estimé</span> <button class="lien" data-grille="${si}-${li}">+ ajouter à ma grille</button></div>` : ""}</td>
+            <td class="num" ${editable} data-champ="quantite" data-s="${si}" data-l="${li}">${nombre(l.quantite)}</td>
+            <td ${editable} data-champ="unite" data-s="${si}" data-l="${li}">${esc(l.unite)}</td>
+            <td class="num" ${editable} data-champ="prix_unitaire_ht" data-s="${si}" data-l="${li}">${nombre(l.prix_unitaire_ht)}</td>
+            <td class="num">${euros(l.total_ht)}${verrouille ? "" : ` <button class="suppr-ligne" data-suppr="${si}-${li}" title="Supprimer la ligne">✕</button>`}</td>
+          </tr>`;
+        })
         .join("")}
-      <tr class="ajout-ligne"><td colspan="5"><button class="lien" data-ajout="${si}">+ ajouter une ligne</button></td></tr>`,
+      ${verrouille ? "" : `<tr class="ajout-ligne"><td colspan="5"><button class="lien" data-ajout="${si}">+ ajouter une ligne</button></td></tr>`}`,
     )
     .join("");
 
@@ -355,19 +546,23 @@ function rendreDocument() {
 
   const mentions = facture
     ? [
-        `Date d'échéance : ${dateFr(ajouterJours(d.date, e.delai_paiement || 30))}.`,
-        d.devisNumero ? `Facture établie selon le devis n° ${d.devisNumero}.` : "",
+        d.statut !== "brouillon" ? `Date d'échéance : ${dateFr(ajouterJours(d.date_document, e.delai_paiement || 30))}.` : "",
+        v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
         "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
         e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
       ]
     : [
-        `Devis valable ${e.validite || 30} jours à compter du ${dateFr(d.date)}. Devis gratuit.`,
+        `Devis valable ${e.validite || 30} jours à compter du ${dateFr(d.date_document)}. Devis gratuit.`,
         acompte ? `Acompte de ${acompte} % à la signature (${euros((ttc * acompte) / 100)}), solde à la fin des travaux.` : "",
         v.duree_estimee ? `Durée estimée des travaux : ${v.duree_estimee}.` : "",
       ];
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
   else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
+
+  const titreDoc = facture
+    ? d.numero ? `FACTURE n° ${esc(d.numero)}` : "FACTURE (brouillon, non numérotée)"
+    : `DEVIS n° ${esc(d.numero)}`;
 
   $("#document").innerHTML = `
     <div class="doc-entete">
@@ -379,26 +574,28 @@ function rendreDocument() {
       </div>
       <div class="client">
         <strong>Client</strong><br>
-        <div contenteditable data-champ="client_nom" data-placeholder="Nom du client">${esc(v.client_nom) || "<em>Nom du client</em>"}</div>
-        <div contenteditable data-champ="client_adresse">${esc(v.client_adresse) || "<em>Adresse du client</em>"}</div>
+        <div ${editable} data-champ="client_nom">${esc(v.client_nom) || "<em>Nom du client</em>"}</div>
+        <div ${editable} data-champ="client_adresse">${esc(v.client_adresse) || "<em>Adresse du client</em>"}</div>
         ${v.adresse_chantier ? `<small>Chantier : ${esc(v.adresse_chantier)}</small>` : ""}
       </div>
     </div>
-    <h2 class="doc-titre">${facture ? "FACTURE" : "DEVIS"} n° ${esc(d.numero)}</h2>
-    <div class="doc-meta">Date : ${dateFr(d.date)} · Objet : <span contenteditable data-champ="titre">${esc(v.titre)}</span></div>
-    <p contenteditable data-champ="description">${esc(v.description)}</p>
+    <h2 class="doc-titre">${titreDoc}</h2>
+    <div class="doc-meta">Date : ${dateFr(d.date_document)} · Objet : <span ${editable} data-champ="titre">${esc(v.titre)}</span></div>
+    <p ${editable} data-champ="description">${esc(v.description)}</p>
     <table class="doc-table">
       <thead><tr><th>Désignation</th><th class="num">Qté</th><th>Unité</th><th class="num">P.U. HT</th><th class="num">Total HT</th></tr></thead>
       <tbody>${lignes}</tbody>
     </table>
     <table class="doc-totaux">
       <tr><td>Total HT</td><td class="num">${euros(v.total_ht)}</td></tr>
-      ${franchise ? "" : `<tr><td>TVA <span contenteditable data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
+      ${franchise ? "" : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
     <div class="doc-mentions">${mentions.filter(Boolean).map((m) => `<p>${esc(m)}</p>`).join("")}</div>
     ${facture ? "" : `<div class="doc-signature"><div>L'entreprise</div><div>Le client<br><small>Date, signature et mention « Bon pour accord »</small></div></div>`}
   `;
+
+  if (verrouille) return;
 
   // Édition directe dans le document
   for (const el of $("#document").querySelectorAll("[contenteditable]")) {
@@ -408,12 +605,13 @@ function rendreDocument() {
     el.addEventListener("blur", () => {
       const { champ, s, l } = el.dataset;
       const val = el.innerText.trim();
-      majDocument((doc) => {
-        const dv = doc.devis;
+      majDocument((dv) => {
         if (champ === "section") dv.sections[s].titre = val;
         else if (l !== undefined) {
           const ligne = dv.sections[s].lignes[l];
-          ligne[champ] = ["quantite", "prix_unitaire_ht"].includes(champ) ? lireNombre(val) : val;
+          const numerique = ["quantite", "prix_unitaire_ht"].includes(champ);
+          ligne[champ] = numerique ? lireNombre(val) : val;
+          if (champ === "prix_unitaire_ht") ligne.prix_source = "artisan";
         } else dv[champ] = champ === "taux_tva" ? lireNombre(val) : val;
       });
     });
@@ -427,33 +625,49 @@ function rendreDocument() {
   for (const b of $("#document").querySelectorAll("[data-suppr]")) {
     b.onclick = () => {
       const [s, l] = b.dataset.suppr.split("-").map(Number);
-      majDocument((doc) => doc.devis.sections[s].lignes.splice(l, 1));
+      majDocument((dv) => dv.sections[s].lignes.splice(l, 1));
     };
   }
   for (const b of $("#document").querySelectorAll("[data-ajout]")) {
     b.onclick = () =>
-      majDocument((doc) =>
-        doc.devis.sections[b.dataset.ajout].lignes.push({ designation: "Nouvelle prestation", detail: "", quantite: 1, unite: "u", prix_unitaire_ht: 0, calcul: "" }),
+      majDocument((dv) =>
+        dv.sections[b.dataset.ajout].lignes.push({ designation: "Nouvelle prestation", detail: "", quantite: 1, unite: "u", prix_unitaire_ht: 0, prix_source: "artisan", calcul: "" }),
       );
+  }
+  for (const b of $("#document").querySelectorAll("[data-grille]")) {
+    b.onclick = async () => {
+      const [s, l] = b.dataset.grille.split("-").map(Number);
+      const ligne = docCourant.contenu.sections[s].lignes[l];
+      const { data, error } = await sb
+        .from("tarifs")
+        .insert({ corps_etat: "", designation: ligne.designation.slice(0, 300), unite: ligne.unite.slice(0, 20), prix: ligne.prix_unitaire_ht })
+        .select("*")
+        .single();
+      if (error) return erreur("Prix non ajouté à la grille.", error);
+      tarifs.push(data);
+      majDocument((dv) => (dv.sections[s].lignes[l].prix_source = "grille"));
+    };
   }
 }
 
 $("#retour").onclick = () => afficherVue("documents");
 $("#imprimer").onclick = () => {
   const avant = document.title;
-  document.title = `${docCourant.numero} ${docCourant.devis.client_nom || ""}`.trim();
+  document.title = `${docCourant.numero || "brouillon"} ${docCourant.contenu.client_nom || ""}`.trim();
   window.print();
   document.title = avant;
 };
 
 $("#partager").onclick = async () => {
   const d = docCourant;
-  const e = entreprise();
-  const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${d.type === "facture" ? "la facture" : "le devis"} n° ${d.numero} (${d.devis.titre}) d'un montant de ${euros(e.franchise_tva ? d.devis.total_ht : d.devis.total_ttc)}${e.franchise_tva ? "" : " TTC"}.\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
-  const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero} – ${d.devis.titre}`;
+  const e = profil.infos;
+  const nom = d.type === "facture" ? "la facture" : "le devis";
+  const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
+  const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero ?? ""} – ${d.contenu.titre}`;
   if (navigator.share) {
     try {
       await navigator.share({ title: sujet, text: texte });
+      if (d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
       return;
     } catch (err) {
       if (err.name === "AbortError") return;
@@ -462,18 +676,29 @@ $("#partager").onclick = async () => {
   location.href = `mailto:?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(`${texte}\n\n(Pense à joindre le PDF via « PDF / Imprimer ».)`)}`;
 };
 
-$("#en-facture").onclick = () => {
-  if (!confirm("Créer la facture à partir de ce devis ?")) return;
-  const facture = {
-    id: crypto.randomUUID(),
-    type: "facture",
-    numero: prochainNumero("facture"),
-    date: new Date().toISOString(),
-    devisNumero: docCourant.numero,
-    devis: structuredClone({ ...docCourant.devis, hypotheses: [] }),
-  };
-  sauverDocuments([facture, ...documents()]);
-  ouvrirDocument(facture.id);
+$("#en-facture").onclick = async () => {
+  if (!confirm("Créer une facture (brouillon) à partir de ce devis ?")) return;
+  const contenu = { ...structuredClone(docCourant.contenu), hypotheses: [], devis_numero: docCourant.numero };
+  const { data, error } = await sb
+    .from("documents")
+    .insert({ type: "facture", devis_id: docCourant.id, contenu })
+    .select("id")
+    .single();
+  if (error) return erreur("Facture non créée.", error);
+  if (docCourant.statut !== "accepte") await sb.from("documents").update({ statut: "accepte" }).eq("id", docCourant.id);
+  ouvrirDocument(data.id);
+};
+
+$("#emettre").onclick = async () => {
+  if (!confirm("Émettre la facture ? Elle recevra son numéro définitif et ne pourra plus être modifiée.")) return;
+  const { data, error } = await sb.rpc("emettre_facture", { p_id: docCourant.id });
+  if (error) return erreur("Émission impossible.", error);
+  docCourant = data;
+  rendreDocument();
+};
+
+$("#payee").onclick = () => {
+  if (confirm("Marquer cette facture comme payée ?")) changerStatut("payee");
 };
 
 $("#modifier-ia").onclick = () => {
@@ -481,10 +706,12 @@ $("#modifier-ia").onclick = () => {
   if (conversation.docId !== d.id) {
     conversation = {
       docId: d.id,
-      historique: [
-        { role: "user", texte: `Voici le devis actuel ${d.numero} à modifier :\n${JSON.stringify(d.devis)}` },
-        { role: "assistant", texte: "Ok, j'ai le devis sous les yeux. Qu'est-ce qu'on change ?", questions: [] },
-      ],
+      historique: d.conversation?.length
+        ? d.conversation
+        : [
+            { role: "user", texte: `Voici le devis actuel ${d.numero} à modifier :\n${JSON.stringify(d.contenu)}` },
+            { role: "assistant", texte: "Ok, j'ai le devis sous les yeux. Qu'est-ce qu'on change ?", questions: [] },
+          ],
     };
     sauverConversation();
     reafficherConversation();
@@ -493,86 +720,107 @@ $("#modifier-ia").onclick = () => {
   $("#texte").focus();
 };
 
-$("#supprimer").onclick = () => {
-  if (!confirm(`Supprimer définitivement ${docCourant.numero} ?`)) return;
-  sauverDocuments(documents().filter((d) => d.id !== docCourant.id));
-  if (conversation.docId === docCourant.id) conversation.docId = null;
+$("#supprimer").onclick = async () => {
+  if (!confirm(`Supprimer définitivement ${docCourant.numero || "ce brouillon"} ?`)) return;
+  const { error } = await sb.from("documents").delete().eq("id", docCourant.id);
+  if (error) return erreur("Suppression impossible.", error);
+  if (conversation.docId === docCourant.id) {
+    conversation.docId = null;
+    sauverConversation();
+  }
   afficherVue("documents");
 };
 
 // ---------------------------------------------------------------------------
-// Réglages : entreprise et grille de prix
+// Réglages : entreprise, métiers et grille de prix
 // ---------------------------------------------------------------------------
 function afficherParametres() {
-  const e = entreprise();
   const form = $("#form-entreprise");
   for (const champ of form.elements) {
     if (!champ.name) continue;
-    if (champ.type === "checkbox") champ.checked = !!e[champ.name];
-    else if (e[champ.name] !== undefined) champ.value = e[champ.name];
+    if (champ.type === "checkbox") champ.checked = !!profil.infos[champ.name];
+    else if (profil.infos[champ.name] !== undefined) champ.value = profil.infos[champ.name];
   }
+  $("#liste-metiers").innerHTML = CORPS_ETAT.map(
+    (c) => `<label><input type="checkbox" value="${esc(c.id)}" ${profil.metiers.includes(c.id) ? "checked" : ""}> ${esc(c.nom)}</label>`,
+  ).join("");
   rendreTarifs();
 }
 
-$("#form-entreprise").onsubmit = (ev) => {
+$("#form-entreprise").onsubmit = async (ev) => {
   ev.preventDefault();
-  const donnees = {};
+  const infos = {};
   for (const champ of ev.target.elements) {
     if (!champ.name) continue;
-    donnees[champ.name] = champ.type === "checkbox" ? champ.checked : champ.value.trim();
+    infos[champ.name] = champ.type === "checkbox" ? champ.checked : champ.value.trim();
   }
-  stock.ecrire("entreprise", donnees);
+  const metiers = [...$("#liste-metiers").querySelectorAll("input:checked")].map((i) => i.value);
+  const { error } = await sb.from("entreprises").upsert({ user_id: utilisateur.id, infos, metiers, updated_at: new Date().toISOString() });
+  if (error) return erreur("Informations non enregistrées.", error);
+  profil = { infos, metiers };
   alert("Informations enregistrées.");
 };
 
+function optionsCorps(selection) {
+  return [`<option value="">— Autre —</option>`, ...CORPS_ETAT.map((c) => `<option value="${esc(c.id)}" ${c.id === selection ? "selected" : ""}>${esc(c.nom)}</option>`)].join("");
+}
+
 function rendreTarifs() {
-  $("#table-tarifs tbody").innerHTML = tarifs()
+  if (!tarifs.length) {
+    $("#grille-tarifs").innerHTML = `<p class="aide">Aucun prix pour l'instant.</p>`;
+    return;
+  }
+  const groupes = new Map();
+  for (const t of tarifs) {
+    if (!groupes.has(t.corps_etat)) groupes.set(t.corps_etat, []);
+    groupes.get(t.corps_etat).push(t);
+  }
+  $("#grille-tarifs").innerHTML = [...groupes]
     .map(
-      (t, i) => `<tr>
-        <td><input data-i="${i}" data-k="designation" value="${esc(t.designation)}"></td>
-        <td><input data-i="${i}" data-k="unite" value="${esc(t.unite)}"></td>
-        <td><input data-i="${i}" data-k="prix" inputmode="decimal" value="${nombre(t.prix)}"></td>
-        <td><button class="suppr-ligne" data-suppr-tarif="${i}">✕</button></td>
-      </tr>`,
+      ([corps, liste]) => `<h3>${esc(corps ? nomCorpsEtat(corps) : "Autre")}</h3>
+      <table class="tarifs"><thead><tr><th>Prestation</th><th>Unité</th><th>Prix €</th><th></th></tr></thead><tbody>
+      ${liste
+        .map(
+          (t) => `<tr>
+            <td><input data-id="${esc(t.id)}" data-k="designation" value="${esc(t.designation)}" maxlength="300" placeholder="Ex : Pose de placo BA13">
+              <select data-id="${esc(t.id)}" data-k="corps_etat">${optionsCorps(t.corps_etat)}</select></td>
+            <td><input data-id="${esc(t.id)}" data-k="unite" value="${esc(t.unite)}" maxlength="20"></td>
+            <td><input data-id="${esc(t.id)}" data-k="prix" inputmode="decimal" value="${nombre(t.prix)}"></td>
+            <td><button class="suppr-ligne" data-suppr-tarif="${esc(t.id)}" title="Supprimer">✕</button></td>
+          </tr>`,
+        )
+        .join("")}
+      </tbody></table>`,
     )
     .join("");
-  for (const input of $("#table-tarifs").querySelectorAll("input")) {
-    input.onchange = () => {
-      const liste = structuredClone(tarifs());
-      liste[input.dataset.i][input.dataset.k] = input.dataset.k === "prix" ? lireNombre(input.value) : input.value.trim();
-      stock.ecrire("tarifs", liste);
+
+  for (const champ of $("#grille-tarifs").querySelectorAll("[data-k]")) {
+    champ.onchange = async () => {
+      const valeur = champ.dataset.k === "prix" ? lireNombre(champ.value) : champ.value.trim();
+      const { data, error } = await sb.from("tarifs").update({ [champ.dataset.k]: valeur }).eq("id", champ.dataset.id).select("*").single();
+      if (error) return erreur("Prix non enregistré.", error);
+      tarifs = tarifs.map((t) => (t.id === data.id ? data : t));
+      if (champ.dataset.k === "corps_etat") rendreTarifs();
     };
   }
-  for (const b of $("#table-tarifs").querySelectorAll("[data-suppr-tarif]")) {
-    b.onclick = () => {
-      const liste = structuredClone(tarifs());
-      liste.splice(Number(b.dataset.supprTarif), 1);
-      stock.ecrire("tarifs", liste);
+  for (const b of $("#grille-tarifs").querySelectorAll("[data-suppr-tarif]")) {
+    b.onclick = async () => {
+      const { error } = await sb.from("tarifs").delete().eq("id", b.dataset.supprTarif);
+      if (error) return erreur("Suppression impossible.", error);
+      tarifs = tarifs.filter((t) => t.id !== b.dataset.supprTarif);
       rendreTarifs();
     };
   }
 }
 
-$("#ajouter-tarif").onclick = () => {
-  stock.ecrire("tarifs", [...tarifs(), { code: `P${Date.now() % 10000}`, designation: "", unite: "m²", prix: 0 }]);
+$("#ajouter-tarif").onclick = async () => {
+  const { data, error } = await sb
+    .from("tarifs")
+    .insert({ corps_etat: "", designation: "", unite: "m²", prix: 0 })
+    .select("*")
+    .single();
+  if (error) return erreur("Impossible d'ajouter un prix.", error);
+  tarifs.push(data);
   rendreTarifs();
-  $("#table-tarifs tbody tr:last-child input").focus();
+  $(`#grille-tarifs input[data-id="${data.id}"]`)?.focus();
 };
-$("#reinit-tarifs").onclick = () => {
-  if (!confirm("Remettre la grille de prix par défaut ? Tes prix personnalisés seront perdus.")) return;
-  localStorage.removeItem("cagot.tarifs");
-  rendreTarifs();
-};
-
-// ---------------------------------------------------------------------------
-// Démarrage
-// ---------------------------------------------------------------------------
-fetch("/api/config")
-  .then((r) => r.json())
-  .then((cfg) => {
-    tarifsParDefaut = cfg.tarifs;
-    $("#bandeau-demo").hidden = !cfg.demo;
-  })
-  .catch(() => {});
-
-reafficherConversation();

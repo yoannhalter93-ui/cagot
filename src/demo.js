@@ -39,25 +39,25 @@ export function devisDeDemo(historique) {
         {
           titre: "Préparation du chantier",
           lignes: [
-            { designation: "Protection des sols et mobilier", detail: "Bâche + adhésif de masquage", quantite: 14.7, unite: "m²", prix_unitaire_ht: 2.5, calcul: "3,50 × 4,20" },
+            { designation: "Protection des sols et mobilier", detail: "Bâche + adhésif de masquage", quantite: 14.7, unite: "m²", prix_unitaire_ht: 2.5, prix_source: "estime", calcul: "3,50 × 4,20" },
           ],
         },
         {
           titre: "Chambre – Murs",
           lignes: [
-            { designation: "Dépose de papier peint", detail: "Décollage à la décolleuse vapeur et grattage", quantite: murs, unite: "m²", prix_unitaire_ht: 8, calcul: "(3,50+4,20)×2×2,50 − 1,7 porte − 1,8 fenêtre" },
-            { designation: "Lessivage des murs", detail: "", quantite: murs, unite: "m²", prix_unitaire_ht: 4, calcul: "idem" },
-            { designation: "Ratissage 2 passes", detail: "Enduit de lissage", quantite: murs, unite: "m²", prix_unitaire_ht: 14, calcul: "idem" },
-            { designation: "Ponçage et dépoussiérage", detail: "", quantite: murs, unite: "m²", prix_unitaire_ht: 4, calcul: "idem" },
-            { designation: "Impression murs", detail: "Sous-couche acrylique", quantite: murs, unite: "m²", prix_unitaire_ht: 5, calcul: "idem" },
-            { designation: "Peinture murs 2 couches", detail: "Acrylique velours", quantite: murs, unite: "m²", prix_unitaire_ht: 14, calcul: "idem" },
+            { designation: "Dépose de papier peint", detail: "Décollage à la décolleuse vapeur et grattage", quantite: murs, unite: "m²", prix_unitaire_ht: 8, prix_source: "grille", calcul: "(3,50+4,20)×2×2,50 − 1,7 porte − 1,8 fenêtre" },
+            { designation: "Lessivage des murs", detail: "", quantite: murs, unite: "m²", prix_unitaire_ht: 4, prix_source: "grille", calcul: "idem" },
+            { designation: "Ratissage 2 passes", detail: "Enduit de lissage", quantite: murs, unite: "m²", prix_unitaire_ht: 14, prix_source: "grille", calcul: "idem" },
+            { designation: "Ponçage et dépoussiérage", detail: "", quantite: murs, unite: "m²", prix_unitaire_ht: 4, prix_source: "grille", calcul: "idem" },
+            { designation: "Impression murs", detail: "Sous-couche acrylique", quantite: murs, unite: "m²", prix_unitaire_ht: 5, prix_source: "grille", calcul: "idem" },
+            { designation: "Peinture murs 2 couches", detail: "Acrylique velours", quantite: murs, unite: "m²", prix_unitaire_ht: 14, prix_source: "grille", calcul: "idem" },
           ],
         },
         {
           titre: "Chambre – Plafond",
           lignes: [
-            { designation: "Impression plafond", detail: "", quantite: 14.7, unite: "m²", prix_unitaire_ht: 6, calcul: "3,50 × 4,20" },
-            { designation: "Peinture plafond 2 couches", detail: "Acrylique mate", quantite: 14.7, unite: "m²", prix_unitaire_ht: 17, calcul: "3,50 × 4,20" },
+            { designation: "Impression plafond", detail: "", quantite: 14.7, unite: "m²", prix_unitaire_ht: 6, prix_source: "grille", calcul: "3,50 × 4,20" },
+            { designation: "Peinture plafond 2 couches", detail: "Acrylique mate", quantite: 14.7, unite: "m²", prix_unitaire_ht: 17, prix_source: "grille", calcul: "3,50 × 4,20" },
           ],
         },
       ],
