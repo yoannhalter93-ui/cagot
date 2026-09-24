@@ -390,6 +390,7 @@ async function envoyer() {
       await jetonAcces(),
     );
     attente.remove();
+    if (data.demo) $("#bandeau-demo").hidden = false;
 
     const reponse = { role: "assistant", texte: data.message, questions: data.questions, brut: data.brut };
     conversation.historique.push(reponse);

@@ -5,8 +5,6 @@ import { calculerTotaux } from "./calcul.js";
 import { devisDeDemo } from "./demo.js";
 import { CONSIGNES, promptArtisan } from "./prompt.js";
 
-const MODELE = process.env.CLAUDE_MODEL || "claude-opus-5";
-
 const Ligne = z.object({
   designation: z.string().describe("Libellé clair de la prestation, tel qu'il apparaîtra sur le devis"),
   detail: z.string().describe("Précisions techniques (produit, épaisseur, nombre de couches, méthode, norme). Chaîne vide si rien à ajouter."),
@@ -60,44 +58,68 @@ function versMessagesApi(historique) {
   });
 }
 
-const client = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN ? new Anthropic() : null;
+// Messages d'erreur montrés à l'artisan (les autres erreurs restent génériques).
+export class ErreurIA extends Error {}
 
-export const modeDemo = () => client === null;
+// Fabrique indépendante de l'environnement : utilisée par le serveur Node (server.js)
+// et par la fonction Supabase (supabase/functions/discuter).
+export function creerIA({ apiKey, modele = "claude-opus-5", effort = "high", delaiMs } = {}) {
+  const client = apiKey ? new Anthropic({ apiKey, ...(delaiMs ? { timeout: delaiMs, maxRetries: 0 } : {}) }) : null;
 
-export async function discuter({ historique, entreprise, tarifs }) {
-  if (!client) return devisDeDemo(historique);
+  async function discuter({ historique, entreprise, tarifs }) {
+    if (!client) return { ...devisDeDemo(historique), demo: true };
 
-  // Streaming : un devis multi-lots peut être long à rédiger.
-  const flux = client.beta.messages.stream({
-    model: MODELE,
-    max_tokens: 64000,
-    thinking: { type: "adaptive" },
-    output_config: { effort: "high", format: betaZodOutputFormat(Reponse) },
-    // Si le modèle principal refuse, l'API relance automatiquement sur un modèle de secours.
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    system: [
-      { type: "text", text: CONSIGNES, cache_control: { type: "ephemeral" } },
-      { type: "text", text: promptArtisan({ entreprise, tarifs }) },
-    ],
-    messages: versMessagesApi(historique),
-  });
-  const reponse = await flux.finalMessage();
+    // Streaming : un devis multi-lots peut être long à rédiger.
+    const flux = client.beta.messages.stream({
+      model: modele,
+      max_tokens: 64000,
+      thinking: { type: "adaptive" },
+      output_config: { effort, format: betaZodOutputFormat(Reponse) },
+      // Si le modèle principal refuse, l'API relance automatiquement sur un modèle de secours.
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system: [
+        { type: "text", text: CONSIGNES, cache_control: { type: "ephemeral" } },
+        { type: "text", text: promptArtisan({ entreprise, tarifs }) },
+      ],
+      messages: versMessagesApi(historique),
+    });
+    let reponse;
+    try {
+      reponse = await flux.finalMessage();
+    } catch (err) {
+      if (err instanceof Anthropic.APIConnectionTimeoutError) {
+        throw new ErreurIA("Le devis est trop long à rédiger d'un coup : découpe le chantier (par pièce ou par lot) et réessaie.");
+      }
+      throw err;
+    }
 
-  if (reponse.stop_reason === "refusal") {
-    throw new Error("L'IA n'a pas pu traiter cette demande. Reformule tes notes et réessaie.");
+    if (reponse.stop_reason === "refusal") {
+      throw new ErreurIA("L'IA n'a pas pu traiter cette demande. Reformule tes notes et réessaie.");
+    }
+    const texte = reponse.content.find((b) => b.type === "text")?.text ?? "";
+    let sortie;
+    try {
+      sortie = Reponse.parse(JSON.parse(texte));
+    } catch {
+      throw new ErreurIA("Réponse de l'IA incomplète, réessaie.");
+    }
+    return {
+      ...sortie,
+      devis: sortie.devis ? calculerTotaux(sortie.devis) : null,
+      brut: JSON.stringify(sortie),
+      demo: false,
+    };
   }
-  const texte = reponse.content.find((b) => b.type === "text")?.text ?? "";
-  let sortie;
-  try {
-    sortie = Reponse.parse(JSON.parse(texte));
-  } catch {
-    throw new Error("Réponse de l'IA incomplète, réessaie.");
-  }
-  const brut = JSON.stringify(sortie);
-  return {
-    ...sortie,
-    devis: sortie.devis ? calculerTotaux(sortie.devis) : null,
-    brut,
-  };
+
+  return { demo: client === null, discuter };
+}
+
+// Traduit une erreur en message pour l'artisan, sans exposer de détail interne.
+export function messageErreur(err) {
+  if (err instanceof ErreurIA) return err.message;
+  if (err instanceof Anthropic.RateLimitError) return "Trop de demandes en même temps, réessaie dans un instant.";
+  if (err instanceof Anthropic.APIConnectionError) return "Impossible de joindre le service IA (connexion).";
+  if (err instanceof Anthropic.APIError) return "Le service IA est indisponible, réessaie.";
+  return "Erreur inattendue, réessaie.";
 }

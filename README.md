@@ -29,7 +29,22 @@ Un clic transforme le devis en facture.
 - **PDF / impression** et **envoi** (partage du téléphone ou e-mail).
 - **Réglages** : infos entreprise (SIRET, assurance décennale, IBAN…), métiers exercés, grille de prix.
 
-## Lancer l'appli
+## Mise en ligne gratuite (Cloudflare Pages + Supabase)
+
+- **Site** : fichiers statiques construits par `npm run web` dans `dist/web`, publiés sur Cloudflare Pages.
+- **IA** : fonction Supabase `discuter` (`supabase/functions/discuter`), même code que le serveur Node.
+- **Réglages** : `dist/web/config.json` (adresse de la base et de l'IA). Changer d'hébergeur plus tard =
+  changer ces adresses (variables `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `API_URL` au build),
+  sans toucher à l'appli. Le serveur Node (`npm start`) reste utilisable à la place.
+
+Cloudflare Pages : connecter le dépôt GitHub, commande de build `npm run web`, dossier de sortie `dist/web`.
+
+Redéployer la fonction IA : `npm run fonctions` puis `supabase functions deploy discuter`.
+Clé de l'IA : dans Supabase → Edge Functions → Secrets, ajouter `ANTHROPIC_API_KEY`
+(sans elle, l'IA répond en mode démo). Sur l'offre gratuite, une demande est coupée à 150 s :
+l'IA y tourne en effort « medium » pour rester dans ce délai.
+
+## Lancer l'appli sur son ordinateur
 
 ```bash
 npm install
@@ -61,6 +76,8 @@ Le fichier `public/plateforme.js` (serveur) y est remplacé par `scripts/essai/p
 | `public/plateforme.js` | Accès aux données (Supabase), à l'IA, export et partage |
 | `src/calcul.js` | Calcul des totaux HT / TVA / TTC (partagé serveur + navigateur) |
 | `src/corps-etat.js` | Corps d'état et points à vérifier par l'IA |
+| `supabase/functions/discuter/` | Fonction IA hébergée par Supabase (version gratuite) |
+| `scripts/construire-web.mjs` | Construit le site statique + `config.json` + en-têtes de sécurité |
 | `supabase/migrations/` | Schéma de la base, règles de sécurité (RLS), numérotation des factures |
 | `src/demo.js` | Réponses du mode démo |
 | `public/` | Interface mobile (HTML/CSS/JS sans framework) |
@@ -74,7 +91,8 @@ Le fichier `public/plateforme.js` (serveur) y est remplacé par `scripts/essai/p
   d'un autre, même en appelant la base directement. Les visiteurs non connectés n'ont accès à rien.
 - **Factures inviolables** : numérotation faite par la base (impossible de sauter ou réutiliser un numéro),
   facture émise verrouillée par un déclencheur SQL.
-- **IA protégée** : réservée aux comptes connectés (jeton vérifié), limitée par adresse IP et par compte,
+- **IA protégée** : réservée aux comptes connectés (jeton vérifié), limitée par compte (compteur en base)
+  et, sur le serveur Node, par adresse IP ;
   requêtes validées (taille, format des photos). La clé Anthropic reste sur le serveur.
 - **En-têtes de sécurité** (CSP stricte, HSTS, anti-iframe) via helmet.
 
