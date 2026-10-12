@@ -94,9 +94,11 @@ $("#bandeau-demo").hidden = !plateforme.demo;
 $("#bandeau-essai").hidden = !plateforme.essai;
 $("#carte-compte").hidden = plateforme.essai;
 $("#micro").hidden = !plateforme.dictee;
+$("#micro-note").hidden = !plateforme.dictee;
 $("#option-mains-libres").hidden = !plateforme.dictee;
 $("#imprimer").textContent = plateforme.libelleExport;
 $("#photo").closest("label").hidden = plateforme.photos === false;
+$("#photo-note").closest("label").hidden = plateforme.photos === false;
 
 let utilisateur = null;
 let modeConnexion = "connexion";
@@ -206,7 +208,7 @@ async function demarrerSession() {
   }
   conversation = local.lire(`conversation.${utilisateur.id}`, { historique: [], docId: null });
   reafficherConversation();
-  afficherVue(profil.infos.nom ? "chantier" : "parametres");
+  afficherVue(profil.infos.nom ? "notes" : "parametres");
 }
 
 // ---------------------------------------------------------------------------
@@ -215,8 +217,11 @@ async function demarrerSession() {
 function afficherVue(nom) {
   for (const v of document.querySelectorAll(".vue")) v.hidden = v.id !== `vue-${nom}`;
   for (const b of document.querySelectorAll(".barre nav button")) {
-    b.classList.toggle("actif", b.dataset.vue === nom || (nom === "document" && b.dataset.vue === "documents"));
+    const parent = { document: "documents", note: "notes" }[nom];
+    b.classList.toggle("actif", b.dataset.vue === nom || b.dataset.vue === parent);
   }
+  if (nom !== "note") quitterNote();
+  if (nom === "notes") afficherNotes();
   if (nom === "documents") afficherListe();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
@@ -230,7 +235,7 @@ const Reconnaissance = window.SpeechRecognition || window.webkitSpeechRecognitio
 let reco = null;
 let texteAvantDictee = "";
 
-function demarrerDictee({ envoiAuto = false } = {}) {
+function demarrerDictee({ envoiAuto = false, cible = $("#texte"), bouton = $("#micro"), apresTexte } = {}) {
   if (!Reconnaissance) {
     notifier("La dictée n'est pas disponible ici : utilise le micro de ton clavier.");
     return;
@@ -240,7 +245,7 @@ function demarrerDictee({ envoiAuto = false } = {}) {
   reco.lang = "fr-FR";
   reco.interimResults = true;
   reco.continuous = !envoiAuto; // mains libres : s'arrête tout seul au silence
-  texteAvantDictee = $("#texte").value ? `${$("#texte").value.trim()} ` : "";
+  texteAvantDictee = cible.value ? `${cible.value.trimEnd()} ` : "";
   let final = "";
 
   reco.onresult = (e) => {
@@ -249,17 +254,18 @@ function demarrerDictee({ envoiAuto = false } = {}) {
       if (e.results[i].isFinal) final += `${e.results[i][0].transcript} `;
       else provisoire += e.results[i][0].transcript;
     }
-    $("#texte").value = texteAvantDictee + final + provisoire;
+    cible.value = texteAvantDictee + final + provisoire;
+    apresTexte?.();
   };
   reco.onerror = (e) => {
     if (e.error === "not-allowed") erreur("Autorise l'accès au micro pour dicter.");
   };
   reco.onend = () => {
-    $("#micro").classList.remove("ecoute");
+    bouton.classList.remove("ecoute");
     reco = null;
-    if (envoiAuto && $("#texte").value.trim()) envoyer();
+    if (envoiAuto && cible.value.trim()) envoyer();
   };
-  $("#micro").classList.add("ecoute");
+  bouton.classList.add("ecoute");
   reco.start();
 }
 
@@ -313,10 +319,16 @@ function redimensionner(fichier, max = 1600) {
   });
 }
 
-$("#photo").onchange = async (e) => {
+function afficherPhotosEnAttente() {
+  const html = photosEnAttente.map((p) => `<img src="${p}" alt="note">`).join("");
+  $("#apercu-photos").innerHTML = html;
+  $("#photos-note").innerHTML = html;
+}
+
+$("#photo").onchange = $("#photo-note").onchange = async (e) => {
   for (const f of e.target.files) photosEnAttente.push(await redimensionner(f));
   e.target.value = "";
-  $("#apercu-photos").innerHTML = photosEnAttente.map((p) => `<img src="${p}" alt="note">`).join("");
+  afficherPhotosEnAttente();
 };
 
 // ---------------------------------------------------------------------------
@@ -334,6 +346,7 @@ function sauverConversation() {
   if (!utilisateur) return;
   local.ecrire(`conversation.${utilisateur.id}`, {
     docId: conversation.docId,
+    noteId: conversation.noteId ?? null,
     historique: historiqueSansPhotos(conversation.historique),
   });
 }
@@ -374,7 +387,7 @@ async function envoyer() {
   bulle("moi", esc(texte) + photosEnAttente.map((i) => `<img src="${i}" alt="note">`).join(""));
   $("#texte").value = "";
   photosEnAttente = [];
-  $("#apercu-photos").innerHTML = "";
+  afficherPhotosEnAttente();
   $("#envoyer").disabled = true;
   const attente = bulle("ia attente", "Je réfléchis au chantier…");
 
@@ -394,7 +407,12 @@ async function envoyer() {
 
     const reponse = { role: "assistant", texte: data.message, questions: data.questions, brut: data.brut };
     conversation.historique.push(reponse);
-    if (data.statut === "devis" && data.devis) reponse.docId = await enregistrerDevis(data.devis);
+    if (data.statut === "devis" && data.devis) {
+      reponse.docId = await enregistrerDevis(data.devis);
+      if (conversation.noteId) {
+        await sb.from("notes").update({ document_id: reponse.docId }).eq("id", conversation.noteId);
+      }
+    }
     sauverConversation();
     bulleIa(reponse);
 
@@ -449,6 +467,143 @@ async function enregistrerDevis(devis) {
   conversation.docId = data.id;
   return data.id;
 }
+
+// ---------------------------------------------------------------------------
+// Notes de chantier (bloc-notes plein écran, enregistrement automatique)
+// ---------------------------------------------------------------------------
+// Chaque frappe est gardée tout de suite sur le téléphone (réseau faible sur chantier),
+// puis envoyée en ligne après une courte pause.
+let noteCourante = null;
+let minuterieNote = null;
+let enregistrementNote = Promise.resolve();
+
+const cleNoteLocale = (id) => `note.${utilisateur?.id}.${id}`;
+const titreAuto = (contenu) => contenu.trim().split("\n")[0].slice(0, 80) || "Note sans titre";
+const heureFr = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+function etatNote(texte) {
+  $("#etat-note").textContent = texte;
+}
+
+async function afficherNotes() {
+  $("#liste-notes").innerHTML = `<p class="aide">Chargement…</p>`;
+  const { data: notes, error } = await sb.from("notes").select("*").order("updated_at", { ascending: false }).limit(300);
+  if (error) {
+    $("#liste-notes").innerHTML = `<p class="aide">Impossible de charger les notes (connexion ?).</p>`;
+    return;
+  }
+  $("#liste-notes").innerHTML = notes.length
+    ? notes
+        .map(
+          (n) => `<div class="element-liste" data-note="${esc(n.id)}">
+            <div><strong>${esc(n.titre || titreAuto(n.contenu))}</strong>
+              <small>${dateFr(n.updated_at)} à ${heureFr(n.updated_at)}</small>
+              <span class="extrait">${esc(n.contenu.slice(0, 200))}</span></div>
+            <div class="droite">${n.envoyee_at ? `<span class="pastille envoyee">${n.document_id ? "devis fait" : "envoyée"}</span>` : ""}</div>
+          </div>`,
+        )
+        .join("")
+    : `<p class="aide">Aucune note pour l'instant.</p>`;
+  for (const el of document.querySelectorAll("[data-note]")) el.onclick = () => ouvrirNote(el.dataset.note);
+}
+
+function afficherEditeurNote(note) {
+  noteCourante = note;
+  // Une copie locale plus récente (enregistrement en ligne raté) l'emporte.
+  const copie = local.lire(cleNoteLocale(note.id), null);
+  if (copie && copie.updated_at > note.updated_at) Object.assign(noteCourante, copie);
+  $("#titre-note").value = noteCourante.titre;
+  $("#contenu-note").value = noteCourante.contenu;
+  etatNote(copie && copie.updated_at > note.updated_at ? "Modifications locales à enregistrer" : "Enregistrée");
+  afficherVue("note");
+  if (copie && copie.updated_at > note.updated_at) programmerEnregistrementNote(0);
+}
+
+async function ouvrirNote(id) {
+  const { data, error } = await sb.from("notes").select("*").eq("id", id).maybeSingle();
+  if (error || !data) return erreur("Note introuvable.", error);
+  afficherEditeurNote(data);
+}
+
+$("#nouvelle-note").onclick = async () => {
+  const { data, error } = await sb.from("notes").insert({ titre: "", contenu: "" }).select("*").single();
+  if (error) return erreur("Impossible de créer la note (connexion ?).", error);
+  afficherEditeurNote(data);
+  $("#contenu-note").focus();
+};
+
+function programmerEnregistrementNote(delai = 800) {
+  if (!noteCourante) return;
+  noteCourante.titre = $("#titre-note").value;
+  noteCourante.contenu = $("#contenu-note").value;
+  noteCourante.updated_at = new Date().toISOString();
+  local.ecrire(cleNoteLocale(noteCourante.id), { titre: noteCourante.titre, contenu: noteCourante.contenu, updated_at: noteCourante.updated_at });
+  etatNote("Enregistrement…");
+  clearTimeout(minuterieNote);
+  minuterieNote = setTimeout(enregistrerNote, delai);
+}
+
+function enregistrerNote() {
+  clearTimeout(minuterieNote);
+  if (!noteCourante) return enregistrementNote;
+  const { id, titre, contenu } = noteCourante;
+  enregistrementNote = enregistrementNote.then(async () => {
+    const { error } = await sb.from("notes").update({ titre, contenu, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) {
+      etatNote("Pas de réseau : gardée sur le téléphone");
+      return;
+    }
+    local.effacer(cleNoteLocale(id));
+    if (noteCourante?.id === id) etatNote(`Enregistrée à ${heureFr(new Date().toISOString())}`);
+  });
+  return enregistrementNote;
+}
+
+function quitterNote() {
+  if (!noteCourante) return;
+  arreterDictee();
+  enregistrerNote();
+  noteCourante = null;
+}
+
+$("#titre-note").oninput = $("#contenu-note").oninput = () => programmerEnregistrementNote();
+// Enregistrer tout de suite si l'artisan quitte l'appli (écran verrouillé, autre appli).
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && noteCourante) enregistrerNote();
+});
+
+$("#retour-notes").onclick = () => afficherVue("notes");
+
+$("#micro-note").onclick = () =>
+  reco
+    ? arreterDictee()
+    : demarrerDictee({ cible: $("#contenu-note"), bouton: $("#micro-note"), apresTexte: () => programmerEnregistrementNote() });
+
+$("#supprimer-note").onclick = async () => {
+  if (!(await demander("Supprimer cette note ?", { ok: "Supprimer", danger: true }))) return;
+  const id = noteCourante.id;
+  clearTimeout(minuterieNote);
+  noteCourante = null;
+  const { error } = await sb.from("notes").delete().eq("id", id);
+  if (error) return erreur("Suppression impossible.", error);
+  local.effacer(cleNoteLocale(id));
+  afficherVue("notes");
+};
+
+$("#envoyer-note").onclick = async () => {
+  const contenu = $("#contenu-note").value.trim();
+  if (!contenu && photosEnAttente.length === 0) return notifier("La note est vide.");
+  if (conversation.historique.length && !(await demander("Démarrer un nouveau chantier avec cette note ? La conversation en cours sera effacée (les devis restent enregistrés).", { ok: "Faire le devis" }))) return;
+  const note = noteCourante;
+  await enregistrerNote();
+  await sb.from("notes").update({ envoyee_at: new Date().toISOString() }).eq("id", note.id);
+  conversation = { historique: [], docId: null, noteId: note.id };
+  sauverConversation();
+  reafficherConversation();
+  afficherVue("chantier");
+  $("#texte").value = note.titre ? `${note.titre}\n\n${contenu}` : contenu;
+  envoyer();
+};
 
 // ---------------------------------------------------------------------------
 // Liste des documents

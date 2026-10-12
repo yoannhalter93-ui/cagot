@@ -13,6 +13,7 @@
   <header class="barre no-print">
     <h1>Cagot</h1>
     <nav id="navigation" hidden>
+      <button data-vue="notes">Notes</button>
       <button data-vue="chantier" class="actif">Chantier</button>
       <button data-vue="documents">Documents</button>
       <button data-vue="parametres">Réglages</button>
@@ -49,6 +50,36 @@
       <label>Nouveau mot de passe (10 caractères minimum) <input name="mdp" type="password" autocomplete="new-password" minlength="10" required></label>
       <button class="btn-principal">Enregistrer</button>
     </form>
+  </main>
+
+  <!-- ===== Notes de chantier : liste ===== -->
+  <main id="vue-notes" class="vue" hidden>
+    <button id="nouvelle-note" class="btn-principal btn-large">+ Nouvelle note</button>
+    <p class="aide">Écris tes notes sur le chantier comme dans un bloc-notes : elles s'enregistrent toutes seules. Une fois fini, envoie-les à l'IA pour faire le devis.</p>
+    <div id="liste-notes"></div>
+  </main>
+
+  <!-- ===== Note de chantier : éditeur plein écran ===== -->
+  <main id="vue-note" class="vue vue-note" hidden>
+    <div class="note-entete">
+      <button id="retour-notes" class="lien" aria-label="Retour aux notes">← Notes</button>
+      <span id="etat-note" class="etat-note" aria-live="polite"></span>
+      <button id="supprimer-note" class="lien danger" aria-label="Supprimer la note">Supprimer</button>
+    </div>
+    <input id="titre-note" class="titre-note" maxlength="200" placeholder="Titre (ex. : Mme Martin – chambre)" autocomplete="off">
+    <textarea id="contenu-note" class="contenu-note" maxlength="50000" placeholder="Écris comme sur un carnet, une info par ligne :
+
+Chambre 1
+3,50 x 4,20  ht 2,50
+1 porte, 1 fenêtre 120x150
+papier peint à enlever
+ratisser, poncer, peindre murs + plafond blanc"></textarea>
+    <div id="photos-note" class="apercu-photos"></div>
+    <div class="note-outils">
+      <button type="button" id="micro-note" class="btn-icone" title="Dicter">🎤</button>
+      <label class="btn-icone" title="Photo de notes papier">📷<input id="photo-note" type="file" accept="image/*" capture="environment" multiple hidden></label>
+      <button type="button" id="envoyer-note" class="btn-principal">Faire le devis avec l'IA →</button>
+    </div>
   </main>
 
   <!-- ===== Vue chantier : conversation avec l'IA ===== -->

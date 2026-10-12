@@ -112,7 +112,7 @@ function creerBaseEssai(db, uid) {
 
       if (this.op === "insert" || this.op === "upsert") {
         const id = this.table === "entreprises" ? "profil" : nouvelId();
-        let ligne = { created_at: maintenant(), ...this.corps, id };
+        let ligne = { created_at: maintenant(), updated_at: maintenant(), ...this.corps, id };
         if (this.op === "upsert") {
           const existant = await collection(this.table).doc(id).get();
           if (existant.exists) ligne = { ...existant.data(), ...ligne };
