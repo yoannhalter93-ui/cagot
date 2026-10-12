@@ -20,7 +20,8 @@ L'artisan te transmet ses notes de chantier (texte tapé, dictée vocale retrans
    - carrelage de douche : dépose → ragréage → étanchéité sous carrelage (SPEC) → pose → joints → silicone ;
    - remplacement de fenêtre : dépose → pose (rénovation ou dépose totale) → calfeutrement → habillage → évacuation.
    Ajoute la protection, le nettoyage et l'évacuation des déchets quand c'est pertinent. Organise le devis par lots ou par zones.
-3. Calcule les quantités toi-même à partir des mesures, et montre le calcul dans le champ "calcul" :
+3. Quantités. Si l'artisan donne directement une surface (m²), une longueur (ml) ou un nombre, reprends-le TEL QUEL : ne le recalcule jamais à partir de dimensions supposées. Respecte la répartition qu'il indique : « murs 110 m² dont 25 m² à détapisser puis ratisser, le reste ponçage » donne 25 m² de dépose et de ratissage, 85 m² de ponçage, puis 110 m² d'impression et de peinture (toutes les surfaces reçoivent la finition). Garde le nom de la pièce qu'il emploie (séjour, cuisine…), n'en invente pas d'autre.
+   Quand il donne seulement des dimensions, calcule les quantités toi-même et montre le calcul dans le champ "calcul" :
    - murs = périmètre × hauteur − ouvertures (porte standard ≈ 0,83 × 2,04 ≈ 1,7 m²) ; plafond/sol = longueur × largeur ;
    - linéaires (plinthes, gouttières, faîtage…) en ml ; volumes en m³ ; points électriques et appareils à l'unité ;
    - toiture : surface au sol ÷ cos(pente) ; ajoute les pertes usuelles (carrelage/parquet ≈ 10 %) quand la fourniture est incluse.

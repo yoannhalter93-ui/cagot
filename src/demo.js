@@ -10,7 +10,7 @@ export function devisDeDemo(historique) {
     const sortie = {
       statut: "questions",
       message:
-        "D'accord, une chambre à refaire avec dépose du papier peint. Il me manque quelques mesures pour être précis.",
+        "Mode démo : l'IA n'est pas encore branchée, je ne lis pas tes notes. Voici des questions d'EXEMPLE ; réponds avec un chiffre pour voir un devis d'exemple.",
       questions: [
         "Quelles sont la longueur et la largeur de la chambre ?",
         "Quelle est la hauteur sous plafond ?",
@@ -26,10 +26,11 @@ export function devisDeDemo(historique) {
   const murs = 38.5 - 1.7 - 1.8; // 35,00 m²
   const sortie = {
     statut: "devis",
-    message: "Voilà le devis de la chambre : dépose du papier peint, préparation complète des murs et peinture murs et plafond.",
+    message:
+      "Mode démo : l'IA n'est pas encore branchée, je ne lis pas tes notes. Voici un devis d'EXEMPLE fixe (une chambre) pour essayer l'appli. Ajoute la clé de l'IA pour un vrai devis.",
     questions: [],
     devis: {
-      titre: "Rénovation peinture – Chambre",
+      titre: "EXEMPLE – Rénovation peinture chambre",
       client_nom: "",
       client_adresse: "",
       adresse_chantier: "",
@@ -63,7 +64,7 @@ export function devisDeDemo(historique) {
       ],
       taux_tva: 10,
       duree_estimee: "4 jours",
-      hypotheses: ["Mode démo : ce devis est un exemple fixe, configure ANTHROPIC_API_KEY pour un vrai chiffrage."],
+      hypotheses: ["MODE DÉMO : ce devis est un exemple fixe qui ne correspond pas à tes notes. Ajoute la clé de l'IA (ANTHROPIC_API_KEY dans Supabase) pour un vrai chiffrage."],
     },
   };
   return { ...sortie, devis: calculerTotaux(sortie.devis), brut: JSON.stringify(sortie) };
