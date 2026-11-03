@@ -271,3 +271,6 @@ button, input, textarea { font: inherit; }
 .carte .actions-logo label.btn { display: inline-block; margin: 0; color: var(--texte); background: var(--surface, #fff); font-size: .95rem; }
 .carte .actions-logo input[type=file] { display: none; }
 .carte .ligne-couleur input[type=color] { width: 48px; flex: none; }
+div.ligne-couleur { flex-wrap: wrap; margin-bottom: 10px; }
+div.ligne-couleur label { margin-bottom: 0; }
+#couleur-logo { border: 1px solid var(--bord); border-radius: 12px; padding: 8px 12px; background: var(--surface, #fff); color: var(--texte); font-weight: 600; cursor: pointer; }

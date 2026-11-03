@@ -1307,7 +1307,35 @@ function afficherLogo(logo) {
   else $("#apercu-logo").removeAttribute("src");
   $("#sans-logo").hidden = ok;
   $("#retirer-logo").hidden = !ok;
+  $("#couleur-logo").hidden = !ok;
 }
+
+// Couleur principale d'un logo déjà enregistré (image en data URL).
+async function couleurDuLogo(logo) {
+  const img = await new Promise((ok, ko) => {
+    const i = new Image();
+    i.onload = () => ok(i);
+    i.onerror = ko;
+    i.src = logo;
+  });
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  return couleurDominante(ctx.getImageData(0, 0, c.width, c.height));
+}
+
+$("#couleur-logo").onclick = async () => {
+  try {
+    const couleur = await couleurDuLogo($("#form-entreprise [name=logo]").value);
+    if (!couleur) return notifier("Ton logo est noir et blanc : choisis la couleur à la main.");
+    $("#form-entreprise [name=couleur]").value = couleur;
+    notifier("Couleur du logo appliquée : appuie sur « Enregistrer ».");
+  } catch (err) {
+    erreur("Couleur du logo introuvable.", err);
+  }
+};
 
 $("#fichier-logo").onchange = async (ev) => {
   const fichier = ev.target.files?.[0];
