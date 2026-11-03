@@ -216,6 +216,7 @@ function lireReponseIA(sortie) {
       titre: String(d.titre ?? "Devis"),
       client_nom: String(d.client_nom ?? ""),
       client_adresse: String(d.client_adresse ?? ""),
+      client_email: String(d.client_email ?? ""),
       adresse_chantier: String(d.adresse_chantier ?? ""),
       description: String(d.description ?? ""),
       sections: d.sections.map((s) => ({

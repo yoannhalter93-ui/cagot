@@ -61,7 +61,7 @@ Réponds UNIQUEMENT par un objet JSON (sans texte autour) de la forme :
   "message": string,
   "questions": string[],
   "devis": null | {
-    "titre": string, "client_nom": string, "client_adresse": string, "adresse_chantier": string,
+    "titre": string, "client_nom": string, "client_adresse": string, "client_email": string, "adresse_chantier": string,
     "description": string,
     "sections": [{ "titre": string, "lignes": [{
       "designation": string, "detail": string, "quantite": number, "unite": string,

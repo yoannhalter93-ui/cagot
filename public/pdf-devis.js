@@ -61,6 +61,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   const lignesClient = [
     ...pdf.splitTextToSize(propre(v.client_nom || ""), largeurC - 6),
     ...pdf.splitTextToSize(propre(v.client_adresse || ""), largeurC - 6),
+    ...(v.client_email ? pdf.splitTextToSize(propre(v.client_email), largeurC - 6) : []),
     ...(v.adresse_chantier ? pdf.splitTextToSize(propre(`Chantier : ${v.adresse_chantier}`), largeurC - 6) : []),
   ];
   const hauteurC = 9 + Math.max(lignesClient.length, 2) * 4.4;

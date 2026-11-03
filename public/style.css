@@ -274,3 +274,10 @@ button, input, textarea { font: inherit; }
 div.ligne-couleur { flex-wrap: wrap; margin-bottom: 10px; }
 div.ligne-couleur label { margin-bottom: 0; }
 #couleur-logo { border: 1px solid var(--bord); border-radius: 12px; padding: 8px 12px; background: var(--surface, #fff); color: var(--texte); font-weight: 600; cursor: pointer; }
+.doc-entete .client .champ-email { word-break: break-all; }
+.dialogue-envoi h3 { margin: 0 0 10px; }
+.ligne-destinataire { display: flex; gap: 6px; margin-bottom: 8px; }
+.ligne-destinataire input { flex: 1; min-width: 0; font-size: 1rem; padding: 9px 10px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); color: var(--texte); }
+.ligne-destinataire input.invalide { border-color: var(--rouge); }
+.ligne-destinataire .retirer { border: 0; background: none; color: var(--gris); font-size: 1.1rem; padding: 0 6px; cursor: pointer; }
+.dialogue-envoi .aide { font-size: .8rem; margin: 8px 0 12px; }

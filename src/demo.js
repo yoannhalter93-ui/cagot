@@ -33,6 +33,7 @@ export function devisDeDemo(historique) {
       titre: "EXEMPLE – Rénovation peinture chambre",
       client_nom: "",
       client_adresse: "",
+      client_email: "",
       adresse_chantier: "",
       description:
         "Dépose du papier peint existant, préparation des murs (lessivage, rebouchage, ratissage, ponçage), impression et mise en peinture des murs et du plafond de la chambre.",

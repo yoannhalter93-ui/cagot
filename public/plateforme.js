@@ -71,9 +71,19 @@ export async function demarrerPlateforme() {
 
     // Partage natif du téléphone (Gmail, WhatsApp, SMS…) avec le PDF en pièce jointe.
     // Renvoie true si le partage a eu lieu.
-    async partager({ sujet, texte, pdf, titre, notifier }) {
+    // Le partage du téléphone ne permet pas de remplir le destinataire : les adresses sont
+    // copiées pour être collées dans « À ». Sans partage de fichier, l'e-mail s'ouvre déjà adressé.
+    async partager({ sujet, texte, pdf, titre, destinataires = [], notifier }) {
       const fichier = pdf ? new File([pdf], `${nomFichier(titre)}.pdf`, { type: "application/pdf" }) : null;
       if (fichier && navigator.canShare?.({ files: [fichier] })) {
+        if (destinataires.length) {
+          try {
+            await navigator.clipboard.writeText(destinataires.join(", "));
+            notifier?.("Adresse copiée : colle-la dans « À » de ton e-mail.");
+          } catch {
+            // presse-papiers refusé : on partage quand même
+          }
+        }
         try {
           await navigator.share({ files: [fichier], title: sujet, text: texte });
           return true;
@@ -93,7 +103,7 @@ export async function demarrerPlateforme() {
         telecharger(fichier, fichier.name);
         notifier?.("PDF téléchargé : joins-le à l'e-mail qui s'ouvre.");
       }
-      location.href = `mailto:?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(texte)}`;
+      location.href = `mailto:${destinataires.map(encodeURIComponent).join(",")}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(texte)}`;
       return false;
     },
   };

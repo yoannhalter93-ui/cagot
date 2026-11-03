@@ -87,6 +87,60 @@ function demander(message, { ok = "Confirmer", danger = false } = {}) {
   });
 }
 
+const emailValide = (m) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(m);
+
+// Fenêtre « Envoyer à » : l'adresse du client déjà remplie, possibilité d'en ajouter.
+// Renvoie la liste des adresses (éventuellement vide) ou null si annulé.
+function demanderDestinataires(initiales) {
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<div class="dialogue dialogue-envoi" role="dialog" aria-modal="true">
+      <h3>Envoyer à</h3>
+      <div class="destinataires"></div>
+      <button type="button" class="lien ajouter-adresse">+ Ajouter une adresse</button>
+      <p class="aide">Le PDF est joint automatiquement. Les adresses sont copiées : dans Gmail, appuie longuement sur « À » puis « Coller ».</p>
+      <div class="dialogue-actions">
+        <button type="button" class="annuler">Annuler</button>
+        <button type="button" class="valider btn-principal">Envoyer</button>
+      </div></div>`;
+    const liste = fond.querySelector(".destinataires");
+    const ajouter = (valeur = "") => {
+      const ligne = document.createElement("div");
+      ligne.className = "ligne-destinataire";
+      ligne.innerHTML = `<input type="email" inputmode="email" autocomplete="email" placeholder="adresse@exemple.fr"><button type="button" class="retirer" aria-label="Retirer">✕</button>`;
+      ligne.querySelector("input").value = valeur;
+      ligne.querySelector(".retirer").onclick = () => {
+        ligne.remove();
+        if (!liste.children.length) ajouter();
+      };
+      liste.appendChild(ligne);
+      return ligne.querySelector("input");
+    };
+    for (const m of initiales.length ? initiales : [""]) ajouter(m);
+    fond.querySelector(".ajouter-adresse").onclick = () => ajouter().focus();
+    const fermer = (reponse) => {
+      fond.remove();
+      resolve(reponse);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.onclick = (e) => e.target === fond && fermer(null);
+    fond.querySelector(".valider").onclick = () => {
+      const champs = [...liste.querySelectorAll("input")];
+      const adresses = champs.map((c) => c.value.replace(/\s+/g, "").toLowerCase()).filter(Boolean);
+      const fausse = champs.find((c) => c.value.trim() && !emailValide(c.value.replace(/\s+/g, "")));
+      if (fausse) {
+        fausse.classList.add("invalide");
+        fausse.focus();
+        return notifier("Adresse e-mail incorrecte.", "erreur");
+      }
+      fermer([...new Set(adresses)]);
+    };
+    document.body.appendChild(fond);
+    if (!initiales.length) liste.querySelector("input").focus();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
@@ -472,6 +526,7 @@ async function enregistrerDevis(devis) {
         ...devis,
         client_nom: devis.client_nom || existant.contenu.client_nom,
         client_adresse: devis.client_adresse || existant.contenu.client_adresse,
+        client_email: devis.client_email || existant.contenu.client_email || "",
       };
       const { error } = await sb.from("documents").update({ contenu, conversation: histo }).eq("id", conversation.docId);
       if (error) throw new Error("Le devis n'a pas pu être enregistré.");
@@ -1104,6 +1159,7 @@ function rendreDocument() {
         <strong>Client</strong><br>
         <div ${editable} data-champ="client_nom">${esc(v.client_nom) || "<em>Nom du client</em>"}</div>
         <div ${editable} data-champ="client_adresse">${esc(v.client_adresse) || "<em>Adresse du client</em>"}</div>
+        <div ${editable} inputmode="email" data-champ="client_email" class="champ-email">${esc(v.client_email) || (verrouille ? "" : "<em>E-mail du client</em>")}</div>
         ${v.adresse_chantier ? `<small>Chantier : ${esc(v.adresse_chantier)}</small>` : ""}
       </div>
     </div>
@@ -1148,7 +1204,8 @@ function rendreDocument() {
           const numerique = ["quantite", "prix_unitaire_ht"].includes(champ);
           ligne[champ] = numerique ? lireNombre(val) : val;
           if (champ === "prix_unitaire_ht") ligne.prix_source = "artisan";
-        } else dv[champ] = champ === "taux_tva" ? lireNombre(val) : val;
+        } else if (champ === "client_email") dv.client_email = val.replace(/\s+/g, "").toLowerCase();
+        else dv[champ] = champ === "taux_tva" ? lireNombre(val) : val;
       });
     });
     el.addEventListener("keydown", (ev) => {
@@ -1217,13 +1274,22 @@ $("#partager").onclick = async () => {
   const nom = d.type === "facture" ? "la facture" : "le devis";
   const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
   const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero ?? ""} – ${d.contenu.titre}`;
-  let pdf = null;
-  try {
-    pdf = await pdfDocument(d);
-  } catch (err) {
+  // Le PDF se prépare pendant qu'on choisit les destinataires.
+  const pdfPret = pdfDocument(d).catch((err) => {
     erreur("PDF impossible à fabriquer, envoi du texte seul.", err);
+    return null;
+  });
+  const initiales = emailValide(d.contenu.client_email || "") ? [d.contenu.client_email] : [];
+  const destinataires = await demanderDestinataires(initiales);
+  if (!destinataires) return;
+  // Première adresse saisie alors que le devis n'en avait pas : on la garde comme e-mail du client.
+  if (!initiales.length && destinataires.length && !estVerrouille(d)) {
+    await majDocument((dv) => {
+      dv.client_email = destinataires[0];
+    });
   }
-  const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), notifier });
+  const pdf = await pdfPret;
+  const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), destinataires, notifier });
   if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
 

@@ -21,6 +21,7 @@ const Devis = z.object({
   titre: z.string().describe("Ex: 'Rénovation salle de bain', 'Réfection toiture'"),
   client_nom: z.string().describe("Nom du client s'il a été donné, sinon chaîne vide"),
   client_adresse: z.string(),
+  client_email: z.string().describe("E-mail du client s'il a été donné, sinon chaîne vide"),
   adresse_chantier: z.string(),
   description: z.string().describe("Résumé des travaux en 2-3 phrases pour le client"),
   sections: z.array(
