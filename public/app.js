@@ -1,6 +1,7 @@
 import { calculerTotaux } from "/calcul.js";
 import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
+import { genererPdf } from "/pdf-devis.js";
 
 // ---------------------------------------------------------------------------
 // Utilitaires
@@ -942,6 +943,36 @@ async function changerStatut(statut) {
   rendreDocument();
 }
 
+// Montants affichés et mentions légales d'un devis / d'une facture (écran et PDF).
+function elementsDocument(d, e = profil.infos) {
+  const v = d.contenu;
+  const facture = d.type === "facture";
+  const franchise = !!e.franchise_tva;
+  const tauxTva = franchise ? 0 : v.taux_tva;
+  const tva = franchise ? 0 : v.montant_tva;
+  const ttc = franchise ? v.total_ht : v.total_ttc;
+  const acompte = Number(e.acompte || 0);
+
+  const mentions = facture
+    ? [
+        d.statut !== "brouillon" ? `Date d'échéance : ${dateFr(ajouterJours(d.date_document, e.delai_paiement || 30))}.` : "",
+        v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
+        "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
+        e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
+      ]
+    : [
+        `Devis valable ${e.validite || 30} jours à compter du ${dateFr(d.date_document)}. Devis gratuit.`,
+        acompte ? `Acompte de ${acompte} % à la signature (${euros((ttc * acompte) / 100)}), solde à la fin des travaux.` : "",
+        v.duree_estimee ? `Durée estimée des travaux : ${v.duree_estimee}.` : "",
+      ];
+  if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
+  else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
+  if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
+
+  const titre = facture ? (d.numero ? `FACTURE n° ${d.numero}` : "FACTURE (brouillon, non numérotée)") : `DEVIS n° ${d.numero}`;
+  return { franchise, tauxTva, tva, ttc, mentions: mentions.filter(Boolean), titre };
+}
+
 function rendreDocument() {
   const d = docCourant;
   const v = d.contenu;
@@ -1001,26 +1032,7 @@ function rendreDocument() {
     )
     .join("");
 
-  const tauxTva = franchise ? 0 : v.taux_tva;
-  const tva = franchise ? 0 : v.montant_tva;
-  const ttc = franchise ? v.total_ht : v.total_ttc;
-  const acompte = Number(e.acompte || 0);
-
-  const mentions = facture
-    ? [
-        d.statut !== "brouillon" ? `Date d'échéance : ${dateFr(ajouterJours(d.date_document, e.delai_paiement || 30))}.` : "",
-        v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
-        "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
-        e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
-      ]
-    : [
-        `Devis valable ${e.validite || 30} jours à compter du ${dateFr(d.date_document)}. Devis gratuit.`,
-        acompte ? `Acompte de ${acompte} % à la signature (${euros((ttc * acompte) / 100)}), solde à la fin des travaux.` : "",
-        v.duree_estimee ? `Durée estimée des travaux : ${v.duree_estimee}.` : "",
-      ];
-  if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
-  else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
-  if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
+  const { tauxTva, tva, ttc, mentions } = elementsDocument(d, e);
 
   const titreDoc = facture
     ? d.numero ? `FACTURE n° ${esc(d.numero)}` : "FACTURE (brouillon, non numérotée)"
@@ -1113,12 +1125,25 @@ function rendreDocument() {
 }
 
 $("#retour").onclick = () => afficherVue("documents");
+const chargerScript = (src) =>
+  new Promise((ok, ko) => {
+    if (document.querySelector(`script[src="${src}"]`)) return ok();
+    const s = Object.assign(document.createElement("script"), { src, onload: ok, onerror: () => ko(new Error(`Chargement impossible : ${src}`)) });
+    document.head.appendChild(s);
+  });
+
+// PDF du document (null si la plateforme ne sait pas en fabriquer, ex. version d'essai).
+async function pdfDocument(d) {
+  if (!plateforme.scriptsPdf) return null;
+  for (const src of plateforme.scriptsPdf) await chargerScript(src);
+  return genererPdf({ d, entreprise: profil.infos, elements: elementsDocument(d), euros, nombre, dateFr });
+}
+
+const titreFichier = (d) => `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero || "brouillon"} ${d.contenu.client_nom || ""}`.trim();
+
 $("#imprimer").onclick = async () => {
   try {
-    await plateforme.exporterPdf({
-      titre: `${docCourant.numero || "brouillon"} ${docCourant.contenu.client_nom || ""}`.trim(),
-      document: $("#document"),
-    });
+    await plateforme.exporterPdf({ titre: titreFichier(docCourant), pdf: await pdfDocument(docCourant), document: $("#document") });
   } catch (err) {
     erreur("Export impossible.", err);
   }
@@ -1130,7 +1155,13 @@ $("#partager").onclick = async () => {
   const nom = d.type === "facture" ? "la facture" : "le devis";
   const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
   const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero ?? ""} – ${d.contenu.titre}`;
-  const envoye = await plateforme.partager({ sujet, texte, notifier });
+  let pdf = null;
+  try {
+    pdf = await pdfDocument(d);
+  } catch (err) {
+    erreur("PDF impossible à fabriquer, envoi du texte seul.", err);
+  }
+  const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), notifier });
   if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
 

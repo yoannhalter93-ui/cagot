@@ -2,6 +2,17 @@
 // Les adresses viennent de config.json : changer d'hébergeur = changer ce fichier.
 // La version d'essai sur claude.ai remplace ce fichier par scripts/essai/plateforme-essai.js.
 
+const nomFichier = (titre) => String(titre || "document").replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "");
+
+function telecharger(blob, nom) {
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement("a"), { href: url, download: nom });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export async function demarrerPlateforme() {
   const config = await fetch("config.json", { cache: "no-store" }).then((r) => r.json());
   const sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
@@ -50,18 +61,26 @@ export async function demarrerPlateforme() {
       return data;
     },
 
-    // Le navigateur du téléphone propose « Enregistrer en PDF » dans la fenêtre d'impression.
-    async exporterPdf({ titre }) {
-      const avant = document.title;
-      document.title = titre;
-      window.print();
-      document.title = avant;
-    },
-    libelleExport: "PDF / Imprimer",
+    // Bibliothèques PDF servies par le site lui-même (chargées seulement quand on en a besoin).
+    scriptsPdf: ["/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js"],
+    libelleExport: "Télécharger le PDF",
 
-    // true si le partage natif du téléphone a été utilisé.
-    async partager({ sujet, texte }) {
-      if (navigator.share) {
+    async exporterPdf({ titre, pdf }) {
+      telecharger(pdf, `${nomFichier(titre)}.pdf`);
+    },
+
+    // Partage natif du téléphone (Gmail, WhatsApp, SMS…) avec le PDF en pièce jointe.
+    // Renvoie true si le partage a eu lieu.
+    async partager({ sujet, texte, pdf, titre, notifier }) {
+      const fichier = pdf ? new File([pdf], `${nomFichier(titre)}.pdf`, { type: "application/pdf" }) : null;
+      if (fichier && navigator.canShare?.({ files: [fichier] })) {
+        try {
+          await navigator.share({ files: [fichier], title: sujet, text: texte });
+          return true;
+        } catch (err) {
+          if (err.name === "AbortError") return false;
+        }
+      } else if (navigator.share && !fichier) {
         try {
           await navigator.share({ title: sujet, text: texte });
           return true;
@@ -69,7 +88,12 @@ export async function demarrerPlateforme() {
           if (err.name === "AbortError") return false;
         }
       }
-      location.href = `mailto:?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(`${texte}\n\n(Pense à joindre le PDF via « PDF / Imprimer ».)`)}`;
+      // Pas de partage de fichier possible (ordinateur…) : on télécharge le PDF puis on ouvre l'e-mail.
+      if (fichier) {
+        telecharger(fichier, fichier.name);
+        notifier?.("PDF téléchargé : joins-le à l'e-mail qui s'ouvre.");
+      }
+      location.href = `mailto:?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(texte)}`;
       return false;
     },
   };

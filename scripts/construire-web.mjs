@@ -21,6 +21,8 @@ cpSync(new URL("public/", racine), sortie, { recursive: true });
 cpSync(new URL("src/calcul.js", racine), new URL("calcul.js", sortie));
 cpSync(new URL("src/corps-etat.js", racine), new URL("corps-etat.js", sortie));
 cpSync(new URL("node_modules/@supabase/supabase-js/dist/umd/supabase.js", racine), new URL("vendor/supabase.js", sortie));
+cpSync(new URL("node_modules/jspdf/dist/jspdf.umd.min.js", racine), new URL("vendor/jspdf.umd.min.js", sortie));
+cpSync(new URL("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js", racine), new URL("vendor/jspdf.plugin.autotable.min.js", sortie));
 writeFileSync(new URL("config.json", sortie), `${JSON.stringify(config, null, 2)}\n`);
 
 // En-têtes de sécurité (format Cloudflare Pages / Netlify)

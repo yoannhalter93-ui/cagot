@@ -48,6 +48,10 @@ app.use(express.static("public"));
 app.get("/vendor/supabase.js", (_req, res) =>
   res.sendFile("node_modules/@supabase/supabase-js/dist/umd/supabase.js", { root: "." }),
 );
+app.get("/vendor/jspdf.umd.min.js", (_req, res) => res.sendFile("node_modules/jspdf/dist/jspdf.umd.min.js", { root: "." }));
+app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) =>
+  res.sendFile("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js", { root: "." }),
+);
 // Même module de calcul côté navigateur (recalcul instantané après modification d'une ligne).
 app.get("/calcul.js", (_req, res) => res.sendFile("src/calcul.js", { root: "." }));
 app.get("/corps-etat.js", (_req, res) => res.sendFile("src/corps-etat.js", { root: "." }));

@@ -253,6 +253,7 @@ export async function demarrerPlateforme() {
     sb,
     dictee: false, // micro refusé dans les pages claude.ai : on utilise le micro du clavier
     photos: !!limites?.images,
+    scriptsPdf: null, // pas de PDF ici : on télécharge le document en page web
     stockagePhotos: null, // pas de stockage de fichiers ici : les photos restent le temps de la session
     partageTelephone: false,
 
