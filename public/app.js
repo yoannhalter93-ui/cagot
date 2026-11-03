@@ -1065,7 +1065,14 @@ function rendreDocument() {
       ${franchise ? "" : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
-    <div class="doc-mentions">${mentions.filter(Boolean).map((m) => `<p>${esc(m)}</p>`).join("")}</div>
+    <div class="doc-mentions">${mentions
+      .filter((m) => !m.startsWith("Durée estimée"))
+      .map((m) => `<p>${esc(m)}</p>`)
+      .join("")}${
+      facture || (verrouille && !v.duree_estimee)
+        ? ""
+        : `<p>Durée estimée des travaux : <span ${editable} data-champ="duree_estimee" class="champ-duree">${esc(v.duree_estimee) || "<em>à préciser (ex. 3 jours)</em>"}</span>.</p>`
+    }</div>
     ${facture ? "" : `<div class="doc-signature"><div>L'entreprise</div><div>Le client<br><small>Date, signature et mention « Bon pour accord »</small></div></div>`}
   `;
 

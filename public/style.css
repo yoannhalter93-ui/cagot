@@ -255,3 +255,5 @@ button, input, textarea { font: inherit; }
   border: 0; background: var(--rouge); color: #fff; font-size: 13px; line-height: 24px; cursor: pointer;
 }
 .photo-note.envoi img { opacity: .45; }
+.doc-mentions .champ-duree { color: var(--texte, #1c2430); font-weight: 600; border-bottom: 1px dashed var(--bleu); padding: 0 2px; }
+.doc-mentions .champ-duree:focus { outline: none; background: #fffbe6; }
