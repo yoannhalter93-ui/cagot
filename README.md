@@ -13,6 +13,10 @@ Un clic transforme le devis en facture.
 - **Comptes et sauvegarde en ligne sécurisée** (Supabase) : chaque artisan n'accède qu'à ses données.
 - **Ta grille de prix**, saisie dans l'appli et classée par corps d'état. Quand un prix manque,
   l'IA l'estime, le surligne sur le devis, et tu l'ajoutes à ta grille en un clic.
+- **Import des notes du téléphone** : « Partager → Cagot » depuis l'appli Notes, Keep ou la galerie
+  (appli ajoutée à l'écran d'accueil), bouton « Coller une note », import de fichiers texte et de photos.
+- **Photos dans les notes** (appareil photo ou galerie), rangées en ligne dans un espace privé et
+  envoyées à l'IA avec la note.
 - **Factures conformes** : brouillon modifiable, puis émission avec numéro chronologique sans trou ;
   une facture émise est verrouillée (ni modifiable ni supprimable), statut « payée ».
 - **Dictée vocale** (micro, français) et **réponses à voix haute** ; mode **mains libres** :

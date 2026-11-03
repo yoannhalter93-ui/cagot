@@ -239,3 +239,19 @@ button, input, textarea { font: inherit; }
   .barre nav { width: 100%; justify-content: space-between; }
   .barre nav button { padding: 8px 6px; font-size: .95rem; }
 }
+
+/* --- Import et photos des notes --- */
+.import-notes { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.import-notes > * {
+  flex: 1 1 140px; text-align: center; background: var(--surface); color: var(--texte);
+  border: 1px solid var(--bord); border-radius: 12px; padding: 10px; cursor: pointer; font-size: .95rem;
+}
+.photos-note { display: flex; gap: 10px; overflow-x: auto; flex: none; padding: 8px 8px 2px 0; }
+.photos-note:empty { display: none; }
+.photo-note { position: relative; flex: none; }
+.photo-note img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--bord); display: block; }
+.photo-note button {
+  position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
+  border: 0; background: var(--rouge); color: #fff; font-size: 13px; line-height: 24px; cursor: pointer;
+}
+.photo-note.envoi img { opacity: .45; }

@@ -6,7 +6,9 @@
   <meta name="theme-color" content="#1f4e79">
   <meta name="referrer" content="no-referrer">
   <title>Cagot – Devis & Factures</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icones/icone-192.png">
+  <link rel="apple-touch-icon" href="/icones/apple-touch-icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -55,7 +57,12 @@
   <!-- ===== Notes de chantier : liste ===== -->
   <main id="vue-notes" class="vue" hidden>
     <button id="nouvelle-note" class="btn-principal btn-large">+ Nouvelle note</button>
+    <div class="import-notes">
+      <button type="button" id="coller-note">📋 Coller une note</button>
+      <label class="bouton-fichier">📥 Importer (texte ou photos)<input id="importer-note" type="file" accept="text/plain,.txt,image/*" multiple hidden></label>
+    </div>
     <p class="aide">Écris tes notes sur le chantier comme dans un bloc-notes : elles s'enregistrent toutes seules. Une fois fini, envoie-les à l'IA pour faire le devis.</p>
+    <p class="aide" id="aide-partage">Astuce : depuis l'appli Notes, Keep ou ta galerie, touche <strong>Partager → Cagot</strong> pour créer une note directement (l'appli doit être ajoutée à l'écran d'accueil).</p>
     <div id="liste-notes"></div>
   </main>
 
@@ -74,10 +81,11 @@ Chambre 1
 1 porte, 1 fenêtre 120x150
 papier peint à enlever
 ratisser, poncer, peindre murs + plafond blanc"></textarea>
-    <div id="photos-note" class="apercu-photos"></div>
+    <div id="photos-note" class="photos-note"></div>
     <div class="note-outils">
-      <button type="button" id="micro-note" class="btn-icone" title="Dicter">🎤</button>
-      <label class="btn-icone" title="Photo de notes papier">📷<input id="photo-note" type="file" accept="image/*" capture="environment" multiple hidden></label>
+      <button type="button" id="micro-note" class="btn-icone" title="Dicter" aria-label="Dicter">🎤</button>
+      <label class="btn-icone" title="Prendre une photo" aria-label="Prendre une photo">📷<input id="photo-note" type="file" accept="image/*" capture="environment" multiple hidden></label>
+      <label class="btn-icone" title="Ajouter depuis la galerie" aria-label="Ajouter depuis la galerie">🖼️<input id="galerie-note" type="file" accept="image/*" multiple hidden></label>
       <button type="button" id="envoyer-note" class="btn-principal">Faire le devis avec l'IA →</button>
     </div>
   </main>

@@ -39,6 +39,9 @@ writeFileSync(
 
 /config.json
   Cache-Control: no-store
+
+/sw.js
+  Cache-Control: no-cache
 `,
 );
 console.log(`dist/web prêt — API : ${config.apiUrl}`);

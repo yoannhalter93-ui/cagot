@@ -98,7 +98,12 @@ $("#micro-note").hidden = !plateforme.dictee;
 $("#option-mains-libres").hidden = !plateforme.dictee;
 $("#imprimer").textContent = plateforme.libelleExport;
 $("#photo").closest("label").hidden = plateforme.photos === false;
+if (plateforme.partageTelephone && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch((err) => console.error(err));
+}
 $("#photo-note").closest("label").hidden = plateforme.photos === false;
+$("#galerie-note").closest("label").hidden = plateforme.photos === false;
+$("#aide-partage").hidden = !plateforme.partageTelephone;
 
 let utilisateur = null;
 let modeConnexion = "connexion";
@@ -209,6 +214,7 @@ async function demarrerSession() {
   conversation = local.lire(`conversation.${utilisateur.id}`, { historique: [], docId: null });
   reafficherConversation();
   afficherVue(profil.infos.nom ? "notes" : "parametres");
+  importerPartage().catch((err) => erreur("Le contenu partagé n'a pas pu être importé.", err));
 }
 
 // ---------------------------------------------------------------------------
@@ -320,16 +326,28 @@ function redimensionner(fichier, max = 1600) {
 }
 
 function afficherPhotosEnAttente() {
-  const html = photosEnAttente.map((p) => `<img src="${p}" alt="note">`).join("");
-  $("#apercu-photos").innerHTML = html;
-  $("#photos-note").innerHTML = html;
+  $("#apercu-photos").innerHTML = photosEnAttente.map((p) => `<img src="${p}" alt="note">`).join("");
 }
 
-$("#photo").onchange = $("#photo-note").onchange = async (e) => {
+$("#photo").onchange = async (e) => {
   for (const f of e.target.files) photosEnAttente.push(await redimensionner(f));
   e.target.value = "";
   afficherPhotosEnAttente();
 };
+
+// Conversion locale (pas de fetch sur « data: », bloqué par la politique de sécurité du site).
+function versBlob(dataUrl) {
+  const [entete, base64] = dataUrl.split(",");
+  const octets = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return new Blob([octets], { type: entete.match(/data:(.*?);/)?.[1] ?? "image/jpeg" });
+}
+const blobVersDataUrl = (blob) =>
+  new Promise((ok, ko) => {
+    const lecteur = new FileReader();
+    lecteur.onload = () => ok(lecteur.result);
+    lecteur.onerror = ko;
+    lecteur.readAsDataURL(blob);
+  });
 
 // ---------------------------------------------------------------------------
 // Conversation avec l'IA
@@ -498,7 +516,8 @@ async function afficherNotes() {
           (n) => `<div class="element-liste" data-note="${esc(n.id)}">
             <div><strong>${esc(n.titre || titreAuto(n.contenu))}</strong>
               <small>${dateFr(n.updated_at)} à ${heureFr(n.updated_at)}</small>
-              <span class="extrait">${esc(n.contenu.slice(0, 200))}</span></div>
+              <span class="extrait">${esc(n.contenu.slice(0, 200))}</span>
+              ${n.photos?.length ? `<small>📷 ${n.photos.length} photo${n.photos.length > 1 ? "s" : ""}</small>` : ""}</div>
             <div class="droite">${n.envoyee_at ? `<span class="pastille envoyee">${n.document_id ? "devis fait" : "envoyée"}</span>` : ""}</div>
           </div>`,
         )
@@ -512,8 +531,11 @@ function afficherEditeurNote(note) {
   // Une copie locale plus récente (enregistrement en ligne raté) l'emporte.
   const copie = local.lire(cleNoteLocale(note.id), null);
   if (copie && copie.updated_at > note.updated_at) Object.assign(noteCourante, copie);
+  noteCourante.photos ??= [];
   $("#titre-note").value = noteCourante.titre;
   $("#contenu-note").value = noteCourante.contenu;
+  if (plateforme.stockagePhotos) photosEnAttente = []; // les photos de la note sont rangées avec elle
+  afficherPhotosNote();
   etatNote(copie && copie.updated_at > note.updated_at ? "Modifications locales à enregistrer" : "Enregistrée");
   afficherVue("note");
   if (copie && copie.updated_at > note.updated_at) programmerEnregistrementNote(0);
@@ -581,21 +603,33 @@ $("#micro-note").onclick = () =>
 
 $("#supprimer-note").onclick = async () => {
   if (!(await demander("Supprimer cette note ?", { ok: "Supprimer", danger: true }))) return;
-  const id = noteCourante.id;
+  const { id, photos = [] } = noteCourante;
   clearTimeout(minuterieNote);
   noteCourante = null;
   const { error } = await sb.from("notes").delete().eq("id", id);
   if (error) return erreur("Suppression impossible.", error);
   local.effacer(cleNoteLocale(id));
+  plateforme.stockagePhotos?.supprimer(photos).catch((err) => console.error(err));
   afficherVue("notes");
 };
 
 $("#envoyer-note").onclick = async () => {
   const contenu = $("#contenu-note").value.trim();
-  if (!contenu && photosEnAttente.length === 0) return notifier("La note est vide.");
+  const nbPhotos = (noteCourante.photos?.length ?? 0) + photosEnAttente.length;
+  if (!contenu && nbPhotos === 0) return notifier("La note est vide.");
   if (conversation.historique.length && !(await demander("Démarrer un nouveau chantier avec cette note ? La conversation en cours sera effacée (les devis restent enregistrés).", { ok: "Faire le devis" }))) return;
   const note = noteCourante;
   await enregistrerNote();
+  if (plateforme.stockagePhotos && note.photos?.length) {
+    etatNote("Préparation des photos…");
+    try {
+      photosEnAttente = await Promise.all(
+        note.photos.slice(0, 10).map(async (chemin) => blobVersDataUrl(await chargerPhoto(chemin))),
+      );
+    } catch (err) {
+      return erreur("Impossible de récupérer les photos de la note (connexion ?).", err);
+    }
+  }
   await sb.from("notes").update({ envoyee_at: new Date().toISOString() }).eq("id", note.id);
   conversation = { historique: [], docId: null, noteId: note.id };
   sauverConversation();
@@ -604,6 +638,155 @@ $("#envoyer-note").onclick = async () => {
   $("#texte").value = note.titre ? `${note.titre}\n\n${contenu}` : contenu;
   envoyer();
 };
+
+// --- Photos de la note (enregistrées en ligne avec elle) ---
+const urlsPhotos = new Map(); // chemin -> aperçu déjà chargé
+const photosEnCours = new Map(); // id temporaire -> aperçu pendant l'envoi
+const nouvelIdLocal = () => crypto.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+
+async function chargerPhoto(chemin) {
+  const blob = await plateforme.stockagePhotos.telecharger(chemin);
+  return blob.type.startsWith("image/") ? blob : new Blob([blob], { type: "image/jpeg" });
+}
+
+async function urlPhoto(chemin) {
+  if (!urlsPhotos.has(chemin)) urlsPhotos.set(chemin, URL.createObjectURL(await chargerPhoto(chemin)));
+  return urlsPhotos.get(chemin);
+}
+
+async function afficherPhotosNote() {
+  const zone = $("#photos-note");
+  if (!plateforme.stockagePhotos) {
+    // Version d'essai : photos gardées le temps de la session, envoyées avec la note.
+    zone.innerHTML = photosEnAttente.map((p) => `<div class="photo-note"><img src="${p}" alt="Photo de la note"></div>`).join("");
+    return;
+  }
+  const note = noteCourante;
+  if (!note) return;
+  const cartes = await Promise.all(
+    note.photos.map(async (chemin) => {
+      const bouton = `<button type="button" data-suppr-photo="${esc(chemin)}" aria-label="Retirer la photo">✕</button>`;
+      try {
+        return `<div class="photo-note"><img src="${await urlPhoto(chemin)}" alt="Photo de la note">${bouton}</div>`;
+      } catch {
+        return `<div class="photo-note">${bouton}</div>`;
+      }
+    }),
+  );
+  if (noteCourante !== note) return;
+  const enCours = [...photosEnCours.values()].map((p) => `<div class="photo-note envoi"><img src="${p}" alt="Envoi en cours"></div>`);
+  zone.innerHTML = [...cartes, ...enCours].join("");
+  for (const b of zone.querySelectorAll("[data-suppr-photo]")) {
+    b.onclick = async () => {
+      if (!(await demander("Retirer cette photo de la note ?", { ok: "Retirer", danger: true }))) return;
+      const chemin = b.dataset.supprPhoto;
+      note.photos = note.photos.filter((c) => c !== chemin);
+      const { error } = await sb.from("notes").update({ photos: note.photos }).eq("id", note.id);
+      if (error) return erreur("Photo non retirée (connexion ?).", error);
+      plateforme.stockagePhotos.supprimer([chemin]).catch((err) => console.error(err));
+      afficherPhotosNote();
+    };
+  }
+}
+
+// Ajoute des images à une note : redimensionnées, puis rangées en ligne.
+async function ajouterPhotosNote(note, fichiers) {
+  const images = [...fichiers].filter((f) => f.type.startsWith("image/"));
+  if (!images.length) return;
+  if (!plateforme.stockagePhotos) {
+    for (const f of images) photosEnAttente.push(await redimensionner(f));
+    if (noteCourante === note) afficherPhotosNote();
+    return;
+  }
+  const place = 20 - note.photos.length;
+  if (place <= 0) return notifier("20 photos maximum par note.", "erreur");
+  if (images.length > place) notifier(`Seules ${place} photo(s) ajoutée(s) : 20 maximum par note.`);
+  for (const f of images.slice(0, place)) {
+    const idTemp = nouvelIdLocal();
+    try {
+      const dataUrl = await redimensionner(f);
+      photosEnCours.set(idTemp, dataUrl);
+      if (noteCourante === note) afficherPhotosNote();
+      const chemin = `${utilisateur.id}/${note.id}/${nouvelIdLocal()}.jpg`;
+      await plateforme.stockagePhotos.televerser(chemin, versBlob(dataUrl));
+      note.photos = [...note.photos, chemin];
+      urlsPhotos.set(chemin, dataUrl);
+      const { error } = await sb.from("notes").update({ photos: note.photos }).eq("id", note.id);
+      if (error) throw error;
+    } catch (err) {
+      erreur("Une photo n'a pas pu être enregistrée (connexion ?).", err);
+    } finally {
+      photosEnCours.delete(idTemp);
+      if (noteCourante === note) afficherPhotosNote();
+    }
+  }
+}
+
+$("#photo-note").onchange = $("#galerie-note").onchange = async (e) => {
+  const fichiers = [...e.target.files];
+  e.target.value = "";
+  if (noteCourante) await ajouterPhotosNote(noteCourante, fichiers);
+};
+
+// --- Importer des notes : coller, fichier texte/photos, ou « Partager → Cagot » ---
+async function creerNoteImportee({ titre = "", contenu = "", fichiers = [] }) {
+  const textes = await Promise.all(
+    fichiers.filter((f) => f.type.startsWith("text/") || /\.txt$/i.test(f.name ?? "")).map((f) => f.text()),
+  );
+  const texteComplet = [contenu, ...textes].map((t) => t.trim()).filter(Boolean).join("\n\n").slice(0, 50000);
+  const { data: note, error } = await sb
+    .from("notes")
+    .insert({ titre: titre.trim().slice(0, 200), contenu: texteComplet })
+    .select("*")
+    .single();
+  if (error) {
+    erreur("Impossible de créer la note (connexion ?).", error);
+    return null;
+  }
+  afficherEditeurNote(note);
+  await ajouterPhotosNote(note, fichiers);
+  notifier("Note importée : vérifie-la puis fais le devis.");
+  return note;
+}
+
+$("#coller-note").onclick = async () => {
+  let texte = "";
+  try {
+    texte = await navigator.clipboard.readText();
+  } catch {
+    /* lecture du presse-papiers refusée : on ouvre une note vide */
+  }
+  if (!texte.trim()) {
+    $("#nouvelle-note").click();
+    notifier("Appuie longuement dans la note puis choisis « Coller ».");
+    return;
+  }
+  creerNoteImportee({ contenu: texte });
+};
+
+$("#importer-note").onchange = async (e) => {
+  const fichiers = [...e.target.files];
+  e.target.value = "";
+  if (fichiers.length) creerNoteImportee({ fichiers });
+};
+
+// Contenu reçu par « Partager → Cagot » : le service worker l'a rangé dans un cache.
+async function importerPartage() {
+  if (!new URLSearchParams(location.search).has("partage")) return;
+  history.replaceState(null, "", location.pathname);
+  if (!("caches" in window)) return;
+  const cache = await caches.open("cagot-partage");
+  const reponse = await cache.match("/partage/contenu.json");
+  if (!reponse) return;
+  const { titre, texte, url, fichiers: descriptions = [] } = await reponse.json();
+  const fichiers = [];
+  for (const d of descriptions) {
+    const r = await cache.match(d.cle);
+    if (r) fichiers.push(new File([await r.blob()], d.nom, { type: d.type }));
+  }
+  for (const cle of await cache.keys()) await cache.delete(cle);
+  await creerNoteImportee({ titre, contenu: [texte, url].filter(Boolean).join("\n"), fichiers });
+}
 
 // ---------------------------------------------------------------------------
 // Liste des documents

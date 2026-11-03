@@ -4,10 +4,31 @@
 
 export async function demarrerPlateforme() {
   const config = await fetch("config.json", { cache: "no-store" }).then((r) => r.json());
+  const sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+  const espacePhotos = () => sb.storage.from("photos-notes");
   return {
     demo: !!config.demo,
     essai: false,
-    sb: window.supabase.createClient(config.supabaseUrl, config.supabaseKey),
+    sb,
+    partageTelephone: true, // « Partager → Cagot » depuis les autres applis (service worker)
+
+    // Photos des notes, rangées dans un espace privé (<user_id>/<note_id>/<fichier>).
+    stockagePhotos: {
+      async televerser(chemin, blob) {
+        const { error } = await espacePhotos().upload(chemin, blob, { contentType: blob.type || "image/jpeg", upsert: false });
+        if (error) throw error;
+      },
+      async telecharger(chemin) {
+        const { data, error } = await espacePhotos().download(chemin);
+        if (error) throw error;
+        return data;
+      },
+      async supprimer(chemins) {
+        if (!chemins.length) return;
+        const { error } = await espacePhotos().remove(chemins);
+        if (error) throw error;
+      },
+    },
     dictee: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
 
     async appelerIA(requete, jeton) {

@@ -253,6 +253,8 @@ export async function demarrerPlateforme() {
     sb,
     dictee: false, // micro refusé dans les pages claude.ai : on utilise le micro du clavier
     photos: !!limites?.images,
+    stockagePhotos: null, // pas de stockage de fichiers ici : les photos restent le temps de la session
+    partageTelephone: false,
 
     async appelerIA({ historique, entreprise, tarifs }) {
       if (!sample) throw new Error("L'IA n'est pas disponible sur cette page.");
