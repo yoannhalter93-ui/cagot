@@ -13,6 +13,7 @@ const config = {
   supabaseUrl: SUPABASE_URL,
   supabaseKey: process.env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_ZxBR_8BuFWNdHoeyKLKLhA_p7wvik6_",
   apiUrl: process.env.API_URL || `${SUPABASE_URL}/functions/v1/discuter`,
+  envoiUrl: process.env.ENVOI_URL || `${SUPABASE_URL}/functions/v1/envoyer`,
 };
 
 rmSync(sortie, { recursive: true, force: true });

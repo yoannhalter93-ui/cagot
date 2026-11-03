@@ -61,6 +61,29 @@ export async function demarrerPlateforme() {
       return data;
     },
 
+    // Envoi direct par Cagot (fonction « envoyer ») : renvoie true si parti,
+    // false si l'envoi direct n'est pas activé (on passe alors par le partage du téléphone).
+    envoiDirect: !!config.envoiUrl,
+    async envoyerEmail({ destinataires, sujet, texte, pdf, titre }, jeton) {
+      const octets = new Uint8Array(await pdf.arrayBuffer());
+      let binaire = "";
+      for (let i = 0; i < octets.length; i += 0x8000) binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
+      let rep;
+      try {
+        rep = await fetch(config.envoiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${jeton}`, apikey: config.supabaseKey },
+          body: JSON.stringify({ destinataires, sujet, texte, pdf: btoa(binaire), nom_fichier: `${nomFichier(titre)}.pdf` }),
+        });
+      } catch {
+        throw new Error("Pas de connexion internet : l'e-mail n'est pas parti.");
+      }
+      const data = await rep.json().catch(() => ({}));
+      if (data.non_configure || rep.status === 404) return false;
+      if (!rep.ok) throw new Error(data.erreur || "L'e-mail n'a pas pu partir.");
+      return true;
+    },
+
     // Bibliothèques PDF servies par le site lui-même (chargées seulement quand on en a besoin).
     scriptsPdf: ["/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js"],
     libelleExport: "Télécharger le PDF",

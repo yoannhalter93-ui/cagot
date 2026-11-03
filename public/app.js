@@ -99,7 +99,7 @@ function demanderDestinataires(initiales) {
       <h3>Envoyer à</h3>
       <div class="destinataires"></div>
       <button type="button" class="lien ajouter-adresse">+ Ajouter une adresse</button>
-      <p class="aide">Le PDF est joint automatiquement. Les adresses sont copiées : dans Gmail, appuie longuement sur « À » puis « Coller ».</p>
+      <p class="aide">${plateforme.envoiDirect ? "Cagot envoie l'e-mail lui-même, avec le PDF joint. Tu peux t'ajouter pour recevoir une copie." : "Le PDF est joint automatiquement. Les adresses sont copiées : dans Gmail, appuie longuement sur « À » puis « Coller »."}</p>
       <div class="dialogue-actions">
         <button type="button" class="annuler">Annuler</button>
         <button type="button" class="valider btn-principal">Envoyer</button>
@@ -1289,6 +1289,25 @@ $("#partager").onclick = async () => {
     });
   }
   const pdf = await pdfPret;
+  // 1) Envoi direct par Cagot (PDF joint, adresses remplies)
+  if (plateforme.envoiDirect && pdf && destinataires.length) {
+    const bouton = $("#partager");
+    bouton.disabled = true;
+    bouton.textContent = "Envoi…";
+    try {
+      if (await plateforme.envoyerEmail({ destinataires, sujet, texte, pdf, titre: titreFichier(d) }, await jetonAcces())) {
+        notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}.`);
+        if (d.type === "devis" && docCourant.statut === "brouillon") changerStatut("envoye");
+        return;
+      }
+    } catch (err) {
+      return erreur(err.message, err);
+    } finally {
+      bouton.disabled = false;
+      bouton.textContent = "Envoyer";
+    }
+  }
+  // 2) Sinon : partage du téléphone (Gmail, WhatsApp…)
   const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), destinataires, notifier });
   if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
