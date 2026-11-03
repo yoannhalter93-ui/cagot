@@ -257,3 +257,17 @@ button, input, textarea { font: inherit; }
 .photo-note.envoi img { opacity: .45; }
 .doc-mentions .champ-duree { color: var(--texte, #1c2430); font-weight: 600; border-bottom: 1px dashed var(--bleu); padding: 0 2px; }
 .doc-mentions .champ-duree:focus { outline: none; background: #fffbe6; }
+
+/* --- Personnalisation (logo, couleur) --- */
+.reglage-logo { display: flex; align-items: center; gap: 14px; margin: 8px 0 12px; }
+.cadre-logo { width: 140px; height: 70px; border: 1px dashed var(--bord); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #fff; overflow: hidden; flex-shrink: 0; }
+.cadre-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.cadre-logo span { color: #6b7684; font-size: .8rem; }
+.actions-logo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.actions-logo .btn { display: inline-block; border: 1px solid var(--bord); border-radius: 12px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+.ligne-couleur { display: flex; align-items: center; gap: 10px; }
+.ligne-couleur input[type=color] { width: 48px; height: 34px; padding: 0; border: 1px solid var(--bord); border-radius: 8px; background: none; }
+.doc-logo { display: block; max-width: 180px; max-height: 80px; object-fit: contain; margin-bottom: 8px; }
+.carte .actions-logo label.btn { display: inline-block; margin: 0; color: var(--texte); background: var(--surface, #fff); font-size: .95rem; }
+.carte .actions-logo input[type=file] { display: none; }
+.carte .ligne-couleur input[type=color] { width: 48px; flex: none; }

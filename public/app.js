@@ -943,6 +943,57 @@ async function changerStatut(statut) {
   rendreDocument();
 }
 
+// Personnalisation : logo (image enregistrée dans les infos de l'entreprise) et couleur.
+const logoValide = (logo) => typeof logo === "string" && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(logo);
+const couleurValide = (c) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+const COULEUR_DEFAUT = "#1f4e79";
+
+function teinteClaire(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const mix = (c) => Math.round(c + (255 - c) * 0.88).toString(16).padStart(2, "0");
+  return `#${mix(r)}${mix(g)}${mix(b)}`;
+}
+
+function appliquerCouleur(el, couleur) {
+  const c = couleurValide(couleur) ? couleur : COULEUR_DEFAUT;
+  el.style.setProperty("--bleu", c);
+  el.style.setProperty("--bleu-clair", teinteClaire(c));
+}
+
+// Réduit le logo (max 600 × 240 px) pour qu'il reste léger dans les PDF et la base.
+async function preparerLogo(fichier) {
+  const url = URL.createObjectURL(fichier);
+  try {
+    const img = await new Promise((ok, ko) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => ko(new Error("Image illisible"));
+      i.src = url;
+    });
+    const echelle = Math.min(1, 600 / img.naturalWidth, 240 / img.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * echelle));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * echelle));
+    const ctx = canvas.getContext("2d");
+    const jpeg = fichier.type === "image/jpeg";
+    if (jpeg) {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    let donnees = canvas.toDataURL(jpeg ? "image/jpeg" : "image/png", 0.9);
+    if (donnees.length > 400_000) {
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      donnees = canvas.toDataURL("image/jpeg", 0.85);
+    }
+    return donnees;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Montants affichés et mentions légales d'un devis / d'une facture (écran et PDF).
 function elementsDocument(d, e = profil.infos) {
   const v = d.contenu;
@@ -968,6 +1019,7 @@ function elementsDocument(d, e = profil.infos) {
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
   else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
+  if (e.conditions?.trim()) mentions.push(e.conditions.trim());
 
   const titre = facture ? (d.numero ? `FACTURE n° ${d.numero}` : "FACTURE (brouillon, non numérotée)") : `DEVIS n° ${d.numero}`;
   return { franchise, tauxTva, tva, ttc, mentions: mentions.filter(Boolean), titre };
@@ -1041,6 +1093,7 @@ function rendreDocument() {
   $("#document").innerHTML = `
     <div class="doc-entete">
       <div class="entreprise">
+        ${logoValide(e.logo) ? `<img class="doc-logo" src="${esc(e.logo)}" alt="">` : ""}
         <strong>${esc(e.nom || "Mon entreprise (à compléter dans Réglages)")}</strong><br>
         ${esc(e.adresse || "").replace(/\n/g, "<br>")}<br>
         ${e.telephone ? `Tél. ${esc(e.telephone)}<br>` : ""}${e.email ? `${esc(e.email)}<br>` : ""}
@@ -1076,6 +1129,7 @@ function rendreDocument() {
     ${facture ? "" : `<div class="doc-signature"><div>L'entreprise</div><div>Le client<br><small>Date, signature et mention « Bon pour accord »</small></div></div>`}
   `;
 
+  appliquerCouleur($("#document"), e.couleur);
   if (verrouille) return;
 
   // Édition directe dans le document
@@ -1237,11 +1291,35 @@ function afficherParametres() {
     if (champ.type === "checkbox") champ.checked = !!profil.infos[champ.name];
     else if (profil.infos[champ.name] !== undefined) champ.value = profil.infos[champ.name];
   }
+  afficherLogo(profil.infos.logo);
   $("#liste-metiers").innerHTML = CORPS_ETAT.map(
     (c) => `<label><input type="checkbox" value="${esc(c.id)}" ${profil.metiers.includes(c.id) ? "checked" : ""}> ${esc(c.nom)}</label>`,
   ).join("");
   rendreTarifs();
 }
+
+function afficherLogo(logo) {
+  const ok = logoValide(logo);
+  $("#form-entreprise [name=logo]").value = ok ? logo : "";
+  $("#apercu-logo").hidden = !ok;
+  if (ok) $("#apercu-logo").src = logo;
+  else $("#apercu-logo").removeAttribute("src");
+  $("#sans-logo").hidden = ok;
+  $("#retirer-logo").hidden = !ok;
+}
+
+$("#fichier-logo").onchange = async (ev) => {
+  const fichier = ev.target.files?.[0];
+  ev.target.value = "";
+  if (!fichier) return;
+  try {
+    afficherLogo(await preparerLogo(fichier));
+    notifier("Logo prêt : appuie sur « Enregistrer ».");
+  } catch (err) {
+    erreur("Ce fichier n'est pas une image utilisable (PNG ou JPEG).", err);
+  }
+};
+$("#retirer-logo").onclick = () => afficherLogo("");
 
 $("#form-entreprise").onsubmit = async (ev) => {
   ev.preventDefault();

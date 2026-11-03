@@ -151,6 +151,19 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <label>Acompte demandé à la signature (%) <input name="acompte" type="number" min="0" max="100" value="30"></label>
       <label>Délai de paiement des factures (jours) <input name="delai_paiement" type="number" min="0" value="30"></label>
 
+      <h2>Mes devis et factures</h2>
+      <p class="aide">Ton logo et ta couleur apparaissent sur l'écran et dans les PDF envoyés aux clients.</p>
+      <div class="reglage-logo">
+        <div class="cadre-logo"><img id="apercu-logo" alt="Mon logo" hidden><span id="sans-logo">Pas de logo</span></div>
+        <div class="actions-logo">
+          <label class="btn">Choisir mon logo<input type="file" id="fichier-logo" accept="image/png,image/jpeg,image/webp" hidden></label>
+          <button type="button" id="retirer-logo" class="lien" hidden>Retirer le logo</button>
+        </div>
+      </div>
+      <input type="hidden" name="logo">
+      <label class="ligne-couleur">Couleur des documents <input type="color" name="couleur" value="#1f4e79"></label>
+      <label>Conditions particulières (ajoutées en bas de chaque devis et facture) <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
+
       <h2>Mes métiers</h2>
       <p class="aide">L'IA te prévient quand des travaux sortent de tes métiers (sous-traitance).</p>
       <div id="liste-metiers" class="metiers"></div>

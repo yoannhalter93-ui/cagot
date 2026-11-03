@@ -1,8 +1,7 @@
 // Fabrication du PDF d'un devis / d'une facture (format A4), avec jsPDF + jspdf-autotable
 // chargés à la demande (window.jspdf). Les montants et mentions viennent de l'appli.
 
-const BLEU = [31, 78, 121];
-const BLEU_CLAIR = [232, 240, 248];
+const BLEU_DEFAUT = [31, 78, 121];
 const GRIS = [107, 118, 132];
 const TEXTE = [28, 36, 48];
 
@@ -10,8 +9,15 @@ const TEXTE = [28, 36, 48];
 // utilisées par toLocaleString("fr-FR") : on les remplace par des espaces simples.
 const propre = (t) => String(t ?? "").replace(/[  ]/g, " ");
 
+// Couleur de l'artisan (#rrggbb) et sa version très claire pour les fonds.
+function couleurs(hex) {
+  const base = /^#[0-9a-f]{6}$/i.test(hex || "") ? [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) : BLEU_DEFAUT;
+  return [base, base.map((c) => Math.round(c + (255 - c) * 0.88))];
+}
+
 export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }) {
   const { jsPDF } = window.jspdf;
+  const [BLEU, BLEU_CLAIR] = couleurs(e.couleur);
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
   const v = d.contenu;
   const L = 210;
@@ -21,8 +27,21 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
 
   // --- En-tête : entreprise (gauche) et client (droite)
   let y = 18;
+  let yNom = y;
+  const logo = /^data:image\/(png|jpeg);base64,/.exec(e.logo || "");
+  if (logo) {
+    try {
+      const { width, height } = pdf.getImageProperties(e.logo);
+      const echelle = Math.min(55 / width, 22 / height);
+      const h = height * echelle;
+      pdf.addImage(e.logo, logo[1] === "png" ? "PNG" : "JPEG", M, 10, width * echelle, h);
+      yNom = 10 + h + 6;
+    } catch {
+      // logo illisible : on continue sans
+    }
+  }
   pdf.setFont("helvetica", "bold").setFontSize(15).setTextColor(...BLEU);
-  pdf.text(propre(e.nom || "Mon entreprise"), M, y);
+  pdf.text(propre(e.nom || "Mon entreprise"), M, yNom);
   pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(...TEXTE);
   const lignesEntreprise = [
     ...String(e.adresse || "").split("\n"),
@@ -31,7 +50,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     e.siret ? `SIRET ${e.siret}` : "",
     e.tva_intra && !elements.franchise ? `TVA ${e.tva_intra}` : "",
   ].filter((l) => l.trim());
-  let yE = y + 5;
+  let yE = yNom + 5;
   for (const l of lignesEntreprise) {
     pdf.text(propre(l), M, yE);
     yE += 4.2;
