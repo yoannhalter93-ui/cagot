@@ -2,6 +2,7 @@ import { calculerTotaux } from "/calcul.js";
 import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
 import { genererPdf } from "/pdf-devis.js";
+import { couleurDominante, nettoyerLogo } from "/logo.js";
 
 // ---------------------------------------------------------------------------
 // Utilitaires
@@ -960,7 +961,8 @@ function appliquerCouleur(el, couleur) {
   el.style.setProperty("--bleu-clair", teinteClaire(c));
 }
 
-// Réduit le logo (max 600 × 240 px) pour qu'il reste léger dans les PDF et la base.
+// Prépare le logo : fond retiré, recadré au plus près, réduit (max 600 × 240 px),
+// et couleur principale proposée pour les documents.
 async function preparerLogo(fichier) {
   const url = URL.createObjectURL(fichier);
   try {
@@ -970,25 +972,24 @@ async function preparerLogo(fichier) {
       i.onerror = () => ko(new Error("Image illisible"));
       i.src = url;
     });
-    const echelle = Math.min(1, 600 / img.naturalWidth, 240 / img.naturalHeight);
+    // Travail sur une copie de taille raisonnable
+    const e1 = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight));
+    const source = document.createElement("canvas");
+    source.width = Math.max(1, Math.round(img.naturalWidth * e1));
+    source.height = Math.max(1, Math.round(img.naturalHeight * e1));
+    const sctx = source.getContext("2d", { willReadFrequently: true });
+    sctx.drawImage(img, 0, 0, source.width, source.height);
+    const pixels = sctx.getImageData(0, 0, source.width, source.height);
+    const cadre = nettoyerLogo(pixels);
+    sctx.putImageData(pixels, 0, 0);
+    const couleur = couleurDominante(pixels);
+
+    const echelle = Math.min(1, 600 / cadre.w, 240 / cadre.h);
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(img.naturalWidth * echelle));
-    canvas.height = Math.max(1, Math.round(img.naturalHeight * echelle));
-    const ctx = canvas.getContext("2d");
-    const jpeg = fichier.type === "image/jpeg";
-    if (jpeg) {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    let donnees = canvas.toDataURL(jpeg ? "image/jpeg" : "image/png", 0.9);
-    if (donnees.length > 400_000) {
-      ctx.globalCompositeOperation = "destination-over";
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      donnees = canvas.toDataURL("image/jpeg", 0.85);
-    }
-    return donnees;
+    canvas.width = Math.max(1, Math.round(cadre.w * echelle));
+    canvas.height = Math.max(1, Math.round(cadre.h * echelle));
+    canvas.getContext("2d").drawImage(source, cadre.x, cadre.y, cadre.w, cadre.h, 0, 0, canvas.width, canvas.height);
+    return { donnees: canvas.toDataURL("image/png"), couleur };
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -1313,8 +1314,10 @@ $("#fichier-logo").onchange = async (ev) => {
   ev.target.value = "";
   if (!fichier) return;
   try {
-    afficherLogo(await preparerLogo(fichier));
-    notifier("Logo prêt : appuie sur « Enregistrer ».");
+    const { donnees, couleur } = await preparerLogo(fichier);
+    afficherLogo(donnees);
+    if (couleur) $("#form-entreprise [name=couleur]").value = couleur;
+    notifier(couleur ? "Logo détouré et couleur reprise du logo : appuie sur « Enregistrer »." : "Logo prêt : appuie sur « Enregistrer ».");
   } catch (err) {
     erreur("Ce fichier n'est pas une image utilisable (PNG ou JPEG).", err);
   }
