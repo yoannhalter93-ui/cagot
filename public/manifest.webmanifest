@@ -22,7 +22,7 @@
       "title": "title",
       "text": "text",
       "url": "url",
-      "files": [{ "name": "fichiers", "accept": ["image/*", "text/plain", ".txt"] }]
+      "files": [{ "name": "fichiers", "accept": ["image/*", "text/*", ".txt", ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword", "application/pdf", "*/*"] }]
     }
   }
 }

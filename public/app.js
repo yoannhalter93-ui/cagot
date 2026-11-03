@@ -729,11 +729,95 @@ $("#photo-note").onchange = $("#galerie-note").onchange = async (e) => {
 };
 
 // --- Importer des notes : coller, fichier texte/photos, ou « Partager → Cagot » ---
+// Lecture des fichiers Word (.docx) : un .docx est une archive ZIP contenant le texte
+// (word/document.xml) et les images (word/media/*). Décompression native du navigateur.
+async function lireZip(fichier) {
+  const octets = new Uint8Array(await fichier.arrayBuffer());
+  const vue = new DataView(octets.buffer);
+  let fin = -1;
+  for (let i = octets.length - 22; i >= Math.max(0, octets.length - 65557); i--) {
+    if (vue.getUint32(i, true) === 0x06054b50) { fin = i; break; }
+  }
+  if (fin < 0) throw new Error("archive illisible");
+  const nb = vue.getUint16(fin + 10, true);
+  let pos = vue.getUint32(fin + 16, true);
+  const entrees = new Map();
+  const decodeur = new TextDecoder();
+  for (let k = 0; k < nb && vue.getUint32(pos, true) === 0x02014b50; k++) {
+    const methode = vue.getUint16(pos + 10, true);
+    const taille = vue.getUint32(pos + 20, true);
+    const lNom = vue.getUint16(pos + 28, true), lExtra = vue.getUint16(pos + 30, true), lComm = vue.getUint16(pos + 32, true);
+    const debutLocal = vue.getUint32(pos + 42, true);
+    const nom = decodeur.decode(octets.subarray(pos + 46, pos + 46 + lNom));
+    entrees.set(nom, async () => {
+      const debut = debutLocal + 30 + vue.getUint16(debutLocal + 26, true) + vue.getUint16(debutLocal + 28, true);
+      const brut = octets.subarray(debut, debut + taille);
+      if (methode === 0) return new Blob([brut]);
+      if (methode !== 8) throw new Error("compression non gérée");
+      return new Response(new Blob([brut]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).blob();
+    });
+    pos += 46 + lNom + lExtra + lComm;
+  }
+  return entrees;
+}
+
+const decoderEntites = (t) =>
+  t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, "&");
+
+async function lireDocx(fichier) {
+  const zip = await lireZip(fichier);
+  const doc = zip.get("word/document.xml");
+  if (!doc) throw new Error("pas un document Word");
+  const xml = (await (await doc()).text()).replace(/\r?\n/g, "");
+  const texte = decoderEntites(
+    xml.replace(/<w:tab\/>/g, "\t").replace(/<w:br[^>]*\/>/g, "\n").replace(/<\/w:p>/g, "\n").replace(/<[^>]+>/g, ""),
+  ).replace(/\n{3,}/g, "\n\n").trim();
+  const types = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
+  const images = [];
+  for (const [nom, lire] of zip) {
+    const ext = nom.match(/^word\/media\/.+\.(\w+)$/i)?.[1]?.toLowerCase();
+    if (ext && types[ext]) images.push(new File([await lire()], nom.split("/").pop(), { type: types[ext] }));
+  }
+  return { texte, images };
+}
+
+const estDocx = (f) => /\.docx$/i.test(f.name ?? "") || f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const estTexte = (f) => f.type.startsWith("text/") || /\.(txt|md|html?)$/i.test(f.name ?? "");
+const texteSansBalises = (html) =>
+  decoderEntites(html.replace(/<(br|\/p|\/div|\/li|\/h\d)[^>]*>/gi, "\n").replace(/<[^>]+>/g, "")).trim();
+
 async function creerNoteImportee({ titre = "", contenu = "", fichiers = [] }) {
-  const textes = await Promise.all(
-    fichiers.filter((f) => f.type.startsWith("text/") || /\.txt$/i.test(f.name ?? "")).map((f) => f.text()),
-  );
+  const textes = [];
+  const images = fichiers.filter((f) => f.type.startsWith("image/"));
+  const ignores = [];
+  for (const f of fichiers) {
+    if (f.type.startsWith("image/")) continue;
+    try {
+      if (estDocx(f)) {
+        const docx = await lireDocx(f);
+        textes.push(docx.texte);
+        images.push(...docx.images);
+      } else if (estTexte(f)) {
+        const t = await f.text();
+        textes.push(/html?$/i.test(f.type + f.name) ? texteSansBalises(t) : t);
+      } else ignores.push(f.name || f.type || "fichier");
+    } catch (err) {
+      console.error(err);
+      ignores.push(f.name || "fichier");
+    }
+  }
+  if (ignores.length) notifier(`Format non pris en charge : ${ignores.join(", ")}. Partage plutôt en texte, image ou Word.`, "erreur");
   const texteComplet = [contenu, ...textes].map((t) => t.trim()).filter(Boolean).join("\n\n").slice(0, 50000);
+  if (!texteComplet && !images.length && !titre.trim()) {
+    if (!ignores.length) notifier("Rien n'a été reçu. Partage la note en texte, en image ou en fichier Word.", "erreur");
+    return null;
+  }
+  if (!titre.trim() && texteComplet) {
+    // Première ligne courte comme titre (ex. « Devis pascal violland »)
+    const premiere = texteComplet.split("\n")[0].trim();
+    if (premiere.length <= 80 && texteComplet.includes("\n")) titre = premiere;
+  }
   const { data: note, error } = await sb
     .from("notes")
     .insert({ titre: titre.trim().slice(0, 200), contenu: texteComplet })
@@ -744,8 +828,8 @@ async function creerNoteImportee({ titre = "", contenu = "", fichiers = [] }) {
     return null;
   }
   afficherEditeurNote(note);
-  await ajouterPhotosNote(note, fichiers);
-  notifier("Note importée : vérifie-la puis fais le devis.");
+  await ajouterPhotosNote(note, images);
+  if (!ignores.length) notifier("Note importée : vérifie-la puis fais le devis.");
   return note;
 }
 
