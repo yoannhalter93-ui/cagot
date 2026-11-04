@@ -333,3 +333,26 @@ div.ligne-couleur label { margin-bottom: 0; }
 .suppr-tarif { border: 0; background: none; font-size: 1.1rem; padding: 6px; cursor: pointer; }
 .carte-tarif .choix-metier { width: 100%; margin-top: 8px; font-size: .85rem; padding: 6px 8px; border: 1px dashed var(--bord); border-radius: 8px; color: var(--gris); background: transparent; }
 .carte-tarif .doublon { margin: 4px 8px 0; font-size: .8rem; color: #9a6700; }
+
+/* --- Suivi des devis et factures --- */
+.tuiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.tuile { text-align: left; border: 1px solid var(--bord); border-radius: 14px; padding: 10px 12px; background: var(--surface); color: var(--texte); cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tuile small { color: var(--gris); font-size: .78rem; }
+.tuile strong { font-size: 1.15rem; }
+.tuile span { color: var(--gris); font-size: .75rem; }
+.tuile.actif { border-color: var(--bleu); box-shadow: inset 0 0 0 1px var(--bleu); }
+.tuile.alerte strong { color: var(--rouge); }
+.filtres-docs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; scrollbar-width: none; }
+.filtres-docs .puce { white-space: nowrap; flex: none; }
+.filtres-docs .puce b { margin-left: 2px; opacity: .7; }
+.carte-doc { flex-direction: column; align-items: stretch !important; gap: 6px; }
+.carte-doc .ligne-doc { display: flex; justify-content: space-between; gap: 10px; }
+.carte-doc .etat-doc { color: var(--gris); font-size: .85rem; }
+.carte-doc .a-relancer { color: var(--rouge); font-weight: 600; }
+.actions-doc { display: flex; gap: 8px; flex-wrap: wrap; }
+.action-doc { border: 1px solid var(--bord); background: var(--surface); color: var(--texte); border-radius: 10px; padding: 8px 12px; font-weight: 600; cursor: pointer; }
+.action-doc.principal { background: var(--bleu); border-color: var(--bleu); color: var(--blanc); }
+.pastille.statut-accepte, .pastille.statut-payee { background: #e3f4ea; color: #1e7a45; }
+.pastille.statut-refuse { background: #fbe9e9; color: #a12b2b; }
+.pastille.statut-envoye, .pastille.statut-emise { background: #fff4dc; color: #8a5a00; }
+.carte-doc.statut-refuse { opacity: .7; }

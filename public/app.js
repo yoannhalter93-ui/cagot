@@ -1174,29 +1174,157 @@ const LIBELLES_STATUT = {
   payee: "payée",
 };
 
+// Suivi : dates de changement de statut des devis (contenu.suivi) ; pour une facture,
+// émise = date du document, payée = dernière modification (seul changement permis).
+const dateSuivi = (d, statut) => d.contenu?.suivi?.[statut] ?? (["envoye", "accepte", "refuse", "payee"].includes(statut) && d.statut === statut ? d.updated_at : null);
+const joursDepuis = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso)) / 86_400_000));
+const ilYa = (iso) => {
+  const j = joursDepuis(iso);
+  return j === 0 ? "aujourd'hui" : j === 1 ? "hier" : `il y a ${j} jours`;
+};
+const montantDoc = (d) => (profil.infos.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc) || 0;
+
+const FILTRES_DOCS = [
+  { id: "tout", nom: "Tout", test: () => true },
+  { id: "a-envoyer", nom: "À envoyer", test: (d) => d.type === "devis" && d.statut === "brouillon" },
+  { id: "envoye", nom: "En attente", test: (d) => d.type === "devis" && d.statut === "envoye" },
+  { id: "accepte", nom: "Acceptés", test: (d) => d.type === "devis" && d.statut === "accepte" },
+  { id: "refuse", nom: "Refusés", test: (d) => d.type === "devis" && d.statut === "refuse" },
+  { id: "a-encaisser", nom: "À encaisser", test: (d) => d.type === "facture" && d.statut === "emise" },
+  { id: "payee", nom: "Payées", test: (d) => d.type === "facture" && d.statut === "payee" },
+  { id: "facture-brouillon", nom: "Factures à émettre", test: (d) => d.type === "facture" && d.statut === "brouillon" },
+];
+let filtreDocs = "tout";
+
 async function afficherListe() {
-  $("#liste-documents").innerHTML = `<p class="aide">Chargement…</p>`;
+  const zone = $("#liste-documents");
+  if (!zone.innerHTML.trim()) zone.innerHTML = `<p class="aide">Chargement…</p>`;
   const { data: docs, error } = await sb
     .from("documents")
-    .select("id, type, statut, numero, date_document, contenu")
+    .select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at")
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(500);
   if (error) {
-    $("#liste-documents").innerHTML = `<p class="aide">Impossible de charger les documents (connexion ?).</p>`;
+    zone.innerHTML = `<p class="aide">Impossible de charger les documents (connexion ?).</p>`;
     return;
   }
-  $("#liste-documents").innerHTML = docs.length
-    ? docs
-        .map(
-          (d) => `<div class="element-liste" data-id="${esc(d.id)}">
-            <div><strong>${esc(d.numero || "Facture brouillon")}</strong> — ${esc(d.contenu.titre)}
-              <small>${dateFr(d.date_document)}${d.contenu.client_nom ? ` · ${esc(d.contenu.client_nom)}` : ""}</small></div>
-            <div class="droite"><span class="pastille ${d.type}">${d.type} · ${LIBELLES_STATUT[d.statut]}</span><br><strong>${euros(d.contenu.total_ttc)}</strong></div>
-          </div>`,
-        )
-        .join("")
-    : `<p class="aide">Aucun document pour l'instant. Va dans « Chantier » pour créer ton premier devis.</p>`;
-  for (const el of $("#liste-documents").querySelectorAll(".element-liste")) el.onclick = () => ouvrirDocument(el.dataset.id);
+  if (!docs.length) {
+    zone.innerHTML = `<p class="aide">Aucun document pour l'instant. Va dans « Chantier » pour créer ton premier devis.</p>`;
+    return;
+  }
+  const factureDe = new Map(docs.filter((d) => d.type === "facture" && d.devis_id).map((f) => [f.devis_id, f]));
+  const somme = (liste) => liste.reduce((t, d) => t + montantDoc(d), 0);
+  const parFiltre = Object.fromEntries(FILTRES_DOCS.map((f) => [f.id, docs.filter(f.test)]));
+  const enAttente = parFiltre.envoye;
+  const aFacturer = parFiltre.accepte.filter((d) => !factureDe.has(d.id));
+  const aEncaisser = parFiltre["a-encaisser"];
+  const retard = aEncaisser.filter((d) => joursDepuis(d.date_document) > Number(profil.infos.delai_paiement || 30));
+  const decides = docs.filter((d) => d.type === "devis" && ["accepte", "refuse"].includes(d.statut));
+  const taux = decides.length ? Math.round((100 * parFiltre.accepte.length) / decides.length) : null;
+
+  const tuile = (filtre, titre, valeur, detail, alerte = false) =>
+    `<button type="button" class="tuile ${alerte ? "alerte" : ""} ${filtreDocs === filtre ? "actif" : ""}" data-filtre="${filtre}">
+      <small>${titre}</small><strong>${valeur}</strong><span>${detail}</span></button>`;
+
+  const liste = parFiltre[filtreDocs] ?? docs;
+  zone.innerHTML = `
+    <div class="tuiles">
+      ${tuile("envoye", "⏳ En attente de réponse", euros(somme(enAttente)), `${enAttente.length} devis${enAttente.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7).length ? ` · ${enAttente.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7).length} à relancer` : ""}`)}
+      ${tuile("accepte", "✅ Acceptés", euros(somme(parFiltre.accepte)), `${parFiltre.accepte.length} devis${aFacturer.length ? ` · ${aFacturer.length} à facturer` : ""}${taux !== null ? ` · ${taux} % acceptés` : ""}`)}
+      ${tuile("a-encaisser", "💶 À encaisser", euros(somme(aEncaisser)), `${aEncaisser.length} facture${aEncaisser.length > 1 ? "s" : ""}${retard.length ? ` · ${retard.length} en retard` : ""}`, retard.length > 0)}
+      ${tuile("payee", "🏦 Encaissé", euros(somme(parFiltre.payee)), `${parFiltre.payee.length} facture${parFiltre.payee.length > 1 ? "s" : ""} payée${parFiltre.payee.length > 1 ? "s" : ""}`)}
+    </div>
+    <div class="filtres-docs">${FILTRES_DOCS.filter((f) => f.id === "tout" || parFiltre[f.id].length)
+      .map((f) => `<button type="button" class="puce ${filtreDocs === f.id ? "choisie" : ""}" data-filtre="${f.id}">${f.nom} <b>${parFiltre[f.id].length}</b></button>`)
+      .join("")}</div>
+    ${liste.length ? liste.map((d) => carteDocument(d, factureDe)).join("") : `<p class="aide">Rien dans cette catégorie.</p>`}`;
+
+  for (const b of zone.querySelectorAll("[data-filtre]")) {
+    b.onclick = () => {
+      filtreDocs = filtreDocs === b.dataset.filtre && b.classList.contains("tuile") ? "tout" : b.dataset.filtre;
+      afficherListe();
+    };
+  }
+  for (const el of zone.querySelectorAll(".element-liste")) el.onclick = () => ouvrirDocument(el.dataset.id);
+  for (const b of zone.querySelectorAll("[data-action]")) {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      const d = docs.find((x) => x.id === b.dataset.doc);
+      const action = b.dataset.action;
+      if (action === "ouvrir") return ouvrirDocument(d.id);
+      if (action === "facturer") {
+        await ouvrirDocument(d.id);
+        return $("#en-facture").click();
+      }
+      if (action === "envoyer") {
+        await ouvrirDocument(d.id);
+        return $("#partager").click();
+      }
+      if (action === "payee" && !(await demander(`Marquer ${d.numero} comme payée (${euros(montantDoc(d))}) ?`, { ok: "Payée 💶" }))) return;
+      const ok = await mettreStatut(d, action);
+      if (ok) {
+        notifier({ accepte: "Devis accepté 🎉", refuse: "Devis marqué refusé", payee: "Facture payée 💶", envoye: "Marqué comme envoyé" }[action] ?? "Statut mis à jour");
+        afficherListe();
+      }
+    };
+  }
+}
+
+function carteDocument(d, factureDe) {
+  const c = d.contenu;
+  const action = (a, libelle, classe = "") => `<button type="button" class="action-doc ${classe}" data-action="${a}" data-doc="${esc(d.id)}">${libelle}</button>`;
+  let etat = "";
+  let actions = "";
+  if (d.type === "devis") {
+    if (d.statut === "brouillon") {
+      etat = `Créé ${ilYa(d.created_at)}`;
+      actions = action("envoyer", "📤 Envoyer", "principal") + action("envoye", "Déjà envoyé");
+    } else if (d.statut === "envoye") {
+      const quand = dateSuivi(d, "envoye") || d.updated_at;
+      const relance = joursDepuis(quand) >= 7;
+      etat = `Envoyé ${ilYa(quand)}${relance ? ` · <span class="a-relancer">⏰ à relancer</span>` : ""}`;
+      actions = action("accepte", "✅ Accepté", "principal") + action("refuse", "❌ Refusé");
+    } else if (d.statut === "accepte") {
+      const f = factureDe.get(d.id);
+      etat = `Accepté ${ilYa(dateSuivi(d, "accepte") || d.updated_at)}${f ? ` · facture ${esc(f.numero || "brouillon")}` : ""}`;
+      actions = f ? action("ouvrir", "Voir le devis") : action("facturer", "🧾 Faire la facture", "principal");
+    } else if (d.statut === "refuse") {
+      etat = `Refusé ${ilYa(dateSuivi(d, "refuse") || d.updated_at)}`;
+      actions = action("envoye", "↩️ Remettre en attente");
+    }
+  } else if (d.statut === "brouillon") {
+    etat = "Facture pas encore émise";
+    actions = action("ouvrir", "Vérifier et émettre", "principal");
+  } else if (d.statut === "emise") {
+    const delai = Number(profil.infos.delai_paiement || 30);
+    const echeance = ajouterJours(d.date_document, delai);
+    const enRetard = joursDepuis(d.date_document) > delai;
+    etat = `Émise ${ilYa(d.date_document)} · échéance ${dateFr(echeance)}${enRetard ? ` · <span class="a-relancer">⚠️ en retard</span>` : ""}`;
+    actions = action("payee", "💶 Payée", "principal");
+  } else {
+    etat = `Payée ${ilYa(d.updated_at)}`;
+  }
+  return `<div class="element-liste carte-doc statut-${d.statut}" data-id="${esc(d.id)}">
+    <div class="ligne-doc">
+      <div><strong>${esc(c.client_nom || c.titre || "Sans titre")}</strong>
+        <small>${esc(d.type === "devis" ? "Devis" : "Facture")} ${esc(d.numero || "brouillon")}${c.client_nom ? ` · ${esc(c.titre)}` : ""}</small></div>
+      <div class="droite"><strong>${euros(montantDoc(d))}</strong><br><span class="pastille ${d.type} statut-${d.statut}">${LIBELLES_STATUT[d.statut]}</span></div>
+    </div>
+    <div class="etat-doc">${etat}</div>
+    ${actions ? `<div class="actions-doc">${actions}</div>` : ""}
+  </div>`;
+}
+
+// Change le statut d'un document ; pour un devis, garde la date du changement (suivi).
+async function mettreStatut(d, statut) {
+  const maj = { statut };
+  if (d.type === "devis") maj.contenu = { ...d.contenu, suivi: { ...(d.contenu.suivi ?? {}), [statut]: new Date().toISOString() } };
+  const { data, error } = await sb.from("documents").update(maj).eq("id", d.id).select("*").single();
+  if (error) {
+    erreur("Statut non modifié.", error);
+    return null;
+  }
+  return data;
 }
 
 // ---------------------------------------------------------------------------
@@ -1226,8 +1354,8 @@ async function majDocument(modif) {
 }
 
 async function changerStatut(statut) {
-  const { data, error } = await sb.from("documents").update({ statut }).eq("id", docCourant.id).select("*").single();
-  if (error) return erreur("Statut non modifié.", error);
+  const data = await mettreStatut(docCourant, statut);
+  if (!data) return;
   docCourant = data;
   rendreDocument();
 }
@@ -1549,14 +1677,15 @@ $("#partager").onclick = async () => {
 
 $("#en-facture").onclick = async () => {
   if (!(await demander("Créer une facture (brouillon) à partir de ce devis ?", { ok: "Créer la facture" }))) return;
-  const contenu = { ...structuredClone(docCourant.contenu), hypotheses: [], devis_numero: docCourant.numero };
+  const { suivi, ...base } = structuredClone(docCourant.contenu);
+  const contenu = { ...base, hypotheses: [], devis_numero: docCourant.numero };
   const { data, error } = await sb
     .from("documents")
     .insert({ type: "facture", devis_id: docCourant.id, contenu })
     .select("id")
     .single();
   if (error) return erreur("Facture non créée.", error);
-  if (docCourant.statut !== "accepte") await sb.from("documents").update({ statut: "accepte" }).eq("id", docCourant.id);
+  if (docCourant.statut !== "accepte") await mettreStatut(docCourant, "accepte");
   ouvrirDocument(data.id);
 };
 
