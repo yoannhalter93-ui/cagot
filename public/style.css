@@ -356,3 +356,26 @@ div.ligne-couleur label { margin-bottom: 0; }
 .pastille.statut-refuse { background: #fbe9e9; color: #a12b2b; }
 .pastille.statut-envoye, .pastille.statut-emise { background: #fff4dc; color: #8a5a00; }
 .carte-doc.statut-refuse { opacity: .7; }
+
+/* --- Carnet de clients --- */
+.entete-clients { display: flex; gap: 8px; margin-bottom: 8px; }
+.entete-clients input { flex: 1; min-width: 0; font-size: 1rem; padding: 10px 12px; border: 1px solid var(--bord); border-radius: 12px; background: var(--surface); color: var(--texte); }
+.contact-telephone { width: 100%; margin-bottom: 10px; }
+.carte-client { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.client-entete { display: flex; gap: 10px; align-items: center; }
+.client-entete small { display: block; color: var(--gris); font-size: .8rem; }
+.avatar { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--bleu-clair); color: var(--bleu); display: grid; place-items: center; font-weight: 700; }
+.client-coordonnees { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.client-coordonnees a { color: var(--texte); text-decoration: none; padding: 4px 0; word-break: break-word; }
+.client-notes { margin: 0; color: var(--gris); font-size: .85rem; white-space: pre-line; }
+.vide-clients { text-align: center; padding: 30px 10px; }
+.fiche-client label { display: block; margin-bottom: 10px; font-size: .9rem; color: var(--gris); }
+.fiche-client input, .fiche-client textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; font: inherit; font-size: 1rem; padding: 9px 10px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); color: var(--texte); }
+.fiche-client h3, .choix-client h3 { margin-top: 0; }
+.danger-texte { color: var(--rouge) !important; margin-right: auto; }
+.dialogue { max-height: 90vh; overflow-y: auto; }
+.recherche-choix { width: 100%; box-sizing: border-box; font-size: 1rem; padding: 9px 10px; border: 1px solid var(--bord); border-radius: 10px; margin-bottom: 8px; background: var(--surface); color: var(--texte); }
+.liste-choix { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.liste-choix button { text-align: left; border: 1px solid var(--bord); border-radius: 10px; padding: 10px; background: var(--surface); color: var(--texte); cursor: pointer; }
+.liste-choix small { display: block; color: var(--gris); }
+@media (max-width: 420px) { .barre nav button { padding: 8px 4px; font-size: .85rem; } }

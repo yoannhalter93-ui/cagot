@@ -18,6 +18,7 @@
       <button data-vue="notes">Notes</button>
       <button data-vue="chantier" class="actif">Chantier</button>
       <button data-vue="documents">Documents</button>
+      <button data-vue="clients">Clients</button>
       <button data-vue="parametres">Réglages</button>
     </nav>
   </header>
@@ -121,6 +122,15 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
   </main>
 
   <!-- ===== Vue documents : liste + détail ===== -->
+  <main id="vue-clients" class="vue" hidden>
+    <div class="entete-clients">
+      <input type="search" id="recherche-clients" placeholder="🔍 Chercher un client…" autocomplete="off">
+      <button type="button" id="nouveau-client" class="btn-principal">+ Client</button>
+    </div>
+    <button type="button" id="contact-telephone" class="btn-secondaire contact-telephone" hidden>📇 Ajouter depuis les contacts du téléphone</button>
+    <div id="liste-clients"></div>
+  </main>
+
   <main id="vue-documents" class="vue" hidden>
     <div id="liste-documents"></div>
   </main>

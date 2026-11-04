@@ -87,6 +87,7 @@ function demander(message, { ok = "Confirmer", danger = false } = {}) {
   });
 }
 
+const normaliser = (t) => String(t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
 const emailValide = (m) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(m);
 
 // Fenêtre « Envoyer à » : l'adresse du client déjà remplie, possibilité d'en ajouter.
@@ -288,6 +289,7 @@ function afficherVue(nom) {
   if (nom !== "note") quitterNote();
   if (nom === "notes") afficherNotes();
   if (nom === "documents") afficherListe();
+  if (nom === "clients") afficherClients();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
 }
@@ -748,6 +750,8 @@ $("#nouveau").onclick = () => {
 };
 
 async function enregistrerDevis(devis) {
+  await completerDepuisCarnet(devis);
+  memoriserClient(devis);
   conversation.titre = [devis.titre, devis.client_nom].filter(Boolean).join(" – ").slice(0, 200);
   const histo = historiqueSansPhotos(conversation.historique);
   if (conversation.docId) {
@@ -1163,6 +1167,252 @@ async function importerPartage() {
 }
 
 // ---------------------------------------------------------------------------
+// Carnet de clients
+// ---------------------------------------------------------------------------
+let clients = null; // chargés à la demande
+const telValide = (t) => /^[+\d][\d\s.()-]{5,}$/.test(String(t ?? "").trim());
+
+async function chargerClients() {
+  const { data, error } = await sb.from("clients").select("*").order("nom").limit(2000);
+  if (error) throw error;
+  clients = data;
+  return clients;
+}
+
+// Retrouve un client du carnet : même e-mail, sinon même nom.
+function trouverClient({ nom, email }) {
+  if (!clients) return null;
+  const e = normaliser(email);
+  const n = normaliser(nom);
+  return (e && clients.find((c) => normaliser(c.email) === e)) || (n && clients.find((c) => normaliser(c.nom) === n)) || null;
+}
+
+// Devis de l'IA pour un client connu : on complète ses coordonnées depuis le carnet.
+async function completerDepuisCarnet(devis) {
+  if (!devis.client_nom && !devis.client_email) return;
+  try {
+    if (!clients) await chargerClients();
+  } catch {
+    return;
+  }
+  const c = trouverClient({ nom: devis.client_nom, email: devis.client_email });
+  if (!c) return;
+  devis.client_adresse ||= c.adresse;
+  devis.client_email ||= c.email;
+  devis.client_telephone ||= c.telephone;
+}
+
+// Ajoute (ou complète) le client d'un devis dans le carnet, sans bloquer l'appli.
+async function memoriserClient(v) {
+  const nom = (v.client_nom ?? "").trim();
+  if (!nom) return;
+  try {
+    if (!clients) await chargerClients();
+    const fiche = {
+      nom: nom.slice(0, 200),
+      adresse: (v.client_adresse ?? "").trim().slice(0, 500),
+      email: (v.client_email ?? "").trim().slice(0, 200),
+      telephone: (v.client_telephone ?? "").trim().slice(0, 40),
+    };
+    const existant = trouverClient(fiche);
+    if (!existant) {
+      const { data, error } = await sb.from("clients").insert(fiche).select("*").single();
+      if (!error) clients.push(data);
+      return;
+    }
+    const manquants = Object.fromEntries(Object.entries(fiche).filter(([k, val]) => val && !existant[k]));
+    if (!Object.keys(manquants).length) return;
+    const { data, error } = await sb.from("clients").update(manquants).eq("id", existant.id).select("*").single();
+    if (!error) clients = clients.map((c) => (c.id === data.id ? data : c));
+  } catch (err) {
+    console.warn("[clients]", err);
+  }
+}
+
+let rechercheClients = "";
+
+async function afficherClients() {
+  const zone = $("#liste-clients");
+  $("#contact-telephone").hidden = !("contacts" in navigator && "select" in navigator.contacts);
+  if (!clients) zone.innerHTML = `<p class="aide">Chargement…</p>`;
+  let docs = [];
+  try {
+    const [, res] = await Promise.all([chargerClients(), sb.from("documents").select("type, statut, contenu").limit(1000)]);
+    docs = res.data ?? [];
+  } catch (err) {
+    zone.innerHTML = `<p class="aide">Impossible de charger les clients (connexion ?).</p>`;
+    console.warn(err);
+    return;
+  }
+  const stats = (c) => {
+    const siens = docs.filter((d) => {
+      const v = d.contenu ?? {};
+      return (c.email && normaliser(v.client_email) === normaliser(c.email)) || normaliser(v.client_nom) === normaliser(c.nom);
+    });
+    const devis = siens.filter((d) => d.type === "devis");
+    const payees = siens.filter((d) => d.type === "facture" && d.statut === "payee");
+    return { devis: devis.length, acceptes: devis.filter((d) => d.statut === "accepte").length, encaisse: payees.reduce((t, d) => t + montantDoc(d), 0) };
+  };
+  const filtre = normaliser(rechercheClients);
+  const liste = clients.filter((c) => !filtre || [c.nom, c.telephone, c.email, c.adresse].some((x) => normaliser(x).includes(filtre)));
+  zone.innerHTML = !clients.length
+    ? `<div class="vide-clients"><p><strong>Ton carnet de clients est vide.</strong></p><p class="aide">Ajoute un client avec « + Client ». Les clients de tes devis s'y ajoutent aussi tout seuls.</p></div>`
+    : liste.length
+      ? `<p class="aide">${clients.length} client${clients.length > 1 ? "s" : ""}</p>` +
+        liste
+          .map((c) => {
+            const st = stats(c);
+            const carte = encodeURIComponent(c.adresse.replace(/\n/g, " "));
+            return `<div class="carte-client" data-client="${esc(c.id)}">
+          <div class="client-entete"><span class="avatar">${esc((c.nom.trim()[0] || "?").toUpperCase())}</span>
+            <div><strong>${esc(c.nom || "Sans nom")}</strong>
+            <small>${st.devis ? `${st.devis} devis${st.acceptes ? ` · ${st.acceptes} accepté${st.acceptes > 1 ? "s" : ""}` : ""}${st.encaisse ? ` · ${euros(st.encaisse)} encaissés` : ""}` : "Pas encore de devis"}</small></div></div>
+          <div class="client-coordonnees">
+            ${c.telephone ? `<a href="tel:${esc(c.telephone.replace(/[^\d+]/g, ""))}">📞 ${esc(c.telephone)}</a>` : ""}
+            ${c.email ? `<a href="mailto:${esc(c.email)}">✉️ ${esc(c.email)}</a>` : ""}
+            ${c.adresse ? `<a href="https://www.google.com/maps/search/?api=1&query=${carte}" target="_blank" rel="noopener">📍 ${esc(c.adresse).replace(/\n/g, ", ")}</a>` : ""}
+            ${c.notes ? `<p class="client-notes">${esc(c.notes)}</p>` : ""}
+          </div>
+          <div class="actions-doc">
+            <button type="button" class="action-doc principal" data-devis-client="${esc(c.id)}">📝 Nouveau devis</button>
+            <button type="button" class="action-doc" data-modifier-client="${esc(c.id)}">✏️ Modifier</button>
+          </div>
+        </div>`;
+          })
+          .join("")
+      : `<p class="aide">Aucun client ne correspond à « ${esc(rechercheClients)} ».</p>`;
+
+  for (const b of zone.querySelectorAll("[data-modifier-client]")) {
+    b.onclick = () => editerClient(clients.find((c) => c.id === b.dataset.modifierClient));
+  }
+  for (const b of zone.querySelectorAll("[data-devis-client]")) {
+    b.onclick = () => {
+      const c = clients.find((x) => x.id === b.dataset.devisClient);
+      nouvelleConversation({ titre: c.nom });
+      montrerListeChantiers(false);
+      afficherVue("chantier");
+      $("#texte").value = [`Client : ${c.nom}`, c.adresse && `Adresse : ${c.adresse.replace(/\n/g, ", ")}`, c.telephone && `Tél. : ${c.telephone}`, c.email && `E-mail : ${c.email}`]
+        .filter(Boolean)
+        .join("\n") + "\n\nTravaux : ";
+      $("#texte").focus();
+    };
+  }
+}
+
+$("#recherche-clients").oninput = (e) => {
+  rechercheClients = e.target.value;
+  afficherClients();
+};
+$("#nouveau-client").onclick = () => editerClient(null);
+
+// Fiche client (création / modification) dans une fenêtre.
+function editerClient(client, valeurs = {}) {
+  return new Promise((resolve) => {
+    const c = { nom: "", telephone: "", email: "", adresse: "", notes: "", ...(client ?? {}), ...valeurs };
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<form class="dialogue fiche-client" role="dialog" aria-modal="true">
+      <h3>${client ? "Modifier le client" : "Nouveau client"}</h3>
+      <label>Nom <input name="nom" maxlength="200" required autocomplete="name"></label>
+      <label>Téléphone <input name="telephone" type="tel" maxlength="40" autocomplete="tel" inputmode="tel"></label>
+      <label>E-mail <input name="email" type="email" maxlength="200" autocomplete="email" inputmode="email"></label>
+      <label>Adresse postale <textarea name="adresse" rows="2" maxlength="500" autocomplete="street-address"></textarea></label>
+      <label>Notes (code d'accès, étage, préférences…) <textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+      <div class="dialogue-actions">
+        ${client ? `<button type="button" class="supprimer-client danger-texte">Supprimer</button>` : ""}
+        <button type="button" class="annuler">Annuler</button>
+        <button type="submit" class="valider btn-principal">Enregistrer</button>
+      </div></form>`;
+    const form = fond.querySelector("form");
+    for (const k of ["nom", "telephone", "email", "adresse", "notes"]) form.elements[k].value = c[k] ?? "";
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.querySelector(".supprimer-client")?.addEventListener("click", async () => {
+      if (!(await demander(`Supprimer ${client.nom} du carnet ? (ses devis restent enregistrés)`, { ok: "Supprimer", danger: true }))) return;
+      const { error } = await sb.from("clients").delete().eq("id", client.id);
+      if (error) return erreur("Suppression impossible.", error);
+      clients = clients.filter((x) => x.id !== client.id);
+      fermer(null);
+      afficherClients();
+    });
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const fiche = Object.fromEntries(["nom", "telephone", "email", "adresse", "notes"].map((k) => [k, form.elements[k].value.trim()]));
+      if (fiche.email && !emailValide(fiche.email)) return notifier("Adresse e-mail incorrecte.", "erreur");
+      if (fiche.telephone && !telValide(fiche.telephone)) return notifier("Numéro de téléphone incorrect.", "erreur");
+      const requete = client ? sb.from("clients").update(fiche).eq("id", client.id) : sb.from("clients").insert(fiche);
+      const { data, error } = await requete.select("*").single();
+      if (error) return erreur("Client non enregistré.", error);
+      clients = client ? clients.map((x) => (x.id === data.id ? data : x)) : [...(clients ?? []), data];
+      clients.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+      notifier(client ? "Client mis à jour ✓" : "Client ajouté ✓");
+      fermer(data);
+      if (!$("#vue-clients").hidden) afficherClients();
+    };
+    document.body.appendChild(fond);
+    if (!client) form.elements.nom.focus();
+  });
+}
+
+// Contacts du téléphone (Android / Chrome) : on préremplit une fiche client.
+$("#contact-telephone").onclick = async () => {
+  try {
+    const [contact] = await navigator.contacts.select(["name", "tel", "email", "address"], { multiple: false });
+    if (!contact) return;
+    const a = contact.address?.[0];
+    const adresse = a ? [...(a.addressLine ?? []), [a.postalCode, a.city].filter(Boolean).join(" ")].filter(Boolean).join("\n") : "";
+    editerClient(null, { nom: contact.name?.[0] ?? "", telephone: contact.tel?.[0] ?? "", email: contact.email?.[0] ?? "", adresse });
+  } catch (err) {
+    erreur("Impossible d'ouvrir les contacts.", err);
+  }
+};
+
+// Choisir un client du carnet (pour un devis).
+async function choisirClient() {
+  try {
+    await chargerClients();
+  } catch (err) {
+    erreur("Impossible de charger les clients.", err);
+    return null;
+  }
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<div class="dialogue choix-client" role="dialog" aria-modal="true">
+      <h3>Choisir un client</h3>
+      <input type="search" placeholder="🔍 Nom, téléphone…" class="recherche-choix">
+      <div class="liste-choix"></div>
+      <div class="dialogue-actions">
+        <button type="button" class="nouveau">+ Nouveau client</button>
+        <button type="button" class="annuler">Annuler</button>
+      </div></div>`;
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    const rendre = () => {
+      const f = normaliser(fond.querySelector(".recherche-choix").value);
+      const l = clients.filter((c) => !f || [c.nom, c.telephone, c.email].some((x) => normaliser(x).includes(f)));
+      fond.querySelector(".liste-choix").innerHTML = l.length
+        ? l.map((c) => `<button type="button" data-id="${esc(c.id)}"><strong>${esc(c.nom)}</strong><small>${esc([c.telephone, c.email].filter(Boolean).join(" · "))}</small></button>`).join("")
+        : `<p class="aide">Aucun client.</p>`;
+      for (const b of fond.querySelectorAll(".liste-choix [data-id]")) b.onclick = () => fermer(clients.find((c) => c.id === b.dataset.id));
+    };
+    fond.querySelector(".recherche-choix").oninput = rendre;
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.querySelector(".nouveau").onclick = async () => {
+      fond.remove();
+      resolve(await editerClient(null));
+    };
+    document.body.appendChild(fond);
+    rendre();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Liste des documents
 // ---------------------------------------------------------------------------
 const LIBELLES_STATUT = {
@@ -1345,6 +1595,8 @@ const estVerrouille = (d) => d.type === "facture" && d.statut !== "brouillon";
 async function majDocument(modif) {
   const contenu = structuredClone(docCourant.contenu);
   modif(contenu);
+  const avant = docCourant.contenu;
+  if (["client_nom", "client_adresse", "client_email", "client_telephone"].some((k) => (contenu[k] ?? "") !== (avant[k] ?? ""))) memoriserClient(contenu);
   const recalcule = calculerTotaux(contenu);
   const { data, error } = await sb.from("documents").update({ contenu: recalcule }).eq("id", docCourant.id).select("*").single();
   if (error) {
@@ -1520,7 +1772,9 @@ function rendreDocument() {
         <strong>Client</strong><br>
         <div ${editable} data-champ="client_nom">${esc(v.client_nom) || "<em>Nom du client</em>"}</div>
         <div ${editable} data-champ="client_adresse">${esc(v.client_adresse) || "<em>Adresse du client</em>"}</div>
+        <div ${editable} inputmode="tel" data-champ="client_telephone">${esc(v.client_telephone) || (verrouille ? "" : "<em>Téléphone du client</em>")}</div>
         <div ${editable} inputmode="email" data-champ="client_email" class="champ-email">${esc(v.client_email) || (verrouille ? "" : "<em>E-mail du client</em>")}</div>
+        ${verrouille ? "" : `<button type="button" id="choisir-client" class="lien no-print">👤 Choisir dans mes clients</button>`}
         ${v.adresse_chantier ? `<small>Chantier : ${esc(v.adresse_chantier)}</small>` : ""}
       </div>
     </div>
@@ -1549,6 +1803,12 @@ function rendreDocument() {
 
   appliquerCouleur($("#document"), e.couleur);
   if (verrouille) return;
+  $("#choisir-client").onclick = async () => {
+    const c = await choisirClient();
+    if (!c) return;
+    await majDocument((dv) => Object.assign(dv, { client_nom: c.nom, client_adresse: c.adresse, client_email: c.email, client_telephone: c.telephone }));
+    notifier(`Client « ${c.nom} » ajouté au devis.`);
+  };
 
   // Édition directe dans le document
   for (const el of $("#document").querySelectorAll("[contenteditable]")) {
@@ -1832,7 +2092,6 @@ function optionsCorps(selection) {
 }
 
 const UNITES = ["m²", "ml", "u", "m³", "h", "jour", "forfait", "ens", "kg"];
-const normaliser = (t) => String(t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
 let rechercheTarifs = "";
 const groupesFermes = new Set();
 
