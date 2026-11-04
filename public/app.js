@@ -367,21 +367,66 @@ $("#voix").onchange = $("#mains-libres").onchange = () => {
 // ---------------------------------------------------------------------------
 let photosEnAttente = [];
 
-function redimensionner(fichier, max = 1600) {
+class ErreurPhoto extends Error {}
+
+function chargerImage(fichier) {
   return new Promise((ok, ko) => {
     const img = new Image();
+    const url = URL.createObjectURL(fichier);
     img.onload = () => {
-      const r = Math.min(1, max / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * r);
-      c.height = Math.round(img.height * r);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(img.src);
-      ok(c.toDataURL("image/jpeg", 0.85));
+      URL.revokeObjectURL(url);
+      ok(img);
     };
-    img.onerror = ko;
-    img.src = URL.createObjectURL(fichier);
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      ko(new Error("image illisible"));
+    };
+    img.src = url;
   });
+}
+
+// Réduit une photo (max 1600 px) en JPEG. createImageBitmap d'abord (moins gourmand en
+// mémoire avec les grosses photos des téléphones récents), sinon <img>.
+async function redimensionner(fichier, max = 1600) {
+  let source = null;
+  try {
+    source = await createImageBitmap(fichier, { imageOrientation: "from-image" });
+  } catch {
+    source = await chargerImage(fichier).catch(() => null);
+  }
+  if (!source) {
+    throw new ErreurPhoto(
+      /hei[cf]/i.test(`${fichier.type} ${fichier.name}`)
+        ? "Photo au format HEIC illisible ici : dans les réglages de l'appareil photo, choisis le format JPEG (ou envoie une capture d'écran de la photo)."
+        : "Cette image est illisible (format non pris en charge).",
+    );
+  }
+  const largeur = source.width;
+  const hauteur = source.height;
+  const r = Math.min(1, max / Math.max(largeur, hauteur));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(largeur * r));
+  c.height = Math.max(1, Math.round(hauteur * r));
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(source, 0, 0, c.width, c.height);
+  source.close?.();
+  const dataUrl = c.toDataURL("image/jpeg", 0.85);
+  if (!dataUrl.startsWith("data:image/jpeg")) throw new ErreurPhoto("Photo trop grande pour ce téléphone, réessaie avec une photo plus petite.");
+  return dataUrl;
+}
+
+// Réessaie une opération réseau (connexion de chantier instable).
+async function avecRelance(action, essais = 3) {
+  for (let n = 1; ; n++) {
+    try {
+      return await action();
+    } catch (err) {
+      if (n >= essais) throw err;
+      await new Promise((r) => setTimeout(r, 1200 * n));
+    }
+  }
 }
 
 function afficherPhotosEnAttente() {
@@ -950,13 +995,16 @@ async function ajouterPhotosNote(note, fichiers) {
       photosEnCours.set(idTemp, dataUrl);
       if (noteCourante === note) afficherPhotosNote();
       const chemin = `${utilisateur.id}/${note.id}/${nouvelIdLocal()}.jpg`;
-      await plateforme.stockagePhotos.televerser(chemin, versBlob(dataUrl));
+      await avecRelance(() => plateforme.stockagePhotos.televerser(chemin, versBlob(dataUrl)));
       note.photos = [...note.photos, chemin];
       urlsPhotos.set(chemin, dataUrl);
-      const { error } = await sb.from("notes").update({ photos: note.photos }).eq("id", note.id);
-      if (error) throw error;
+      await avecRelance(async () => {
+        const { error } = await sb.from("notes").update({ photos: note.photos }).eq("id", note.id);
+        if (error) throw error;
+      });
     } catch (err) {
-      erreur("Une photo n'a pas pu être enregistrée (connexion ?).", err);
+      if (err instanceof ErreurPhoto) erreur(err.message, err);
+      else erreur(`Une photo n'a pas pu être enregistrée (${String(err?.message || err).slice(0, 80)}). Vérifie la connexion et réessaie.`, err);
     } finally {
       photosEnCours.delete(idTemp);
       if (noteCourante === note) afficherPhotosNote();
