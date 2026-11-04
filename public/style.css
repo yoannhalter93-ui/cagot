@@ -313,3 +313,23 @@ div.ligne-couleur label { margin-bottom: 0; }
 .envoyer-reponses.pret { animation: pulse-pret 1.2s ease-in-out 2; }
 @keyframes pulse-pret { 50% { transform: scale(1.03); box-shadow: 0 0 0 6px color-mix(in srgb, var(--bleu) 20%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .envoyer-reponses.pret { animation: none; } .barre-progression span, .q-ok { transition: none; } }
+
+/* --- Grille de prix en cartes (téléphone) --- */
+.recherche-tarifs { width: 100%; box-sizing: border-box; font-size: 1rem; padding: 10px 12px; border: 1px solid var(--bord); border-radius: 12px; background: var(--surface); color: var(--texte); margin: 4px 0 8px; }
+.groupe-tarifs { margin: 10px 0; }
+.groupe-tarifs summary { cursor: pointer; font-weight: 700; color: var(--bleu); padding: 8px 2px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.groupe-tarifs summary::-webkit-details-marker { display: none; }
+.groupe-tarifs summary::before { content: "▸"; transition: transform .2s; }
+.groupe-tarifs[open] summary::before { transform: rotate(90deg); }
+.groupe-tarifs .nb { font-size: .75rem; background: var(--bleu-clair); color: var(--bleu); border-radius: 99px; padding: 1px 8px; }
+.carte-tarif { border: 1px solid var(--bord); border-radius: 12px; padding: 10px; margin-bottom: 8px; background: var(--surface); }
+.carte-tarif textarea[data-k=designation] { width: 100%; box-sizing: border-box; resize: none; overflow: hidden; font: inherit; font-size: 1rem; font-weight: 600; line-height: 1.35; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--texte); }
+.carte-tarif textarea[data-k=designation]:focus { border-color: var(--bleu); background: var(--fond); outline: none; }
+.ligne-prix { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.carte label.champ-prix { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--gris); }
+.carte .champ-prix input { width: 90px !important; font-size: 1.05rem; font-weight: 700; text-align: right; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--texte); }
+.champ-prix span, .ligne-prix .par { color: var(--gris); font-size: .9rem; white-space: nowrap; }
+.ligne-prix select { flex: 1; min-width: 0; font-size: 1rem; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--texte); }
+.suppr-tarif { border: 0; background: none; font-size: 1.1rem; padding: 6px; cursor: pointer; }
+.carte-tarif .choix-metier { width: 100%; margin-top: 8px; font-size: .85rem; padding: 6px 8px; border: 1px dashed var(--bord); border-radius: 8px; color: var(--gris); background: transparent; }
+.carte-tarif .doublon { margin: 4px 8px 0; font-size: .8rem; color: #9a6700; }

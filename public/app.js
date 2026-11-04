@@ -1464,13 +1464,15 @@ function rendreDocument() {
     b.onclick = async () => {
       const [s, l] = b.dataset.grille.split("-").map(Number);
       const ligne = docCourant.contenu.sections[s].lignes[l];
-      const { data, error } = await sb
-        .from("tarifs")
-        .insert({ corps_etat: "", designation: ligne.designation.slice(0, 300), unite: ligne.unite.slice(0, 20), prix: ligne.prix_unitaire_ht })
-        .select("*")
-        .single();
+      // Déjà dans la grille (même nom, même unité) : on met à jour son prix au lieu de créer un doublon.
+      const existant = tarifs.find((t) => normaliser(t.designation) === normaliser(ligne.designation) && t.unite === ligne.unite);
+      const requete = existant
+        ? sb.from("tarifs").update({ prix: ligne.prix_unitaire_ht }).eq("id", existant.id)
+        : sb.from("tarifs").insert({ corps_etat: "", designation: ligne.designation.slice(0, 300), unite: ligne.unite.slice(0, 20), prix: ligne.prix_unitaire_ht });
+      const { data, error } = await requete.select("*").single();
       if (error) return erreur("Prix non ajouté à la grille.", error);
-      tarifs.push(data);
+      tarifs = existant ? tarifs.map((t) => (t.id === data.id ? data : t)) : [...tarifs, data];
+      notifier(existant ? "Prix mis à jour dans ta grille ✓" : "Ajouté à ta grille ✓");
       majDocument((dv) => (dv.sections[s].lignes[l].prix_source = "grille"));
     };
   }
@@ -1700,49 +1702,101 @@ function optionsCorps(selection) {
   return [`<option value="">— Autre —</option>`, ...CORPS_ETAT.map((c) => `<option value="${esc(c.id)}" ${c.id === selection ? "selected" : ""}>${esc(c.nom)}</option>`)].join("");
 }
 
+const UNITES = ["m²", "ml", "u", "m³", "h", "jour", "forfait", "ens", "kg"];
+const normaliser = (t) => String(t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+let rechercheTarifs = "";
+const groupesFermes = new Set();
+
+// Grille de prix en cartes (lisible sur téléphone) : nom complet sur plusieurs lignes,
+// prix et unité en dessous, rangée par métier, avec recherche.
 function rendreTarifs() {
+  const zone = $("#grille-tarifs");
   if (!tarifs.length) {
-    $("#grille-tarifs").innerHTML = `<p class="aide">Aucun prix pour l'instant.</p>`;
+    zone.innerHTML = `<p class="aide">Aucun prix pour l'instant. Ajoute tes prix habituels : l'IA les utilisera en priorité.</p>`;
     return;
   }
-  const groupes = new Map();
+  const filtre = normaliser(rechercheTarifs);
+  const visibles = tarifs.filter((t) => !filtre || normaliser(t.designation).includes(filtre));
+  const comptes = new Map();
   for (const t of tarifs) {
+    const cle = `${normaliser(t.designation)}|${t.unite}`;
+    comptes.set(cle, (comptes.get(cle) ?? 0) + 1);
+  }
+  const groupes = new Map();
+  for (const t of visibles) {
     if (!groupes.has(t.corps_etat)) groupes.set(t.corps_etat, []);
     groupes.get(t.corps_etat).push(t);
   }
-  $("#grille-tarifs").innerHTML = [...groupes]
-    .map(
-      ([corps, liste]) => `<h3>${esc(corps ? nomCorpsEtat(corps) : "Autre")}</h3>
-      <table class="tarifs"><thead><tr><th>Prestation</th><th>Unité</th><th>Prix €</th><th></th></tr></thead><tbody>
-      ${liste
-        .map(
-          (t) => `<tr>
-            <td><input data-id="${esc(t.id)}" data-k="designation" value="${esc(t.designation)}" maxlength="300" placeholder="Ex : Pose de placo BA13">
-              <select data-id="${esc(t.id)}" data-k="corps_etat">${optionsCorps(t.corps_etat)}</select></td>
-            <td><input data-id="${esc(t.id)}" data-k="unite" value="${esc(t.unite)}" maxlength="20"></td>
-            <td><input data-id="${esc(t.id)}" data-k="prix" inputmode="decimal" value="${nombre(t.prix)}"></td>
-            <td><button class="suppr-ligne" data-suppr-tarif="${esc(t.id)}" title="Supprimer">✕</button></td>
-          </tr>`,
-        )
-        .join("")}
-      </tbody></table>`,
-    )
-    .join("");
+  const unites = (u) => [...new Set([...UNITES, u].filter(Boolean))].map((x) => `<option ${x === u ? "selected" : ""}>${esc(x)}</option>`).join("");
+  zone.innerHTML = `
+    <input type="search" id="recherche-tarifs" class="recherche-tarifs" placeholder="🔍 Chercher un prix…" value="${esc(rechercheTarifs)}">
+    ${
+      visibles.length
+        ? [...groupes]
+            .sort(([a], [b]) => (a ? nomCorpsEtat(a) : "zzz").localeCompare(b ? nomCorpsEtat(b) : "zzz", "fr"))
+            .map(
+              ([corps, liste]) => `<details class="groupe-tarifs" data-groupe="${esc(corps)}" ${groupesFermes.has(corps) && !filtre ? "" : "open"}>
+          <summary>${esc(corps ? nomCorpsEtat(corps) : "Sans métier")} <span class="nb">${liste.length}</span></summary>
+          ${liste
+            .map(
+              (t) => `<div class="carte-tarif">
+              <textarea data-id="${esc(t.id)}" data-k="designation" rows="1" maxlength="300" placeholder="Nom de la prestation (ex : Pose de placo BA13)">${esc(t.designation)}</textarea>
+              ${comptes.get(`${normaliser(t.designation)}|${t.unite}`) > 1 && t.designation ? `<p class="doublon">⚠️ En double : supprime celui en trop avec 🗑️</p>` : ""}
+              <div class="ligne-prix">
+                <label class="champ-prix"><input data-id="${esc(t.id)}" data-k="prix" inputmode="decimal" value="${nombre(t.prix)}" aria-label="Prix HT"><span>€ HT</span></label>
+                <span class="par">par</span>
+                <select data-id="${esc(t.id)}" data-k="unite" aria-label="Unité">${unites(t.unite)}</select>
+                <button class="suppr-tarif" data-suppr-tarif="${esc(t.id)}" aria-label="Supprimer ce prix">🗑️</button>
+              </div>
+              <select data-id="${esc(t.id)}" data-k="corps_etat" class="choix-metier" aria-label="Métier">${optionsCorps(t.corps_etat).replace("— Autre —", "Métier : à choisir")}</select>
+            </div>`,
+            )
+            .join("")}
+        </details>`,
+            )
+            .join("")
+        : `<p class="aide">Aucun prix ne correspond à « ${esc(rechercheTarifs)} ».</p>`
+    }`;
 
-  for (const champ of $("#grille-tarifs").querySelectorAll("[data-k]")) {
+  const recherche = $("#recherche-tarifs");
+  recherche.oninput = () => {
+    rechercheTarifs = recherche.value;
+    const pos = recherche.selectionStart;
+    rendreTarifs();
+    const r = $("#recherche-tarifs");
+    r.focus();
+    r.setSelectionRange(pos, pos);
+  };
+  for (const d of zone.querySelectorAll("details[data-groupe]")) {
+    d.ontoggle = () => (d.open ? groupesFermes.delete(d.dataset.groupe) : groupesFermes.add(d.dataset.groupe));
+  }
+  for (const champ of zone.querySelectorAll("textarea[data-k]")) {
+    const ajuster = () => {
+      champ.style.height = "auto";
+      champ.style.height = `${champ.scrollHeight}px`;
+    };
+    ajuster();
+    champ.addEventListener("input", ajuster);
+  }
+  for (const champ of zone.querySelectorAll("[data-k]")) {
     champ.onchange = async () => {
       const valeur = champ.dataset.k === "prix" ? lireNombre(champ.value) : champ.value.trim();
       const { data, error } = await sb.from("tarifs").update({ [champ.dataset.k]: valeur }).eq("id", champ.dataset.id).select("*").single();
       if (error) return erreur("Prix non enregistré.", error);
       tarifs = tarifs.map((t) => (t.id === data.id ? data : t));
+      if (champ.dataset.k === "prix") champ.value = nombre(data.prix);
+      // Seul un changement de métier déplace la carte (pas de re-rendu pendant la saisie).
       if (champ.dataset.k === "corps_etat") rendreTarifs();
+      notifier("Prix enregistré ✓");
     };
   }
-  for (const b of $("#grille-tarifs").querySelectorAll("[data-suppr-tarif]")) {
+  for (const b of zone.querySelectorAll("[data-suppr-tarif]")) {
     b.onclick = async () => {
+      const t = tarifs.find((x) => x.id === b.dataset.supprTarif);
+      if (t?.designation && !(await demander(`Supprimer « ${t.designation} » de ta grille ?`, { ok: "Supprimer", danger: true }))) return;
       const { error } = await sb.from("tarifs").delete().eq("id", b.dataset.supprTarif);
       if (error) return erreur("Suppression impossible.", error);
-      tarifs = tarifs.filter((t) => t.id !== b.dataset.supprTarif);
+      tarifs = tarifs.filter((x) => x.id !== b.dataset.supprTarif);
       rendreTarifs();
     };
   }
@@ -1756,6 +1810,10 @@ $("#ajouter-tarif").onclick = async () => {
     .single();
   if (error) return erreur("Impossible d'ajouter un prix.", error);
   tarifs.push(data);
+  rechercheTarifs = "";
+  groupesFermes.delete("");
   rendreTarifs();
-  $(`#grille-tarifs input[data-id="${data.id}"]`)?.focus();
+  const champ = $(`#grille-tarifs textarea[data-id="${data.id}"]`);
+  champ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  champ?.focus();
 };
