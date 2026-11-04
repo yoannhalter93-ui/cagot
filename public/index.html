@@ -92,6 +92,13 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
 
   <!-- ===== Vue chantier : conversation avec l'IA ===== -->
   <main id="vue-chantier" class="vue" hidden>
+    <div class="entete-chantier no-print">
+      <button type="button" id="mes-chantiers" class="btn-secondaire">📋 Mes chantiers</button>
+      <span id="titre-chantier" class="titre-chantier">Nouveau chantier</span>
+      <button type="button" id="nouveau" class="btn-secondaire">+ Nouveau</button>
+    </div>
+    <div id="liste-chantiers" class="liste-chantiers" hidden></div>
+    <div id="zone-conversation">
     <div id="fil" class="fil">
       <div class="bulle ia">Salut ! Décris-moi le chantier : dicte-le avec le micro 🎤, tape tes notes, ou prends en photo tes notes papier 📷. Je te pose des questions s'il me manque quelque chose, puis je rédige le devis.</div>
     </div>
@@ -109,7 +116,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
     <div class="options-chantier no-print">
       <label><input type="checkbox" id="voix"> L'IA me parle</label>
       <label id="option-mains-libres"><input type="checkbox" id="mains-libres"> Mains libres</label>
-      <button type="button" id="nouveau" class="lien">Nouveau chantier</button>
+    </div>
     </div>
   </main>
 

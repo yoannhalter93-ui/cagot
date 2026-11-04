@@ -281,3 +281,11 @@ div.ligne-couleur label { margin-bottom: 0; }
 .ligne-destinataire input.invalide { border-color: var(--rouge); }
 .ligne-destinataire .retirer { border: 0; background: none; color: var(--gris); font-size: 1.1rem; padding: 0 6px; cursor: pointer; }
 .dialogue-envoi .aide { font-size: .8rem; margin: 8px 0 12px; }
+
+/* --- Liste des chantiers --- */
+.entete-chantier { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.entete-chantier .titre-chantier { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.btn-secondaire { border: 1px solid var(--bord); border-radius: 12px; padding: 8px 12px; background: var(--surface); color: var(--texte); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn-secondaire.actif { background: var(--bleu); border-color: var(--bleu); color: var(--blanc); }
+.liste-chantiers .element-liste.courant { border-color: var(--bleu); box-shadow: inset 3px 0 0 var(--bleu); }
+.liste-chantiers .suppr-chantier { border: 0; background: none; color: var(--gris); font-size: 1.1rem; padding: 4px 8px; cursor: pointer; }

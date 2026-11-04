@@ -269,6 +269,9 @@ async function demarrerSession() {
   }
   conversation = local.lire(`conversation.${utilisateur.id}`, { historique: [], docId: null });
   reafficherConversation();
+  // Chantier commencé avant la liste des chantiers : on l'enregistre en ligne.
+  if (!conversation.id && conversation.historique.length) sauverConversation();
+  else afficherTitreChantier();
   afficherVue(profil.infos.nom ? "notes" : "parametres");
   importerPartage().catch((err) => erreur("Le contenu partagé n'a pas pu être importé.", err));
 }
@@ -416,14 +419,131 @@ const historiqueSansPhotos = (historique) =>
     images?.length ? { ...m, texte: `${m.texte}\n[${images.length} photo(s) de notes]` } : m,
   );
 
-function sauverConversation() {
+// Le chantier ouvert est gardé sur le téléphone (reprise instantanée) et enregistré en
+// ligne dans « Mes chantiers » (plusieurs chantiers, rien ne se perd en changeant d'appareil).
+function sauverConversation({ enLigne = true } = {}) {
   if (!utilisateur) return;
   local.ecrire(`conversation.${utilisateur.id}`, {
+    id: conversation.id ?? null,
+    titre: conversation.titre ?? "",
     docId: conversation.docId,
     noteId: conversation.noteId ?? null,
     historique: historiqueSansPhotos(conversation.historique),
   });
+  afficherTitreChantier();
+  if (enLigne && conversation.historique.length) {
+    const c = conversation;
+    clearTimeout(c.minuterie);
+    c.minuterie = setTimeout(() => {
+      fileChantiers = fileChantiers.then(() => enregistrerChantier(c)).catch((err) => console.warn("[chantier]", err));
+    }, 300);
+  }
 }
+
+let fileChantiers = Promise.resolve();
+
+function titreChantier(c) {
+  if (c.titre) return c.titre;
+  const premier = c.historique.find((m) => m.role === "user")?.texte ?? "";
+  const ligne = premier.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  return ligne.length > 60 ? `${ligne.slice(0, 57)}…` : ligne || "Chantier sans titre";
+}
+
+function afficherTitreChantier() {
+  $("#titre-chantier").textContent = conversation.historique.length ? titreChantier(conversation) : "Nouveau chantier";
+}
+
+async function enregistrerChantier(c) {
+  const ligne = {
+    titre: titreChantier(c).slice(0, 200),
+    historique: historiqueSansPhotos(c.historique),
+    document_id: c.docId ?? null,
+    note_id: c.noteId ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  if (c.id) {
+    const { error } = await sb.from("chantiers").update(ligne).eq("id", c.id);
+    if (error) throw error;
+    return;
+  }
+  const { data, error } = await sb.from("chantiers").insert(ligne).select("id").single();
+  if (error) throw error;
+  c.id = data.id;
+  if (c === conversation) sauverConversation({ enLigne: false });
+}
+
+function nouvelleConversation(extra = {}) {
+  conversation = { historique: [], docId: null, ...extra };
+  sauverConversation({ enLigne: false });
+  reafficherConversation();
+}
+
+function ouvrirConversation(ch) {
+  conversation = {
+    id: ch.id,
+    titre: ch.titre,
+    historique: ch.historique ?? [],
+    docId: ch.document_id ?? null,
+    noteId: ch.note_id ?? null,
+  };
+  sauverConversation({ enLigne: false });
+  reafficherConversation();
+}
+
+function montrerListeChantiers(visible) {
+  $("#liste-chantiers").hidden = !visible;
+  $("#zone-conversation").hidden = visible;
+  $("#mes-chantiers").classList.toggle("actif", visible);
+  if (visible) afficherListeChantiers();
+}
+
+async function afficherListeChantiers() {
+  const liste = $("#liste-chantiers");
+  liste.innerHTML = `<p class="aide">Chargement…</p>`;
+  await fileChantiers; // le chantier en cours est enregistré avant d'afficher la liste
+  const { data, error } = await sb
+    .from("chantiers")
+    .select("id, titre, document_id, updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    liste.innerHTML = `<p class="aide">Impossible de charger les chantiers (connexion ?).</p>`;
+    return;
+  }
+  liste.innerHTML = data.length
+    ? data
+        .map(
+          (ch) => `<div class="element-liste ${ch.id === conversation.id ? "courant" : ""}" data-chantier="${esc(ch.id)}">
+            <div><strong>${esc(ch.titre || "Chantier sans titre")}</strong>
+              <small>${dateFr(ch.updated_at)}${ch.id === conversation.id ? " · ouvert" : ""}</small></div>
+            <div class="droite">${ch.document_id ? `<span class="pastille devis">devis</span>` : ""}
+              <button type="button" class="suppr-chantier" data-suppr-chantier="${esc(ch.id)}" aria-label="Supprimer">✕</button></div>
+          </div>`,
+        )
+        .join("")
+    : `<p class="aide">Aucun chantier enregistré pour l'instant.</p>`;
+  for (const el of liste.querySelectorAll("[data-chantier]")) {
+    el.onclick = async (ev) => {
+      if (ev.target.closest("[data-suppr-chantier]")) return;
+      const { data: ch, error: err } = await sb.from("chantiers").select("*").eq("id", el.dataset.chantier).single();
+      if (err) return erreur("Chantier introuvable.", err);
+      ouvrirConversation(ch);
+      montrerListeChantiers(false);
+    };
+  }
+  for (const b of liste.querySelectorAll("[data-suppr-chantier]")) {
+    b.onclick = async () => {
+      if (!(await demander("Supprimer ce chantier ? La conversation sera effacée (le devis éventuel reste dans Documents).", { ok: "Supprimer", danger: true }))) return;
+      const id = b.dataset.supprChantier;
+      const { error: err } = await sb.from("chantiers").delete().eq("id", id);
+      if (err) return erreur("Suppression impossible.", err);
+      if (conversation.id === id) nouvelleConversation();
+      afficherListeChantiers();
+    };
+  }
+}
+
+$("#mes-chantiers").onclick = () => montrerListeChantiers($("#liste-chantiers").hidden);
 
 function bulle(classe, html) {
   const div = document.createElement("div");
@@ -510,14 +630,15 @@ $("#saisie").onsubmit = (e) => {
   envoyer();
 };
 
-$("#nouveau").onclick = async () => {
-  if (conversation.historique.length && !(await demander("Commencer un nouveau chantier ? La conversation en cours sera effacée (les devis restent enregistrés).", { ok: "Nouveau chantier" }))) return;
-  conversation = { historique: [], docId: null };
-  sauverConversation();
-  reafficherConversation();
+// Nouveau chantier : l'actuel reste dans « Mes chantiers ».
+$("#nouveau").onclick = () => {
+  nouvelleConversation();
+  montrerListeChantiers(false);
+  $("#texte").focus();
 };
 
 async function enregistrerDevis(devis) {
+  conversation.titre = [devis.titre, devis.client_nom].filter(Boolean).join(" – ").slice(0, 200);
   const histo = historiqueSansPhotos(conversation.historique);
   if (conversation.docId) {
     const { data: existant } = await sb.from("documents").select("contenu").eq("id", conversation.docId).eq("type", "devis").maybeSingle();
@@ -688,9 +809,8 @@ $("#envoyer-note").onclick = async () => {
     }
   }
   await sb.from("notes").update({ envoyee_at: new Date().toISOString() }).eq("id", note.id);
-  conversation = { historique: [], docId: null, noteId: note.id };
-  sauverConversation();
-  reafficherConversation();
+  nouvelleConversation({ noteId: note.id, titre: note.titre || "" });
+  montrerListeChantiers(false);
   afficherVue("chantier");
   $("#texte").value = note.titre ? `${note.titre}\n\n${contenu}` : contenu;
   envoyer();
@@ -963,7 +1083,7 @@ async function afficherListe() {
         )
         .join("")
     : `<p class="aide">Aucun document pour l'instant. Va dans « Chantier » pour créer ton premier devis.</p>`;
-  for (const el of document.querySelectorAll(".element-liste")) el.onclick = () => ouvrirDocument(el.dataset.id);
+  for (const el of $("#liste-documents").querySelectorAll(".element-liste")) el.onclick = () => ouvrirDocument(el.dataset.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,10 +1457,21 @@ $("#payee").onclick = async () => {
   if (await demander("Marquer cette facture comme payée ?", { ok: "Marquer payée" })) changerStatut("payee");
 };
 
-$("#modifier-ia").onclick = () => {
+$("#modifier-ia").onclick = async () => {
   const d = docCourant;
   if (conversation.docId !== d.id) {
+    // Le chantier qui a produit ce devis, s'il existe encore
+    const { data: existants } = await sb
+      .from("chantiers")
+      .select("*")
+      .eq("document_id", d.id)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    if (existants?.length) ouvrirConversation(existants[0]);
+  }
+  if (conversation.docId !== d.id) {
     conversation = {
+      titre: [d.contenu.titre, d.contenu.client_nom].filter(Boolean).join(" – "),
       docId: d.id,
       historique: d.conversation?.length
         ? d.conversation
@@ -1352,6 +1483,7 @@ $("#modifier-ia").onclick = () => {
     sauverConversation();
     reafficherConversation();
   }
+  montrerListeChantiers(false);
   afficherVue("chantier");
   $("#texte").focus();
 };
