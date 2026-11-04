@@ -153,7 +153,7 @@ $("#carte-compte").hidden = plateforme.essai;
 $("#micro").hidden = !plateforme.dictee;
 $("#micro-note").hidden = !plateforme.dictee;
 $("#option-mains-libres").hidden = !plateforme.dictee;
-$("#imprimer").textContent = plateforme.libelleExport;
+$("#imprimer").innerHTML = `<span>📄</span>${plateforme.essai ? "Télécharger" : "PDF"}`;
 $("#photo").closest("label").hidden = plateforme.photos === false;
 if (plateforme.partageTelephone && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch((err) => console.error(err));
@@ -233,6 +233,7 @@ sb.auth.onAuthStateChange((evenement, session) => {
     } else {
       utilisateur = null;
       $("#navigation").hidden = true;
+      $("#btn-reglages").hidden = true;
       afficherModeConnexion("connexion");
       afficherVue("connexion");
     }
@@ -262,6 +263,7 @@ async function chargerProfil() {
 
 async function demarrerSession() {
   $("#navigation").hidden = false;
+  $("#btn-reglages").hidden = false;
   $("#email-compte").textContent = utilisateur.email;
   try {
     await chargerProfil();
@@ -273,27 +275,144 @@ async function demarrerSession() {
   // Chantier commencé avant la liste des chantiers : on l'enregistre en ligne.
   if (!conversation.id && conversation.historique.length) sauverConversation();
   else afficherTitreChantier();
-  afficherVue(profil.infos.nom ? "notes" : "parametres");
+  afficherVue(profil.infos.nom ? "accueil" : "parametres");
   importerPartage().catch((err) => erreur("Le contenu partagé n'a pas pu être importé.", err));
 }
 
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
+let typeDocs = "devis"; // onglet Devis ou Factures
+let filtreDocs = "tout";
+
 function afficherVue(nom) {
-  for (const v of document.querySelectorAll(".vue")) v.hidden = v.id !== `vue-${nom}`;
-  for (const b of document.querySelectorAll(".barre nav button")) {
-    const parent = { document: "documents", note: "notes" }[nom];
-    b.classList.toggle("actif", b.dataset.vue === nom || b.dataset.vue === parent);
+  // « devis » et « factures » : même écran, filtré par type
+  if (nom === "devis" || nom === "factures") {
+    typeDocs = nom === "devis" ? "devis" : "facture";
+    filtreDocs = "tout";
+    nom = "documents";
   }
+  for (const v of document.querySelectorAll(".vue")) v.hidden = v.id !== `vue-${nom}`;
+  const onglet =
+    nom === "documents" || nom === "document"
+      ? typeDocs === "facture"
+        ? "plus"
+        : "devis"
+      : ["note", "notes", "parametres"].includes(nom)
+        ? nom === "parametres"
+          ? "plus"
+          : "chantier"
+        : nom;
+  $("#menu-plus").hidden = true;
+  for (const b of document.querySelectorAll("#navigation [data-vue]")) b.classList.toggle("actif", b.dataset.vue === onglet);
+  $("#btn-reglages").classList.toggle("actif", nom === "parametres");
   if (nom !== "note") quitterNote();
+  if (nom === "accueil") afficherAccueil();
   if (nom === "notes") afficherNotes();
   if (nom === "documents") afficherListe();
   if (nom === "clients") afficherClients();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
 }
-for (const b of document.querySelectorAll(".barre nav button")) b.onclick = () => afficherVue(b.dataset.vue);
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-vue]");
+  if (b && !b.closest(".vue[hidden]")) {
+    if (b.dataset.vue === "plus") {
+      $("#menu-plus").hidden = !$("#menu-plus").hidden;
+      return;
+    }
+    return afficherVue(b.dataset.vue);
+  }
+  if (!$("#menu-plus").hidden && !ev.target.closest(".feuille")) $("#menu-plus").hidden = true;
+});
+
+// ---------------------------------------------------------------------------
+// Accueil
+// ---------------------------------------------------------------------------
+async function afficherAccueil() {
+  const e = profil.infos;
+  $("#bonjour").textContent = `Bonjour${e.prenom ? ` ${e.prenom}` : ""} 👋`;
+  $("#nom-entreprise-accueil").textContent = e.nom || "";
+  const [docs, chantiers] = await Promise.all([
+    sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
+    sb.from("chantiers").select("id, titre, document_id, updated_at").order("updated_at", { ascending: false }).limit(3),
+  ]);
+  if (!docs.error) {
+    const { tuiles } = indicateurs(docs.data);
+    $("#activite-accueil").innerHTML = Object.entries(tuiles).map(([id, t]) => htmlTuile(id, t)).join("");
+    for (const b of $("#activite-accueil").querySelectorAll("[data-filtre]")) {
+      b.onclick = () => {
+        afficherVue(b.dataset.type === "facture" ? "factures" : "devis");
+        filtreDocs = b.dataset.filtre;
+        afficherListe();
+      };
+    }
+  }
+  const zone = $("#chantiers-accueil");
+  if (chantiers.error || !chantiers.data.length) {
+    zone.innerHTML = `<p class="aide">${chantiers.error ? "La liste des chantiers sera disponible après la mise à jour du serveur." : "Pas encore de chantier. Appuie sur « Créer un devis rapide » pour commencer."}</p>`;
+    return;
+  }
+  zone.innerHTML = chantiers.data
+    .map(
+      (ch) => `<button type="button" class="carte-chantier" data-ouvrir-chantier="${esc(ch.id)}">
+        <span class="icone-chantier">🏗️</span>
+        <span><strong>${esc(ch.titre || "Chantier sans titre")}</strong><small>${ilYa(ch.updated_at)}</small></span>
+        <span class="pastille ${ch.document_id ? "statut-accepte" : "statut-envoye"}">${ch.document_id ? "devis fait" : "en cours"}</span>
+      </button>`,
+    )
+    .join("");
+  for (const b of zone.querySelectorAll("[data-ouvrir-chantier]")) {
+    b.onclick = async () => {
+      const { data: ch, error } = await sb.from("chantiers").select("*").eq("id", b.dataset.ouvrirChantier).single();
+      if (error) return erreur("Chantier introuvable.", error);
+      ouvrirConversation(ch);
+      montrerListeChantiers(false);
+      afficherVue("chantier");
+    };
+  }
+}
+
+function devisRapide() {
+  nouvelleConversation();
+  montrerListeChantiers(false);
+  afficherVue("chantier");
+  $("#texte").focus();
+}
+$("#r-devis").onclick = devisRapide;
+$("#voir-chantiers").onclick = () => {
+  afficherVue("chantier");
+  montrerListeChantiers(true);
+};
+
+// Facture sans devis : un brouillon vierge à compléter.
+async function nouvelleFactureVierge() {
+  const contenu = calculerTotaux({
+    titre: "Travaux",
+    client_nom: "",
+    client_adresse: "",
+    client_email: "",
+    adresse_chantier: "",
+    description: "",
+    sections: [{ titre: "Prestations", lignes: [{ designation: "Nouvelle prestation", detail: "", quantite: 1, unite: "u", prix_unitaire_ht: 0, prix_source: "artisan", calcul: "" }] }],
+    taux_tva: profil.infos.franchise_tva ? 0 : 10,
+    duree_estimee: "",
+    hypotheses: [],
+  });
+  const { data, error } = await sb.from("documents").insert({ type: "facture", contenu }).select("id").single();
+  if (error) return erreur("Facture non créée.", error);
+  ouvrirDocument(data.id);
+}
+$("#nouveau-document").onclick = () => (typeDocs === "facture" ? nouvelleFactureVierge() : devisRapide());
+
+// Réglages en onglets
+for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
+  b.onclick = () => {
+    for (const x of document.querySelectorAll(".onglets-reglages [data-onglet]")) x.classList.toggle("actif", x === b);
+    for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== b.dataset.onglet;
+    $("#form-entreprise").hidden = !["entreprise", "perso"].includes(b.dataset.onglet);
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Voix : dictée (reconnaissance vocale) et synthèse vocale
@@ -1435,16 +1554,42 @@ const ilYa = (iso) => {
 const montantDoc = (d) => (profil.infos.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc) || 0;
 
 const FILTRES_DOCS = [
-  { id: "tout", nom: "Tout", test: () => true },
-  { id: "a-envoyer", nom: "À envoyer", test: (d) => d.type === "devis" && d.statut === "brouillon" },
-  { id: "envoye", nom: "En attente", test: (d) => d.type === "devis" && d.statut === "envoye" },
-  { id: "accepte", nom: "Acceptés", test: (d) => d.type === "devis" && d.statut === "accepte" },
-  { id: "refuse", nom: "Refusés", test: (d) => d.type === "devis" && d.statut === "refuse" },
-  { id: "a-encaisser", nom: "À encaisser", test: (d) => d.type === "facture" && d.statut === "emise" },
-  { id: "payee", nom: "Payées", test: (d) => d.type === "facture" && d.statut === "payee" },
-  { id: "facture-brouillon", nom: "Factures à émettre", test: (d) => d.type === "facture" && d.statut === "brouillon" },
+  { id: "tout", nom: "Tous", test: () => true },
+  { id: "a-envoyer", type: "devis", nom: "À envoyer", test: (d) => d.type === "devis" && d.statut === "brouillon" },
+  { id: "envoye", type: "devis", nom: "En attente", test: (d) => d.type === "devis" && d.statut === "envoye" },
+  { id: "accepte", type: "devis", nom: "Acceptés", test: (d) => d.type === "devis" && d.statut === "accepte" },
+  { id: "refuse", type: "devis", nom: "Refusés", test: (d) => d.type === "devis" && d.statut === "refuse" },
+  { id: "facture-brouillon", type: "facture", nom: "À émettre", test: (d) => d.type === "facture" && d.statut === "brouillon" },
+  { id: "a-encaisser", type: "facture", nom: "À encaisser", test: (d) => d.type === "facture" && d.statut === "emise" },
+  { id: "payee", type: "facture", nom: "Payées", test: (d) => d.type === "facture" && d.statut === "payee" },
 ];
-let filtreDocs = "tout";
+
+// Les 4 indicateurs d'activité (accueil, Devis, Factures).
+function indicateurs(docs) {
+  const factureDe = new Map(docs.filter((d) => d.type === "facture" && d.devis_id).map((f) => [f.devis_id, f]));
+  const somme = (liste) => liste.reduce((t, d) => t + montantDoc(d), 0);
+  const par = Object.fromEntries(FILTRES_DOCS.map((f) => [f.id, docs.filter(f.test)]));
+  const relances = par.envoye.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7).length;
+  const aFacturer = par.accepte.filter((d) => !factureDe.has(d.id)).length;
+  const retard = par["a-encaisser"].filter((d) => joursDepuis(d.date_document) > Number(profil.infos.delai_paiement || 30)).length;
+  const decides = par.accepte.length + par.refuse.length;
+  const taux = decides ? Math.round((100 * par.accepte.length) / decides) : null;
+  const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+  return {
+    factureDe,
+    par,
+    tuiles: {
+      envoye: { type: "devis", icone: "⏳", titre: "Devis en attente", valeur: euros(somme(par.envoye)), detail: `${pluriel(par.envoye.length, "devis").replace("deviss", "devis")}${relances ? ` · ${relances} à relancer` : ""}` },
+      accepte: { type: "devis", icone: "✅", titre: "Devis acceptés", valeur: euros(somme(par.accepte)), detail: `${pluriel(par.accepte.length, "devis").replace("deviss", "devis")}${aFacturer ? ` · ${aFacturer} à facturer` : ""}${taux !== null ? ` · ${taux} %` : ""}` },
+      "a-encaisser": { type: "facture", icone: "💶", titre: "À encaisser", valeur: euros(somme(par["a-encaisser"])), detail: `${pluriel(par["a-encaisser"].length, "facture")}${retard ? ` · ${retard} en retard` : ""}`, alerte: retard > 0 },
+      payee: { type: "facture", icone: "🏦", titre: "Encaissé", valeur: euros(somme(par.payee)), detail: `${pluriel(par.payee.length, "facture")} payée${par.payee.length > 1 ? "s" : ""}` },
+    },
+  };
+}
+
+const htmlTuile = (id, t, actif = false) =>
+  `<button type="button" class="tuile ${t.alerte ? "alerte" : ""} ${actif ? "actif" : ""}" data-filtre="${id}" data-type="${t.type}">
+    <small>${t.icone} ${t.titre}</small><strong>${t.valeur}</strong><span>${t.detail}</span></button>`;
 
 async function afficherListe() {
   const zone = $("#liste-documents");
@@ -1462,32 +1607,24 @@ async function afficherListe() {
     zone.innerHTML = `<p class="aide">Aucun document pour l'instant. Va dans « Chantier » pour créer ton premier devis.</p>`;
     return;
   }
-  const factureDe = new Map(docs.filter((d) => d.type === "facture" && d.devis_id).map((f) => [f.devis_id, f]));
-  const somme = (liste) => liste.reduce((t, d) => t + montantDoc(d), 0);
-  const parFiltre = Object.fromEntries(FILTRES_DOCS.map((f) => [f.id, docs.filter(f.test)]));
-  const enAttente = parFiltre.envoye;
-  const aFacturer = parFiltre.accepte.filter((d) => !factureDe.has(d.id));
-  const aEncaisser = parFiltre["a-encaisser"];
-  const retard = aEncaisser.filter((d) => joursDepuis(d.date_document) > Number(profil.infos.delai_paiement || 30));
-  const decides = docs.filter((d) => d.type === "devis" && ["accepte", "refuse"].includes(d.statut));
-  const taux = decides.length ? Math.round((100 * parFiltre.accepte.length) / decides.length) : null;
-
-  const tuile = (filtre, titre, valeur, detail, alerte = false) =>
-    `<button type="button" class="tuile ${alerte ? "alerte" : ""} ${filtreDocs === filtre ? "actif" : ""}" data-filtre="${filtre}">
-      <small>${titre}</small><strong>${valeur}</strong><span>${detail}</span></button>`;
-
-  const liste = parFiltre[filtreDocs] ?? docs;
+  const { factureDe, par: parFiltre, tuiles } = indicateurs(docs);
+  const filtres = FILTRES_DOCS.filter((f) => !f.type || f.type === typeDocs);
+  if (!filtres.some((f) => f.id === filtreDocs)) filtreDocs = "tout";
+  const liste = (parFiltre[filtreDocs] ?? docs).filter((d) => d.type === typeDocs);
+  $("#titre-documents").textContent = typeDocs === "facture" ? "Factures" : "Devis";
   zone.innerHTML = `
-    <div class="tuiles">
-      ${tuile("envoye", "⏳ En attente de réponse", euros(somme(enAttente)), `${enAttente.length} devis${enAttente.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7).length ? ` · ${enAttente.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7).length} à relancer` : ""}`)}
-      ${tuile("accepte", "✅ Acceptés", euros(somme(parFiltre.accepte)), `${parFiltre.accepte.length} devis${aFacturer.length ? ` · ${aFacturer.length} à facturer` : ""}${taux !== null ? ` · ${taux} % acceptés` : ""}`)}
-      ${tuile("a-encaisser", "💶 À encaisser", euros(somme(aEncaisser)), `${aEncaisser.length} facture${aEncaisser.length > 1 ? "s" : ""}${retard.length ? ` · ${retard.length} en retard` : ""}`, retard.length > 0)}
-      ${tuile("payee", "🏦 Encaissé", euros(somme(parFiltre.payee)), `${parFiltre.payee.length} facture${parFiltre.payee.length > 1 ? "s" : ""} payée${parFiltre.payee.length > 1 ? "s" : ""}`)}
-    </div>
-    <div class="filtres-docs">${FILTRES_DOCS.filter((f) => f.id === "tout" || parFiltre[f.id].length)
-      .map((f) => `<button type="button" class="puce ${filtreDocs === f.id ? "choisie" : ""}" data-filtre="${f.id}">${f.nom} <b>${parFiltre[f.id].length}</b></button>`)
+    <div class="tuiles">${Object.entries(tuiles)
+      .filter(([, t]) => t.type === typeDocs)
+      .map(([id, t]) => htmlTuile(id, t, filtreDocs === id))
       .join("")}</div>
-    ${liste.length ? liste.map((d) => carteDocument(d, factureDe)).join("") : `<p class="aide">Rien dans cette catégorie.</p>`}`;
+    <div class="filtres-docs">${filtres
+      .filter((f) => f.id === "tout" || parFiltre[f.id].length)
+      .map((f) => {
+        const n = f.id === "tout" ? docs.filter((d) => d.type === typeDocs).length : parFiltre[f.id].length;
+        return `<button type="button" class="puce ${filtreDocs === f.id ? "choisie" : ""}" data-filtre="${f.id}">${f.nom} <b>${n}</b></button>`;
+      })
+      .join("")}</div>
+    ${liste.length ? liste.map((d) => carteDocument(d, factureDe)).join("") : `<p class="aide">${typeDocs === "facture" ? "Aucune facture ici. Une facture se crée depuis un devis accepté, ou avec « + Nouveau »." : "Aucun devis ici. Appuie sur « + Nouveau » pour en faire un."}</p>`}`;
 
   for (const b of zone.querySelectorAll("[data-filtre]")) {
     b.onclick = () => {
@@ -1586,6 +1723,7 @@ async function ouvrirDocument(id) {
   const { data, error } = await sb.from("documents").select("*").eq("id", id).maybeSingle();
   if (error || !data) return erreur("Document introuvable.", error);
   docCourant = data;
+  typeDocs = data.type;
   afficherVue("document");
   rendreDocument();
 }
@@ -1615,7 +1753,7 @@ async function changerStatut(statut) {
 // Personnalisation : logo (image enregistrée dans les infos de l'entreprise) et couleur.
 const logoValide = (logo) => typeof logo === "string" && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(logo);
 const couleurValide = (c) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
-const COULEUR_DEFAUT = "#1f4e79";
+const COULEUR_DEFAUT = "#1f3b63";
 
 function teinteClaire(hex) {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -1708,6 +1846,25 @@ function rendreDocument() {
   $("#emettre").hidden = !(facture && d.statut === "brouillon");
   $("#payee").hidden = !(facture && d.statut === "emise");
   $("#supprimer").hidden = verrouille;
+  $(".menu-plus").open = false;
+  $("#numero-document").textContent = `${facture ? "Facture" : "Devis"} ${d.numero || "brouillon"}`;
+  const badge = $("#badge-statut");
+  badge.textContent = LIBELLES_STATUT[d.statut];
+  badge.className = `badge-statut statut-${d.statut}`;
+  const principale = {
+    "devis-brouillon": ["📤 Envoyer le devis", () => $("#partager").click()],
+    "devis-envoye": ["✓ Marquer comme accepté", () => changerStatut("accepte").then(() => notifier("Devis accepté 🎉"))],
+    "devis-accepte": ["🧾 Créer la facture", () => $("#en-facture").click()],
+    "devis-refuse": ["↩️ Remettre en attente", () => changerStatut("envoye")],
+    "facture-brouillon": ["✅ Émettre la facture", () => $("#emettre").click()],
+    "facture-emise": ["💶 Marquer payée", () => $("#payee").click()],
+  }[`${d.type}-${d.statut}`];
+  const bouton = $("#action-principale");
+  bouton.hidden = !principale;
+  if (principale) {
+    bouton.textContent = principale[0];
+    bouton.onclick = principale[1];
+  }
 
   const info = $("#info-statut");
   if (facture) {
@@ -1717,7 +1874,8 @@ function rendreDocument() {
         ? "Facture en <strong>brouillon</strong> : vérifie-la puis clique « Émettre la facture ». Elle recevra alors son numéro définitif et ne pourra plus être modifiée."
         : `Facture <strong>${LIBELLES_STATUT[d.statut]}</strong> : elle est verrouillée (obligation légale). Pour corriger, il faudra faire un avoir.`;
   } else {
-    info.hidden = false;
+    // Le statut se lit dans le badge en haut et se change avec le gros bouton (ou ici, en détail)
+    info.hidden = true;
     info.innerHTML = `Statut du devis : <select id="statut-devis">${["brouillon", "envoye", "accepte", "refuse"]
       .map((s) => `<option value="${s}" ${s === d.statut ? "selected" : ""}>${LIBELLES_STATUT[s]}</option>`)
       .join("")}</select>`;
@@ -1916,7 +2074,7 @@ $("#partager").onclick = async () => {
   if (plateforme.envoiDirect && pdf && destinataires.length) {
     const bouton = $("#partager");
     bouton.disabled = true;
-    bouton.textContent = "Envoi…";
+    bouton.innerHTML = "<span>⏳</span>Envoi…";
     try {
       if (await plateforme.envoyerEmail({ destinataires, sujet, texte, pdf, titre: titreFichier(d) }, await jetonAcces())) {
         notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}.`);
@@ -1927,13 +2085,24 @@ $("#partager").onclick = async () => {
       return erreur(err.message, err);
     } finally {
       bouton.disabled = false;
-      bouton.textContent = "Envoyer";
+      bouton.innerHTML = "<span>✉️</span>Mail";
     }
   }
   // 2) Sinon : partage du téléphone (Gmail, WhatsApp…)
   const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), destinataires, notifier });
   if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
+
+$("#partager-tel").onclick = async () => {
+  const d = docCourant;
+  try {
+    const pdf = await pdfDocument(d);
+    await plateforme.partager({ sujet: titreFichier(d), texte: titreFichier(d), pdf, titre: titreFichier(d), notifier });
+  } catch (err) {
+    erreur("Partage impossible.", err);
+  }
+};
+for (const b of document.querySelectorAll(".menu-plus-liste button")) b.addEventListener("click", () => ($(".menu-plus").open = false));
 
 $("#en-facture").onclick = async () => {
   if (!(await demander("Créer une facture (brouillon) à partir de ce devis ?", { ok: "Créer la facture" }))) return;

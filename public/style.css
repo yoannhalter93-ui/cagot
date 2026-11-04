@@ -1,8 +1,11 @@
 :root {
   color-scheme: light;
-  --bleu: #1f4e79;
-  --bleu-clair: #e8f0f8;
-  --fond: #f4f6f8;
+  --bleu: #1f3b63;
+  --bleu-clair: #e6edf6;
+  --vert: #2f8a4e;
+  --or: #f2b632;
+  --fond: #f5f3ee;
+  --nav: 64px;
   --texte: #1c2430;
   --gris: #6b7684;
   --bord: #d7dde4;
@@ -198,7 +201,7 @@ button, input, textarea { font: inherit; }
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --fond: #11161d; --texte: #e3e8ee; --gris: #9aa6b4; --bord: #2c3642; --surface: #1a212b;
-    --bleu-clair: #1c2c3d; --jaune: #3a3017; --jaune-texte: #f1d58a;
+    --bleu-clair: #1c2c3d; --jaune: #3a3017; --jaune-texte: #f1d58a; --bleu: #3d6aa8;
   }
 }
 :root[data-theme="dark"] {
@@ -379,3 +382,112 @@ div.ligne-couleur label { margin-bottom: 0; }
 .liste-choix button { text-align: left; border: 1px solid var(--bord); border-radius: 10px; padding: 10px; background: var(--surface); color: var(--texte); cursor: pointer; }
 .liste-choix small { display: block; color: var(--gris); }
 @media (max-width: 420px) { .barre nav button { padding: 8px 4px; font-size: .85rem; } }
+
+
+/* =====================================================================
+   Refonte « Cagot Pro » : barre du haut, onglets en bas, accueil
+   ===================================================================== */
+body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
+.barre { background: var(--bleu); padding: 12px 16px; }
+.barre .logo { display: flex; align-items: center; gap: 8px; font-size: 1.35rem; font-weight: 800; letter-spacing: .2px; margin: 0; }
+.barre .logo svg { width: 28px; height: 26px; fill: none; stroke: var(--or); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.barre .logo span { color: var(--or); }
+.btn-reglages { background: rgba(255,255,255,.12); border: 0; color: #fff; font-size: 1.1rem; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; }
+.btn-reglages.actif { background: rgba(255,255,255,.28); }
+@media (max-width: 430px) { .barre h1.logo { display: flex !important; } }
+
+.onglets {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; justify-content: space-around; gap: 2px;
+  height: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); padding: 6px 6px env(safe-area-inset-bottom, 0px);
+  background: var(--surface); border-top: 1px solid var(--bord); box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+}
+.onglets[hidden] { display: none; }
+.onglets button {
+  flex: 1; max-width: 90px; border: 0; background: transparent; color: var(--gris); border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: .72rem; font-weight: 600; cursor: pointer;
+}
+.onglets svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.onglets #onglet-plus svg { fill: currentColor; stroke: none; }
+.onglets button.actif { background: var(--bleu); color: #fff; }
+.feuille-plus { position: fixed; inset: 0; z-index: 19; background: rgba(0,0,0,.25); }
+.feuille-plus[hidden] { display: none; }
+.feuille { position: absolute; right: 10px; bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 8px); background: var(--surface); border-radius: 16px; padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.2); display: flex; flex-direction: column; min-width: 200px; }
+.feuille button { text-align: left; border: 0; background: none; color: var(--texte); padding: 12px 14px; font-size: 1rem; border-radius: 10px; cursor: pointer; }
+.feuille button:active { background: var(--fond); }
+
+/* Hauteurs plein écran en tenant compte des onglets */
+#vue-chantier { min-height: calc(100dvh - 64px - var(--nav)); }
+.saisie { bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
+.vue-note:not([hidden]) { height: calc(100dvh - 64px - var(--nav) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+
+/* Accueil */
+.accueil-entete { background: linear-gradient(135deg, var(--bleu), #2c5288); color: #fff; margin: -16px -16px 14px; padding: 20px 18px 26px; border-radius: 0 0 22px 22px; }
+.accueil-entete h2 { margin: 0; font-size: 1.5rem; }
+.accueil-entete p { margin: 4px 0 0; opacity: .85; text-transform: uppercase; letter-spacing: .5px; font-size: .85rem; }
+#activite-accueil { margin-top: -6px; }
+.btn-devis-rapide { width: 100%; border: 0; border-radius: 16px; padding: 16px; font-size: 1.15rem; font-weight: 800; color: #fff; background: linear-gradient(180deg, #38a05c, var(--vert)); box-shadow: 0 6px 16px rgba(47,138,78,.35); cursor: pointer; margin: 4px 0 6px; }
+.btn-devis-rapide:active { transform: scale(.98); }
+.titre-section { margin: 18px 2px 10px; font-size: 1.1rem; }
+.ligne-titre { display: flex; justify-content: space-between; align-items: center; }
+.ligne-titre h3 { margin: 0; font-size: 1.1rem; }
+.raccourcis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.raccourcis button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border: 1px solid var(--bord); border-radius: 14px; background: var(--surface); color: var(--texte); font-size: .8rem; font-weight: 600; cursor: pointer; }
+.raccourcis button span { font-size: 1.5rem; }
+.carte-chantier { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px; border: 1px solid var(--bord); border-radius: 14px; background: var(--surface); color: var(--texte); margin-bottom: 8px; cursor: pointer; }
+.carte-chantier > span:nth-child(2) { flex: 1; min-width: 0; }
+.carte-chantier strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte-chantier small { color: var(--gris); }
+.icone-chantier { width: 44px; height: 44px; border-radius: 12px; background: var(--bleu-clair); display: grid; place-items: center; font-size: 1.4rem; flex: none; }
+.tuile { box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+
+/* Segments (Avec l'IA / Mes notes) */
+.segments { display: flex; background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+.segments button { flex: 1; border: 0; background: none; padding: 9px; border-radius: 9px; font-weight: 600; color: var(--gris); cursor: pointer; }
+.segments button.actif { background: var(--bleu); color: #fff; }
+
+/* Listes Devis / Factures */
+.entete-documents { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.entete-documents h2 { margin: 0; }
+.btn-or, .entete-clients .btn-principal { background: var(--vert); border: 0; color: #fff; font-weight: 700; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
+.tuiles:has(> :only-child), .tuiles:has(> :nth-child(2):last-child) { grid-template-columns: 1fr 1fr; }
+
+/* Fiche document */
+.entete-document { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.entete-document #retour { font-size: 1.4rem; text-decoration: none; padding: 4px 8px; }
+.titre-document { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.badge-statut { font-size: .8rem; font-weight: 700; padding: 3px 12px; border-radius: 99px; background: var(--bleu-clair); color: var(--bleu); }
+.badge-statut.statut-accepte, .badge-statut.statut-payee { background: #e3f4ea; color: #1e7a45; }
+.badge-statut.statut-envoye, .badge-statut.statut-emise { background: #fff4dc; color: #8a5a00; }
+.badge-statut.statut-refuse { background: #fbe9e9; color: #a12b2b; }
+.menu-plus { position: relative; }
+.menu-plus summary { list-style: none; font-size: 1.5rem; padding: 2px 10px; cursor: pointer; border-radius: 10px; }
+.menu-plus summary::-webkit-details-marker { display: none; }
+.menu-plus-liste { position: absolute; right: 0; top: 110%; z-index: 15; background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.15); padding: 6px; min-width: 210px; display: flex; flex-direction: column; }
+.menu-plus-liste button { text-align: left; border: 0; background: none; padding: 11px 12px; border-radius: 9px; font-size: .95rem; color: var(--texte); cursor: pointer; }
+.menu-plus-liste button[hidden] { display: none; }
+.menu-plus-liste .danger { color: var(--rouge); }
+.barre-actions-doc { position: sticky; bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); background: var(--fond); padding: 10px 0 6px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.outils-doc { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.outils-doc button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border: 1px solid var(--bord); border-radius: 12px; background: var(--surface); color: var(--texte); font-size: .75rem; font-weight: 600; cursor: pointer; }
+.outils-doc button[hidden] { display: none; }
+.outils-doc button span { font-size: 1.2rem; }
+.btn-action-principale { border: 0; border-radius: 14px; padding: 14px; font-size: 1.05rem; font-weight: 800; color: #fff; background: var(--vert); cursor: pointer; }
+.btn-action-principale[hidden] { display: none; }
+
+/* Réglages en onglets */
+.onglets-reglages { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; scrollbar-width: none; }
+.onglets-reglages button { flex: none; border: 1px solid var(--bord); background: var(--surface); color: var(--texte); border-radius: 99px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+.onglets-reglages button.actif { background: var(--bleu); border-color: var(--bleu); color: #fff; }
+#form-entreprise[hidden], [data-panneau][hidden] { display: none; }
+.btn-enregistrer { width: 100%; margin-top: 8px; padding: 13px; }
+
+/* Boutons principaux en vert (actions), le bleu reste la couleur de structure */
+.btn-principal { background: var(--vert); }
+.bulle.moi { background: var(--bleu); }
+@media print { .onglets, .feuille-plus, .barre-actions-doc, .entete-document { display: none !important; } body { padding: 0; } }
+/* Barre d'actions du document : compacte */
+.barre-actions-doc { padding: 6px 0 4px; gap: 6px; }
+.outils-doc button { flex-direction: row; justify-content: center; gap: 4px; padding: 7px 2px; font-size: .72rem; }
+.outils-doc button span { font-size: 1rem; }
+.btn-action-principale { padding: 11px; font-size: 1rem; }

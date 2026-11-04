@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1f4e79">
+  <meta name="theme-color" content="#1f3b63">
   <meta name="referrer" content="no-referrer">
   <title>Cagot – Devis & Factures</title>
   <link rel="manifest" href="/manifest.webmanifest">
@@ -13,15 +13,24 @@
 </head>
 <body>
   <header class="barre no-print">
-    <h1>Cagot</h1>
-    <nav id="navigation" hidden>
-      <button data-vue="notes">Notes</button>
-      <button data-vue="chantier" class="actif">Chantier</button>
-      <button data-vue="documents">Documents</button>
-      <button data-vue="clients">Clients</button>
-      <button data-vue="parametres">Réglages</button>
-    </nav>
+    <h1 class="logo"><svg viewBox="0 0 32 28" aria-hidden="true"><path d="M3 14 16 3l13 11" /><path d="M7 11v14h18V11" /></svg>Cagot <span>Pro</span></h1>
+    <button type="button" id="btn-reglages" class="btn-reglages" data-vue="parametres" aria-label="Réglages" hidden>⚙️</button>
   </header>
+  <nav id="navigation" class="onglets no-print" hidden>
+    <button data-vue="accueil"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg><span>Accueil</span></button>
+    <button data-vue="devis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></svg><span>Devis</span></button>
+
+    <button data-vue="clients"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.4 0 4.1 1.5 4.6 4.3"/></svg><span>Clients</span></button>
+    <button data-vue="chantier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M6 18v-3a6 6 0 0 1 12 0v3"/><path d="M12 9V6M10 6h4"/></svg><span>Chantiers</span></button>
+    <button data-vue="plus" id="onglet-plus"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Plus</span></button>
+  </nav>
+  <div id="menu-plus" class="feuille-plus no-print" hidden>
+    <div class="feuille">
+      <button type="button" data-vue="factures">🧾 Factures</button>
+      <button type="button" data-vue="notes">🗒️ Mes notes</button>
+      <button type="button" data-vue="parametres">⚙️ Réglages</button>
+    </div>
+  </div>
 
   <div id="bandeau-essai" class="bandeau no-print" hidden>
     Version d'essai : tes données restent privées sur ton compte Claude. Pour dicter, utilise le micro de ton clavier.
@@ -55,8 +64,28 @@
     </form>
   </main>
 
+  <!-- ===== Accueil ===== -->
+  <main id="vue-accueil" class="vue" hidden>
+    <section class="accueil-entete">
+      <h2 id="bonjour">Bonjour 👋</h2>
+      <p id="nom-entreprise-accueil"></p>
+    </section>
+    <div id="activite-accueil" class="tuiles"></div>
+    <button type="button" id="r-devis" class="btn-devis-rapide">⚡ Créer un devis rapide</button>
+    <h3 class="titre-section">Mes accès rapides</h3>
+    <div class="raccourcis">
+      <button type="button" data-vue="notes"><span>🗒️</span>Notes</button>
+      <button type="button" data-vue="chantier"><span>🏗️</span>Chantier</button>
+      <button type="button" data-vue="clients"><span>👥</span>Clients</button>
+      <button type="button" data-vue="factures"><span>🧾</span>Factures</button>
+    </div>
+    <div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" id="voir-chantiers">Voir tout ›</button></div>
+    <div id="chantiers-accueil"></div>
+  </main>
+
   <!-- ===== Notes de chantier : liste ===== -->
   <main id="vue-notes" class="vue" hidden>
+    <div class="segments"><button type="button" data-vue="chantier">💬 Avec l'IA</button><button type="button" data-vue="notes" class="actif">🗒️ Mes notes</button></div>
     <button id="nouvelle-note" class="btn-principal btn-large">+ Nouvelle note</button>
     <div class="import-notes">
       <button type="button" id="coller-note">📋 Coller une note</button>
@@ -93,6 +122,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
 
   <!-- ===== Vue chantier : conversation avec l'IA ===== -->
   <main id="vue-chantier" class="vue" hidden>
+    <div class="segments no-print"><button type="button" data-vue="chantier" class="actif">💬 Avec l'IA</button><button type="button" data-vue="notes">🗒️ Mes notes</button></div>
     <div class="entete-chantier no-print">
       <button type="button" id="mes-chantiers" class="btn-secondaire">📋 Mes chantiers</button>
       <span id="titre-chantier" class="titre-chantier">Nouveau chantier</span>
@@ -132,29 +162,50 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
   </main>
 
   <main id="vue-documents" class="vue" hidden>
+    <div class="entete-documents"><h2 id="titre-documents">Devis</h2><button type="button" id="nouveau-document" class="btn-or">+ Nouveau</button></div>
     <div id="liste-documents"></div>
   </main>
 
   <main id="vue-document" class="vue" hidden>
-    <div class="actions no-print">
-      <button id="retour" class="lien">← Retour</button>
-      <button id="imprimer">PDF / Imprimer</button>
-      <button id="partager">Envoyer</button>
-      <button id="en-facture">Créer la facture</button>
-      <button id="emettre" class="btn-principal">Émettre la facture</button>
-      <button id="payee">Marquer payée</button>
-      <button id="modifier-ia">Modifier avec l'IA</button>
-      <button id="supprimer" class="danger">Supprimer</button>
+    <div class="entete-document no-print">
+      <button id="retour" class="lien" aria-label="Retour">←</button>
+      <div class="titre-document"><strong id="numero-document"></strong><span id="badge-statut" class="badge-statut"></span></div>
+      <details class="menu-plus">
+        <summary aria-label="Plus d'actions">⋯</summary>
+        <div class="menu-plus-liste">
+          <button id="en-facture">🧾 Créer la facture</button>
+          <button id="emettre">✅ Émettre la facture</button>
+          <button id="payee">💶 Marquer payée</button>
+          <button id="supprimer" class="danger">🗑️ Supprimer</button>
+        </div>
+      </details>
     </div>
     <div id="info-statut" class="info no-print" hidden></div>
     <div id="hypotheses" class="hypotheses no-print" hidden></div>
     <article id="document" class="document"></article>
+    <div class="barre-actions-doc no-print">
+      <div class="outils-doc">
+        <button type="button" id="modifier-ia"><span>✏️</span>Modifier</button>
+        <button type="button" id="partager-tel"><span>🔗</span>Partager</button>
+        <button type="button" id="imprimer"><span>📄</span>PDF</button>
+        <button type="button" id="partager"><span>✉️</span>Mail</button>
+      </div>
+      <button type="button" id="action-principale" class="btn-action-principale" hidden></button>
+    </div>
   </main>
 
   <!-- ===== Vue réglages ===== -->
   <main id="vue-parametres" class="vue" hidden>
+    <div class="onglets-reglages" role="tablist">
+      <button type="button" data-onglet="entreprise" class="actif">Entreprise</button>
+      <button type="button" data-onglet="perso">Personnalisation</button>
+      <button type="button" data-onglet="tarifs">Tarifs</button>
+      <button type="button" data-onglet="compte">Compte</button>
+    </div>
     <form id="form-entreprise" class="carte">
+      <div data-panneau="entreprise">
       <h2>Mon entreprise</h2>
+      <label>Ton prénom (pour l'accueil) <input name="prenom" maxlength="60" autocomplete="given-name"></label>
       <label>Nom / raison sociale <input name="nom" maxlength="200"></label>
       <label>Adresse <textarea name="adresse" rows="2" maxlength="500"></textarea></label>
       <label>Téléphone <input name="telephone" type="tel" maxlength="30"></label>
@@ -168,7 +219,13 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <label>Acompte demandé à la signature (%) <input name="acompte" type="number" min="0" max="100" value="30"></label>
       <label>Délai de paiement des factures (jours) <input name="delai_paiement" type="number" min="0" value="30"></label>
 
-      <h2>Mes devis et factures</h2>
+      <h2>Mes métiers</h2>
+      <p class="aide">L'IA te prévient quand des travaux sortent de tes métiers (sous-traitance).</p>
+      <div id="liste-metiers" class="metiers"></div>
+      </div>
+
+      <div data-panneau="perso" hidden>
+      <h2>Personnalisation des documents</h2>
       <p class="aide">Ton logo et ta couleur apparaissent sur l'écran et dans les PDF envoyés aux clients.</p>
       <div class="reglage-logo">
         <div class="cadre-logo"><img id="apercu-logo" alt="Mon logo" hidden><span id="sans-logo">Pas de logo</span></div>
@@ -179,19 +236,16 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       </div>
       <input type="hidden" name="logo">
       <div class="ligne-couleur">
-        <label class="ligne-couleur">Couleur des documents <input type="color" name="couleur" value="#1f4e79"></label>
+        <label class="ligne-couleur">Couleur des documents <input type="color" name="couleur" value="#1f3b63"></label>
         <button type="button" id="couleur-logo" class="btn" hidden>🎨 Prendre la couleur du logo</button>
       </div>
       <label>Conditions particulières (ajoutées en bas de chaque devis et facture) <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
+      </div>
 
-      <h2>Mes métiers</h2>
-      <p class="aide">L'IA te prévient quand des travaux sortent de tes métiers (sous-traitance).</p>
-      <div id="liste-metiers" class="metiers"></div>
-
-      <button class="btn-principal">Enregistrer</button>
+      <button class="btn-principal btn-enregistrer">Enregistrer</button>
     </form>
 
-    <div class="carte">
+    <div class="carte" data-panneau="tarifs" hidden>
       <h2>Ma grille de prix (HT)</h2>
       <p class="aide">L'IA chiffre avec tes prix. Quand un prix manque, elle l'estime et le signale sur le devis : tu peux alors l'ajouter à ta grille en un clic.</p>
       <div id="grille-tarifs"></div>
@@ -200,7 +254,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       </div>
     </div>
 
-    <div class="carte" id="carte-compte">
+    <div class="carte" id="carte-compte" data-panneau="compte" hidden>
       <h2>Mon compte</h2>
       <p class="aide">Connecté en tant que <strong id="email-compte"></strong></p>
       <button id="deconnexion">Se déconnecter</button>
