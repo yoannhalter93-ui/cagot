@@ -555,14 +555,78 @@ function bulle(classe, html) {
 }
 
 function bulleIa(m) {
-  const questions = m.questions?.length ? `<ol>${m.questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>` : "";
+  const enAttente = m.questions?.length && conversation.historique.at(-1) === m;
+  const questions = m.questions?.length && !enAttente ? `<ol>${m.questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>` : "";
   const bouton = m.docId ? `<br><button class="btn-principal" data-doc="${esc(m.docId)}">Voir le devis</button>` : "";
   const div = bulle("ia", esc(m.texte) + questions + bouton);
   div.querySelector("[data-doc]")?.addEventListener("click", () => ouvrirDocument(m.docId));
+  if (enAttente) carteQuestions(m);
+}
+
+// Les questions de l'IA en cartes : une case réponse par question, réponses rapides à toucher.
+function carteQuestions(m) {
+  const total = m.questions.length;
+  const reponses = new Array(total).fill("");
+  const zone = document.createElement("div");
+  zone.className = "cartes-questions";
+  zone.innerHTML = `
+    <div class="progression"><div class="barre-progression"><span></span></div><small class="compteur"></small></div>
+    ${m.questions
+      .map(
+        (q, i) => `<div class="carte-question" data-i="${i}">
+          <div class="q-entete"><span class="q-num">${i + 1}</span><span class="q-texte">${esc(q)}</span><span class="q-ok" aria-hidden="true">✓</span></div>
+          <div class="q-choix">${[...(m.suggestions?.[i] ?? []).slice(0, 4), "Je ne sais pas"]
+            .map((s) => `<button type="button" class="puce" data-val="${esc(s)}">${esc(s)}</button>`)
+            .join("")}</div>
+          <textarea rows="1" class="q-reponse" placeholder="Ta réponse…"></textarea>
+        </div>`,
+      )
+      .join("")}
+    <button type="button" class="btn-principal envoyer-reponses">Envoyer mes réponses</button>`;
+  const maj = () => {
+    const faites = reponses.filter((r) => r.trim()).length;
+    zone.querySelector(".barre-progression span").style.width = `${(100 * faites) / total}%`;
+    zone.querySelector(".compteur").textContent = faites === total ? "Tout est rempli 👍" : `${faites} / ${total} réponse${faites > 1 ? "s" : ""}`;
+    zone.querySelectorAll(".carte-question").forEach((c, i) => c.classList.toggle("repondue", !!reponses[i].trim()));
+    zone.querySelector(".envoyer-reponses").classList.toggle("pret", faites === total);
+  };
+  zone.querySelectorAll(".carte-question").forEach((carte, i) => {
+    const champ = carte.querySelector(".q-reponse");
+    const ajuster = () => {
+      champ.style.height = "auto";
+      champ.style.height = `${champ.scrollHeight}px`;
+    };
+    champ.oninput = () => {
+      reponses[i] = champ.value;
+      carte.querySelectorAll(".puce").forEach((p) => p.classList.toggle("choisie", p.dataset.val === champ.value));
+      ajuster();
+      maj();
+    };
+    carte.querySelectorAll(".puce").forEach((p) => {
+      p.onclick = () => {
+        champ.value = champ.value === p.dataset.val ? "" : p.dataset.val;
+        champ.oninput();
+        // Question suivante pas encore remplie
+        if (champ.value) zone.querySelectorAll(".carte-question:not(.repondue)")[0]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      };
+    });
+  });
+  zone.querySelector(".envoyer-reponses").onclick = () => {
+    if (!reponses.some((r) => r.trim())) return notifier("Réponds au moins à une question.");
+    const texte = m.questions
+      .map((q, i) => `${i + 1}. ${q}\n→ ${reponses[i].trim() || "Je ne sais pas (suppose au mieux et signale-le)"}`)
+      .join("\n");
+    const libre = $("#texte").value.trim();
+    zone.remove();
+    $("#texte").value = libre ? `${texte}\n\n${libre}` : texte;
+    envoyer();
+  };
+  $("#fil").appendChild(zone);
+  maj();
 }
 
 function reafficherConversation() {
-  $("#fil").querySelectorAll(".bulle:not(:first-child)").forEach((b) => b.remove());
+  $("#fil").querySelectorAll(".bulle:not(:first-child), .cartes-questions").forEach((b) => b.remove());
   for (const m of conversation.historique) {
     if (m.role === "user") {
       bulle("moi", esc(m.texte) + (m.images ?? []).map((i) => `<img src="${i}" alt="note">`).join(""));
@@ -576,6 +640,7 @@ async function envoyer() {
   arreterDictee();
   arreterParole();
 
+  $("#fil").querySelectorAll(".cartes-questions").forEach((z) => z.remove());
   const message = { role: "user", texte, images: photosEnAttente };
   conversation.historique.push(message);
   bulle("moi", esc(texte) + photosEnAttente.map((i) => `<img src="${i}" alt="note">`).join(""));
@@ -599,7 +664,7 @@ async function envoyer() {
     attente.remove();
     if (data.demo) $("#bandeau-demo").hidden = false;
 
-    const reponse = { role: "assistant", texte: data.message, questions: data.questions, brut: data.brut };
+    const reponse = { role: "assistant", texte: data.message, questions: data.questions, suggestions: data.suggestions ?? [], brut: data.brut };
     conversation.historique.push(reponse);
     if (data.statut === "devis" && data.devis) {
       reponse.docId = await enregistrerDevis(data.devis);

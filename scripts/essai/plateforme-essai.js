@@ -207,6 +207,9 @@ function lireReponseIA(sortie) {
     statut: sortie.statut,
     message: sortie.message,
     questions: Array.isArray(sortie.questions) ? sortie.questions.map(String) : [],
+    suggestions: Array.isArray(sortie.suggestions)
+      ? sortie.suggestions.map((s) => (Array.isArray(s) ? s.map(String).slice(0, 4) : []))
+      : [],
     devis: null,
   };
   if (sortie.statut === "devis") {

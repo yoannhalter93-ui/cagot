@@ -289,3 +289,27 @@ div.ligne-couleur label { margin-bottom: 0; }
 .btn-secondaire.actif { background: var(--bleu); border-color: var(--bleu); color: var(--blanc); }
 .liste-chantiers .element-liste.courant { border-color: var(--bleu); box-shadow: inset 3px 0 0 var(--bleu); }
 .liste-chantiers .suppr-chantier { border: 0; background: none; color: var(--gris); font-size: 1.1rem; padding: 4px 8px; cursor: pointer; }
+
+/* --- Questions de l'IA en cartes --- */
+.cartes-questions { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 8px; }
+.progression { display: flex; align-items: center; gap: 10px; }
+.barre-progression { flex: 1; height: 8px; border-radius: 99px; background: var(--bord); overflow: hidden; }
+.barre-progression span { display: block; height: 100%; width: 0; background: var(--vert, #2e9d5b); border-radius: 99px; transition: width .35s ease; }
+.progression .compteur { color: var(--gris); font-weight: 600; white-space: nowrap; }
+.carte-question { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 12px; transition: border-color .2s, box-shadow .2s; }
+.carte-question.repondue { border-color: var(--vert, #2e9d5b); box-shadow: inset 4px 0 0 var(--vert, #2e9d5b); }
+.q-entete { display: flex; align-items: flex-start; gap: 10px; font-weight: 600; line-height: 1.35; }
+.q-num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--bleu); color: var(--blanc); display: grid; place-items: center; font-size: .85rem; }
+.q-texte { flex: 1; }
+.q-ok { flex: none; color: var(--vert, #2e9d5b); font-size: 1.2rem; opacity: 0; transform: scale(.4); transition: opacity .2s, transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.repondue .q-ok { opacity: 1; transform: scale(1); }
+.repondue .q-num { background: var(--vert, #2e9d5b); }
+.q-choix { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+.puce { border: 1px solid var(--bord); background: var(--fond, transparent); color: var(--texte); border-radius: 99px; padding: 7px 12px; font-size: .9rem; cursor: pointer; transition: transform .1s, background .15s; }
+.puce:active { transform: scale(.94); }
+.puce.choisie { background: var(--bleu); border-color: var(--bleu); color: var(--blanc); }
+.q-reponse { width: 100%; box-sizing: border-box; resize: none; overflow: hidden; font: inherit; font-size: 1rem; padding: 9px 10px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); color: var(--texte); }
+.envoyer-reponses { align-self: stretch; padding: 12px; font-size: 1rem; transition: transform .2s; }
+.envoyer-reponses.pret { animation: pulse-pret 1.2s ease-in-out 2; }
+@keyframes pulse-pret { 50% { transform: scale(1.03); box-shadow: 0 0 0 6px color-mix(in srgb, var(--bleu) 20%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .envoyer-reponses.pret { animation: none; } .barre-progression span, .q-ok { transition: none; } }

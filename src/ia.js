@@ -41,6 +41,9 @@ const Reponse = z.object({
     .string()
     .describe("Ce que l'assistant dit à l'artisan : court, naturel, lisible à voix haute (pas de tableau ni de markdown)"),
   questions: z.array(z.string()).describe("Questions précises encore ouvertes (vide si statut = devis)"),
+  suggestions: z
+    .array(z.array(z.string()))
+    .describe("Pour chaque question, dans le même ordre : 2 à 4 réponses courtes probables à toucher du doigt (ex: ['2,50 m', '2,70 m']). Tableau vide pour une question vraiment ouverte."),
   devis: Devis.nullable().describe("Le devis complet si statut = devis, sinon null"),
 });
 

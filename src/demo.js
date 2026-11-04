@@ -17,6 +17,7 @@ export function devisDeDemo(historique) {
         "Combien de portes et de fenêtres, et quelles dimensions pour les fenêtres ?",
         "Le plafond est-il à repeindre aussi ?",
       ],
+      suggestions: [["3 × 4 m", "3,5 × 4,2 m"], ["2,50 m", "2,70 m"], ["1 porte, 1 fenêtre", "1 porte, 2 fenêtres"], ["Oui", "Non"]],
       devis: null,
     };
     return { ...sortie, brut: JSON.stringify(sortie) };
@@ -29,6 +30,7 @@ export function devisDeDemo(historique) {
     message:
       "Mode démo : l'IA n'est pas encore branchée, je ne lis pas tes notes. Voici un devis d'EXEMPLE fixe (une chambre) pour essayer l'appli. Ajoute la clé de l'IA pour un vrai devis.",
     questions: [],
+    suggestions: [],
     devis: {
       titre: "EXEMPLE – Rénovation peinture chambre",
       client_nom: "",
