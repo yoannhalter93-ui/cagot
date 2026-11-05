@@ -836,7 +836,7 @@ async function envoyer() {
   try {
     const data = await plateforme.appelerIA(
       {
-        historique: conversation.historique.map(({ role, texte, brut, images }) => ({ role, texte, brut, images })),
+        historique: await historiquePourIA(),
         entreprise: { nom: profil.infos.nom, metiers: profil.metiers, franchise_tva: !!profil.infos.franchise_tva },
         tarifs: tarifs
           .filter((t) => t.designation)
@@ -885,6 +885,25 @@ $("#nouveau").onclick = () => {
   $("#texte").focus();
 };
 
+// Devis déjà fait et retouché à la main : l'IA reçoit la version à jour (avec les
+// modifications de l'artisan) jointe au dernier message, pour ne pas repartir de son ancienne version.
+async function historiquePourIA() {
+  const h = conversation.historique.map(({ role, texte, brut, images }) => ({ role, texte, brut, images }));
+  if (!conversation.docId) return h;
+  const { data: doc } = await sb.from("documents").select("contenu").eq("id", conversation.docId).eq("type", "devis").maybeSingle();
+  if (!doc) return h;
+  const { suivi, hypotheses, total_ht, montant_tva, total_ttc, ...actuel } = doc.contenu;
+  actuel.sections = (actuel.sections ?? []).map(({ sous_total_ht, ...sec }) => ({
+    ...sec,
+    lignes: (sec.lignes ?? []).map(({ total_ht: _t, ...l }) => ({ ...l, prix_source: l.prix_source === "artisan" ? "grille" : l.prix_source })),
+  }));
+  let json = JSON.stringify(actuel);
+  if (json.length > 40000) json = JSON.stringify({ ...actuel, sections: actuel.sections.map((s) => ({ ...s, lignes: s.lignes.map(({ calcul, ...l }) => l) })) });
+  const dernier = h.at(-1);
+  dernier.texte = `${dernier.texte}\n\n[DEVIS ACTUEL – version à jour, avec les modifications faites à la main par l'artisan. Pars de CE devis : garde à l'identique tout ce que je ne demande pas de changer (lignes, quantités, prix, textes).]\n${json}`.slice(0, 49000);
+  return h;
+}
+
 async function enregistrerDevis(devis) {
   await completerDepuisCarnet(devis);
   memoriserClient(devis);
@@ -893,11 +912,21 @@ async function enregistrerDevis(devis) {
   if (conversation.docId) {
     const { data: existant } = await sb.from("documents").select("contenu").eq("id", conversation.docId).eq("type", "devis").maybeSingle();
     if (existant) {
+      const ancien = existant.contenu;
+      // Les prix saisis à la main restent marqués « artisan » s'ils n'ont pas changé.
+      const prixArtisan = new Map(
+        (ancien.sections ?? []).flatMap((s) => s.lignes ?? []).filter((l) => l.prix_source === "artisan").map((l) => [normaliser(l.designation), l.prix_unitaire_ht]),
+      );
+      for (const l of (devis.sections ?? []).flatMap((s) => s.lignes ?? [])) {
+        if (prixArtisan.get(normaliser(l.designation)) === l.prix_unitaire_ht) l.prix_source = "artisan";
+      }
       const contenu = {
         ...devis,
-        client_nom: devis.client_nom || existant.contenu.client_nom,
-        client_adresse: devis.client_adresse || existant.contenu.client_adresse,
-        client_email: devis.client_email || existant.contenu.client_email || "",
+        client_nom: devis.client_nom || ancien.client_nom,
+        client_adresse: devis.client_adresse || ancien.client_adresse,
+        client_email: devis.client_email || ancien.client_email || "",
+        client_telephone: devis.client_telephone || ancien.client_telephone || "",
+        ...(ancien.suivi ? { suivi: ancien.suivi } : {}),
       };
       const { error } = await sb.from("documents").update({ contenu, conversation: histo }).eq("id", conversation.docId);
       if (error) throw new Error("Le devis n'a pas pu être enregistré.");
