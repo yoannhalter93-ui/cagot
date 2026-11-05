@@ -23,6 +23,7 @@ cpSync(new URL("src/calcul.js", racine), new URL("calcul.js", sortie));
 cpSync(new URL("src/corps-etat.js", racine), new URL("corps-etat.js", sortie));
 cpSync(new URL("node_modules/@supabase/supabase-js/dist/umd/supabase.js", racine), new URL("vendor/supabase.js", sortie));
 cpSync(new URL("node_modules/jspdf/dist/jspdf.umd.min.js", racine), new URL("vendor/jspdf.umd.min.js", sortie));
+cpSync(new URL("node_modules/heic-to/dist/csp/heic-to.js", racine), new URL("vendor/heic-to.js", sortie));
 cpSync(new URL("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js", racine), new URL("vendor/jspdf.plugin.autotable.min.js", sortie));
 writeFileSync(new URL("config.json", sortie), `${JSON.stringify(config, null, 2)}\n`);
 
@@ -33,7 +34,7 @@ const connect = ["'self'", SUPABASE_URL, supabaseWs, apiOrigine].filter((v, i, t
 writeFileSync(
   new URL("_headers", sortie),
   `/*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src ${connect.join(" ")}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src ${connect.join(" ")}; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

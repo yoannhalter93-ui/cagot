@@ -506,6 +506,13 @@ function chargerImage(fichier) {
   });
 }
 
+// HEIC/HEIF : par le type, l'extension ou la signature du fichier (« ftypheic », « ftypmif1 »…).
+async function estHeic(fichier) {
+  if (/hei[cf]/i.test(`${fichier.type} ${fichier.name}`)) return true;
+  const tete = new TextDecoder().decode(await fichier.slice(4, 12).arrayBuffer());
+  return /^ftyp(heic|heix|hevc|heim|heis|mif1|msf1)/.test(tete);
+}
+
 // Réduit une photo (max 1600 px) en JPEG. createImageBitmap d'abord (moins gourmand en
 // mémoire avec les grosses photos des téléphones récents), sinon <img>.
 async function redimensionner(fichier, max = 1600) {
@@ -514,6 +521,16 @@ async function redimensionner(fichier, max = 1600) {
     source = await createImageBitmap(fichier, { imageOrientation: "from-image" });
   } catch {
     source = await chargerImage(fichier).catch(() => null);
+  }
+  // Photo HEIC que le navigateur ne lit pas : conversion en JPEG sur le téléphone.
+  if (!source && plateforme.decodeurHeic && (await estHeic(fichier))) {
+    try {
+      const { heicTo } = await import(plateforme.decodeurHeic);
+      const jpeg = await heicTo({ blob: fichier, type: "image/jpeg", quality: 0.9 });
+      source = await createImageBitmap(jpeg).catch(() => chargerImage(jpeg));
+    } catch (err) {
+      console.warn("[heic]", err);
+    }
   }
   if (!source) {
     throw new ErreurPhoto(

@@ -86,6 +86,8 @@ export async function demarrerPlateforme() {
 
     // Bibliothèques PDF servies par le site lui-même (chargées seulement quand on en a besoin).
     scriptsPdf: ["/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js"],
+    // Décodeur des photos HEIC (iPhone, certains Android), chargé seulement si besoin.
+    decodeurHeic: "/vendor/heic-to.js",
     libelleExport: "Télécharger le PDF",
 
     async exporterPdf({ titre, pdf }) {
