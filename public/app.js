@@ -1331,6 +1331,33 @@ async function importerPartage() {
   await creerNoteImportee({ titre, contenu: [texte, url].filter(Boolean).join("\n"), fichiers });
 }
 
+// Choix de l'unité d'une ligne du devis (forfait, m², ml…).
+function choisirUnite(ligne) {
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<div class="dialogue choix-unites" role="dialog" aria-modal="true">
+      <h3>Unité</h3>
+      <p class="aide"></p>
+      <div class="grille-unites">${[...new Set([...UNITES, ligne.unite])]
+        .map((u) => `<button type="button" class="puce ${u === ligne.unite ? "choisie" : ""}" data-u="${esc(u)}">${esc(u)}</button>`)
+        .join("")}</div>
+      <label class="unite-libre">Autre <input maxlength="20" placeholder="ex : lot, pièce"></label>
+      <div class="dialogue-actions"><button type="button" class="annuler">Annuler</button><button type="button" class="valider btn-principal">OK</button></div>
+    </div>`;
+    fond.querySelector(".aide").textContent = `« ${ligne.designation} » · ${nombre(ligne.quantite)} ${ligne.unite} × ${euros(ligne.prix_unitaire_ht)}. En forfait, le montant total reste le même.`;
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    for (const b of fond.querySelectorAll("[data-u]")) b.onclick = () => fermer(b.dataset.u);
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.querySelector(".valider").onclick = () => fermer(fond.querySelector(".unite-libre input").value.trim() || null);
+    fond.onclick = (e) => e.target === fond && fermer(null);
+    document.body.appendChild(fond);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Carnet de clients
 // ---------------------------------------------------------------------------
@@ -1947,7 +1974,7 @@ function rendreDocument() {
               ${l.calcul ? `<div class="calcul">${esc(l.calcul)}</div>` : ""}
               ${estime ? `<div class="no-print"><span class="badge-estime">prix estimé</span> <button class="lien" data-grille="${si}-${li}">+ ajouter à ma grille</button></div>` : ""}</td>
             <td class="num" ${editable} data-champ="quantite" data-s="${si}" data-l="${li}">${nombre(l.quantite)}</td>
-            <td ${editable} data-champ="unite" data-s="${si}" data-l="${li}">${esc(l.unite)}</td>
+            <td>${verrouille ? esc(l.unite) : `<button type="button" class="choix-unite" data-unite="${si}-${li}" title="Changer l'unité">${esc(l.unite)} ▾</button>`}</td>
             <td class="num" ${editable} data-champ="prix_unitaire_ht" data-s="${si}" data-l="${li}">${nombre(l.prix_unitaire_ht)}</td>
             <td class="num">${euros(l.total_ht)}${verrouille ? "" : ` <button class="suppr-ligne" data-suppr="${si}-${li}" title="Supprimer la ligne">✕</button>`}</td>
           </tr>`;
@@ -2039,6 +2066,26 @@ function rendreDocument() {
         el.blur();
       }
     });
+  }
+  for (const b of $("#document").querySelectorAll("[data-unite]")) {
+    b.onclick = async () => {
+      const [si, li] = b.dataset.unite.split("-").map(Number);
+      const ligne = docCourant.contenu.sections[si].lignes[li];
+      const unite = await choisirUnite(ligne);
+      if (!unite || unite === ligne.unite) return;
+      await majDocument((dv) => {
+        const l = dv.sections[si].lignes[li];
+        if (unite === "forfait" && l.quantite !== 1) {
+          // Même montant, présenté en forfait : 1 × total
+          l.prix_unitaire_ht = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100;
+          l.quantite = 1;
+          l.calcul = "";
+        }
+        l.unite = unite;
+        l.prix_source = "artisan";
+      });
+      notifier(unite === "forfait" ? "Ligne passée au forfait (même montant)." : `Unité : ${unite}`);
+    };
   }
   for (const b of $("#document").querySelectorAll("[data-suppr]")) {
     b.onclick = () => {

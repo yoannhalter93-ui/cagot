@@ -491,3 +491,9 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .outils-doc button { flex-direction: row; justify-content: center; gap: 4px; padding: 7px 2px; font-size: .72rem; }
 .outils-doc button span { font-size: 1rem; }
 .btn-action-principale { padding: 11px; font-size: 1rem; }
+.choix-unite { border: 1px dashed var(--bord); background: none; color: inherit; font: inherit; padding: 2px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.grille-unites { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.grille-unites .puce { min-width: 64px; font-size: 1rem; }
+.unite-libre { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--gris); }
+.unite-libre input { flex: 1; font-size: 1rem; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--texte); }
+@media print { .choix-unite { border: 0; padding: 0; } }
