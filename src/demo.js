@@ -6,6 +6,22 @@ export function devisDeDemo(historique) {
   const tout = historique.filter((m) => m.role === "user").map((m) => m.texte ?? "").join(" ");
   const aDesMesures = /\d/.test(tout);
 
+  const dernier = historique.at(-1) ?? {};
+  if ((dernier.images ?? []).length && /plan|scann|métré|metre/i.test(dernier.texte ?? "")) {
+    const sortie = {
+      statut: "metre",
+      message: "Mode démo : métré d'EXEMPLE (l'IA n'est pas branchée). Vérifie les mesures avant de t'en servir.",
+      questions: [],
+      suggestions: [],
+      devis: null,
+      metre: [
+        { piece: "Séjour", surface_sol_m2: 31.21, perimetre_ml: 23.1, hauteur_m: 2.5, surface_murs_m2: 51.1, source: "plan", remarque: "" },
+        { piece: "Cuisine", surface_sol_m2: 9.99, perimetre_ml: 12.7, hauteur_m: 2.5, surface_murs_m2: 28.3, source: "plan", remarque: "" },
+        { piece: "Chambre 1", surface_sol_m2: 11.7, perimetre_ml: 13.7, hauteur_m: 2.5, surface_murs_m2: 30.8, source: "plan", remarque: "Hauteur non indiquée : 2,50 m retenu" },
+      ],
+    };
+    return { ...sortie, brut: JSON.stringify(sortie) };
+  }
   if (!aDesMesures) {
     const sortie = {
       statut: "questions",
@@ -19,6 +35,7 @@ export function devisDeDemo(historique) {
       ],
       suggestions: [["3 × 4 m", "3,5 × 4,2 m"], ["2,50 m", "2,70 m"], ["1 porte, 1 fenêtre", "1 porte, 2 fenêtres"], ["Oui", "Non"]],
       devis: null,
+      metre: [],
     };
     return { ...sortie, brut: JSON.stringify(sortie) };
   }
@@ -31,6 +48,7 @@ export function devisDeDemo(historique) {
       "Mode démo : l'IA n'est pas encore branchée, je ne lis pas tes notes. Voici un devis d'EXEMPLE fixe (une chambre) pour essayer l'appli. Ajoute la clé de l'IA pour un vrai devis.",
     questions: [],
     suggestions: [],
+    metre: [],
     devis: {
       titre: "EXEMPLE – Rénovation peinture chambre",
       client_nom: "",

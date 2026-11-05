@@ -200,7 +200,7 @@ function baseIndisponible(message) {
 }
 
 function lireReponseIA(sortie) {
-  if (!sortie || !["questions", "devis"].includes(sortie.statut) || typeof sortie.message !== "string") {
+  if (!sortie || !["questions", "devis", "metre"].includes(sortie.statut) || typeof sortie.message !== "string") {
     throw new Error("Réponse de l'IA incomplète, réessaie.");
   }
   const propre = {
@@ -211,6 +211,18 @@ function lireReponseIA(sortie) {
       ? sortie.suggestions.map((s) => (Array.isArray(s) ? s.map(String).slice(0, 4) : []))
       : [],
     devis: null,
+    metre:
+      sortie.statut === "metre" && Array.isArray(sortie.metre)
+        ? sortie.metre.slice(0, 60).map((p) => ({
+            piece: String(p.piece ?? ""),
+            surface_sol_m2: Number(p.surface_sol_m2) || 0,
+            perimetre_ml: Number(p.perimetre_ml) || 0,
+            hauteur_m: Number(p.hauteur_m) || 0,
+            surface_murs_m2: Number(p.surface_murs_m2) || 0,
+            source: ["plan", "cotes", "echelle", "estime"].includes(p.source) ? p.source : "estime",
+            remarque: String(p.remarque ?? ""),
+          }))
+        : [],
   };
   if (sortie.statut === "devis") {
     const d = sortie.devis;
@@ -269,7 +281,7 @@ export async function demarrerPlateforme() {
         content: m.role === "assistant" ? m.brut ?? m.texte : `${i === 0 ? cadre : ""}${m.texte || "Voici mes notes de chantier (photo)."}`,
       }));
       const dernier = historique.at(-1);
-      const images = limites?.images && dernier.images?.length ? dernier.images.map(dataUrlVersBlob) : undefined;
+      const images = limites?.images && dernier.images?.length ? dernier.images.filter((i) => i.startsWith("data:image")).map(dataUrlVersBlob) : undefined;
       let sortie;
       try {
         sortie = await sample.json(tours, { images, modelTier: "complex", cache: false });

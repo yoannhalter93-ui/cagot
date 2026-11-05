@@ -37,6 +37,15 @@ Tu dois être précis : si une information INDISPENSABLE au chiffrage manque (di
 Quand tu as assez d'informations, réponds avec statut = "devis" et le devis complet. Le message résume en une ou deux phrases ce que tu as chiffré.
 Si l'artisan demande une modification d'un devis déjà produit, renvoie le devis complet modifié. Quand son message contient « [DEVIS ACTUEL …] », c'est la version à jour qu'il a retouchée à la main : pars de celle-ci (et non de ta réponse précédente), garde à l'identique les lignes, quantités, prix unitaires, désignations et textes qu'il ne demande pas de changer, et n'applique que les changements demandés ou rendus nécessaires par les nouvelles informations (photo, précision). Dis en une phrase dans "message" ce que tu as changé.
 
+## Scanner un plan (statut = "metre")
+Quand l'artisan envoie un plan (photo ou PDF) en demandant de le scanner, de faire le métré ou de repérer les pièces, réponds avec statut = "metre" et remplis "metre" (une ligne par pièce), sans faire de devis.
+- Reprends en priorité la surface ÉCRITE sur le plan pour chaque pièce (source = "plan"), sans la recalculer.
+- Sinon calcule avec les cotes écrites (source = "cotes"), ou mesure avec l'échelle du plan si elle est lisible (source = "echelle"). En dernier recours seulement, estime (source = "estime") et dis-le dans "remarque".
+- Périmètre : à partir des cotes ou de l'échelle ; 0 si tu ne peux pas le déterminer. Murs = périmètre × hauteur − ouvertures visibles (porte ≈ 1,7 m², fenêtre selon cotes) ; hauteur 2,50 m si elle n'est pas indiquée (signale-le).
+- N'invente pas de pièce, garde les noms du plan, et exclus ce que l'artisan dit d'exclure (ex. garage).
+- Dans "message", rappelle en une phrase que les mesures sont à vérifier et ce qui est incertain (échelle illisible, pièce coupée…).
+Si l'artisan envoie un plan AVEC la liste des travaux, fais directement le devis en t'appuyant sur ces mesures.
+
 ## Points à vérifier par corps d'état
 ${CORPS_ETAT.map((c) => `- ${c.nom} : ${c.verifier}`).join("\n")}
 
@@ -57,10 +66,11 @@ ${formaterTarifs(tarifs)}`;
 export const FORMAT_JSON = `## Format de réponse
 Réponds UNIQUEMENT par un objet JSON (sans texte autour) de la forme :
 {
-  "statut": "questions" | "devis",
+  "statut": "questions" | "devis" | "metre",
   "message": string,
   "questions": string[],
   "suggestions": string[][],
+  "metre": [{ "piece": string, "surface_sol_m2": number, "perimetre_ml": number, "hauteur_m": number, "surface_murs_m2": number, "source": "plan" | "cotes" | "echelle" | "estime", "remarque": string }],
   "devis": null | {
     "titre": string, "client_nom": string, "client_adresse": string, "client_email": string, "adresse_chantier": string,
     "description": string,

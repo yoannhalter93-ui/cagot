@@ -497,3 +497,20 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .unite-libre { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--gris); }
 .unite-libre input { flex: 1; font-size: 1rem; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--texte); }
 @media print { .choix-unite { border: 0; padding: 0; } }
+
+/* --- Scanner un plan : métré --- */
+.piece-pdf { display: inline-block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.2); font-weight: 600; }
+.apercu-photos .piece-pdf { background: var(--bleu-clair); color: var(--bleu); }
+.carte-metre { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 12px; align-self: stretch; }
+.metre-titre { font-weight: 800; font-size: 1.05rem; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.metre-titre small { color: var(--gris); font-weight: 600; }
+.table-metre { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.table-metre th { text-align: left; color: var(--gris); font-weight: 600; padding: 4px; }
+.table-metre td { padding: 4px; vertical-align: top; border-top: 1px solid var(--bord); }
+.table-metre td:nth-child(2), .table-metre td:nth-child(3) { width: 74px; }
+.table-metre input { width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; padding: 6px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--texte); }
+.table-metre td:nth-child(2) input, .table-metre td:nth-child(3) input { text-align: right; }
+.table-metre small { display: block; color: var(--gris); font-size: .72rem; margin-top: 2px; }
+.table-metre .source-estime small { color: #9a6700; }
+.table-metre tfoot td { font-weight: 800; padding-top: 8px; text-align: right; }
+.table-metre tfoot td:first-child { text-align: left; }

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 // Validation stricte de ce que l'appli envoie à l'IA (serveur Node et fonction Supabase).
-const Image = z.string().max(8_000_000).regex(/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/);
+// Photos, ou plans en PDF (scanner un plan).
+const Image = z.string().max(10_000_000).regex(/^data:(image\/(jpeg|png|webp|gif)|application\/pdf);base64,[A-Za-z0-9+/=]+$/);
 export const Requete = z.object({
   historique: z
     .array(

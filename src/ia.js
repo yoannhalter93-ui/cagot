@@ -35,8 +35,18 @@ const Devis = z.object({
   hypotheses: z.array(z.string()).describe("Hypothèses retenues faute d'information, et points à vérifier par l'artisan"),
 });
 
+const Piece = z.object({
+  piece: z.string().describe("Nom de la pièce tel qu'écrit sur le plan (Séjour, Chambre 1…)"),
+  surface_sol_m2: z.number().describe("Surface au sol en m² (celle écrite sur le plan en priorité)"),
+  perimetre_ml: z.number().describe("Périmètre en mètres linéaires, 0 si impossible à déterminer"),
+  hauteur_m: z.number().describe("Hauteur sous plafond retenue (2,50 par défaut si non indiquée)"),
+  surface_murs_m2: z.number().describe("Surface des murs = périmètre × hauteur − ouvertures, 0 si périmètre inconnu"),
+  source: z.enum(["plan", "cotes", "echelle", "estime"]).describe("'plan' = surface écrite sur le plan, 'cotes' = calculée avec les cotes, 'echelle' = mesurée à l'échelle, 'estime' = estimation"),
+  remarque: z.string().describe("Doute ou précision utile, chaîne vide sinon"),
+});
+
 const Reponse = z.object({
-  statut: z.enum(["questions", "devis"]),
+  statut: z.enum(["questions", "devis", "metre"]),
   message: z
     .string()
     .describe("Ce que l'assistant dit à l'artisan : court, naturel, lisible à voix haute (pas de tableau ni de markdown)"),
@@ -45,6 +55,7 @@ const Reponse = z.object({
     .array(z.array(z.string()))
     .describe("Pour chaque question, dans le même ordre : 2 à 4 réponses courtes probables à toucher du doigt (ex: ['2,50 m', '2,70 m']). Tableau vide pour une question vraiment ouverte."),
   devis: Devis.nullable().describe("Le devis complet si statut = devis, sinon null"),
+  metre: z.array(Piece).describe("Si statut = metre : une ligne par pièce repérée sur le plan, sinon tableau vide"),
 });
 
 // Historique côté client : [{ role: "user"|"assistant", texte, images?: [dataURL] }]
@@ -55,7 +66,8 @@ function versMessagesApi(historique) {
     for (const image of m.images ?? []) {
       const [entete, data] = image.split(",");
       const media_type = entete.match(/data:(.*?);base64/)?.[1] ?? "image/jpeg";
-      contenu.push({ type: "image", source: { type: "base64", media_type, data } });
+      if (media_type === "application/pdf") contenu.push({ type: "document", source: { type: "base64", media_type, data } });
+      else contenu.push({ type: "image", source: { type: "base64", media_type, data } });
     }
     contenu.push({ type: "text", text: m.texte || "Voici mes notes de chantier (photo)." });
     return { role: "user", content: contenu };

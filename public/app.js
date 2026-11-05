@@ -567,9 +567,31 @@ async function avecRelance(action, essais = 3) {
   }
 }
 
+const estPdf = (dataUrl) => dataUrl.startsWith("data:application/pdf");
+const vignette = (p) => (estPdf(p) ? `<span class="piece-pdf">📄 Plan PDF</span>` : `<img src="${p}" alt="note">`);
+
 function afficherPhotosEnAttente() {
-  $("#apercu-photos").innerHTML = photosEnAttente.map((p) => `<img src="${p}" alt="note">`).join("");
+  $("#apercu-photos").innerHTML = photosEnAttente.map(vignette).join("");
 }
+
+// Scanner un plan : photo (gardée plus nette que les photos de notes) ou PDF.
+$("#plan").onchange = async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
+      if (f.size > 7_000_000) return notifier("PDF trop lourd (7 Mo maximum) : envoie plutôt une photo du plan.", "erreur");
+      photosEnAttente.push(await blobVersDataUrl(new Blob([f], { type: "application/pdf" })));
+    } else photosEnAttente.push(await redimensionner(f, 2400));
+  } catch (err) {
+    return erreur(err instanceof ErreurPhoto ? err.message : "Plan illisible.", err);
+  }
+  afficherPhotosEnAttente();
+  if (!$("#texte").value.trim()) $("#texte").value = "Scanne ce plan : repère les pièces et propose le métré. ";
+  $("#texte").focus();
+  notifier("Plan ajouté : précise si besoin ce qu'il faut exclure (ex. garage), puis Envoyer.");
+};
 
 $("#photo").onchange = async (e) => {
   for (const f of e.target.files) photosEnAttente.push(await redimensionner(f));
@@ -599,7 +621,7 @@ let conversation = { historique: [], docId: null };
 
 const historiqueSansPhotos = (historique) =>
   historique.map(({ images, ...m }) =>
-    images?.length ? { ...m, texte: `${m.texte}\n[${images.length} photo(s) de notes]` } : m,
+    images?.length ? { ...m, texte: `${m.texte}\n[${images.length} photo(s) ou plan(s) joint(s)]` } : m,
   );
 
 // Le chantier ouvert est gardé sur le téléphone (reprise instantanée) et enregistré en
@@ -744,6 +766,68 @@ function bulleIa(m) {
   const div = bulle("ia", esc(m.texte) + questions + bouton);
   div.querySelector("[data-doc]")?.addEventListener("click", () => ouvrirDocument(m.docId));
   if (enAttente) carteQuestions(m);
+  if (m.metre?.length) carteMetre(m);
+}
+
+// Métré lu sur un plan : tableau à vérifier/corriger, puis à utiliser pour le devis.
+const SOURCES_METRE = { plan: "écrit sur le plan", cotes: "calculé (cotes)", echelle: "mesuré à l'échelle", estime: "estimé ⚠️" };
+function carteMetre(m) {
+  const lignes = m.metre.map((p) => ({ ...p }));
+  const zone = document.createElement("div");
+  zone.className = "carte-metre";
+  const rendre = () => {
+    const totSol = lignes.reduce((t, p) => t + (Number(p.surface_sol_m2) || 0), 0);
+    const totMurs = lignes.reduce((t, p) => t + (Number(p.surface_murs_m2) || 0), 0);
+    zone.innerHTML = `
+      <div class="metre-titre">📐 Métré à vérifier <small>${lignes.length} pièce${lignes.length > 1 ? "s" : ""}</small></div>
+      <table class="table-metre"><thead><tr><th>Pièce</th><th>Sol m²</th><th>Murs m²</th><th></th></tr></thead><tbody>
+      ${lignes
+        .map(
+          (p, i) => `<tr class="source-${esc(p.source)}">
+          <td><input data-i="${i}" data-k="piece" value="${esc(p.piece)}"><small>${SOURCES_METRE[p.source] ?? ""}${p.hauteur_m ? ` · h ${nombre(p.hauteur_m)} m` : ""}${p.remarque ? ` · ${esc(p.remarque)}` : ""}</small></td>
+          <td><input data-i="${i}" data-k="surface_sol_m2" inputmode="decimal" value="${nombre(p.surface_sol_m2)}"></td>
+          <td><input data-i="${i}" data-k="surface_murs_m2" inputmode="decimal" value="${p.surface_murs_m2 ? nombre(p.surface_murs_m2) : ""}" placeholder="?"></td>
+          <td><button type="button" class="suppr-ligne" data-retirer="${i}" aria-label="Retirer">✕</button></td></tr>`,
+        )
+        .join("")}
+      </tbody><tfoot><tr><td>Total</td><td>${nombre(Math.round(totSol * 100) / 100)}</td><td>${totMurs ? nombre(Math.round(totMurs * 100) / 100) : ""}</td><td></td></tr></tfoot></table>
+      <p class="aide">Les mesures viennent du plan : vérifie-les et corrige-les si besoin avant de faire le devis.</p>
+      <div class="actions-doc">
+        <button type="button" class="action-doc principal" data-utiliser>✅ Utiliser ce métré</button>
+        <button type="button" class="action-doc" data-note-metre>🗒️ En faire une note</button>
+      </div>`;
+    for (const champ of zone.querySelectorAll("input[data-k]")) {
+      champ.onchange = () => {
+        const p = lignes[champ.dataset.i];
+        p[champ.dataset.k] = champ.dataset.k === "piece" ? champ.value.trim() : lireNombre(champ.value);
+        rendre();
+      };
+    }
+    for (const b of zone.querySelectorAll("[data-retirer]")) {
+      b.onclick = () => {
+        lignes.splice(Number(b.dataset.retirer), 1);
+        rendre();
+      };
+    }
+    const texte = () =>
+      "Métré validé (reprends ces surfaces telles quelles) :\n" +
+      lignes
+        .map((p) => `- ${p.piece} : sol ${nombre(p.surface_sol_m2)} m²${p.surface_murs_m2 ? `, murs ${nombre(p.surface_murs_m2)} m²` : ""}${p.hauteur_m ? ` (h ${nombre(p.hauteur_m)} m)` : ""}`)
+        .join("\n");
+    zone.querySelector("[data-utiliser]").onclick = () => {
+      $("#texte").value = `${texte()}\n\nTravaux à chiffrer : `;
+      $("#texte").focus();
+      $("#texte").setSelectionRange($("#texte").value.length, $("#texte").value.length);
+      notifier("Écris maintenant les travaux pièce par pièce, puis Envoyer.");
+    };
+    zone.querySelector("[data-note-metre]").onclick = async () => {
+      const { data, error } = await sb.from("notes").insert({ titre: `Métré ${conversation.titre || ""}`.trim().slice(0, 200), contenu: `${texte()}\n\n` }).select("*").single();
+      if (error) return erreur("Note non créée.", error);
+      afficherEditeurNote(data);
+    };
+  };
+  rendre();
+  $("#fil").appendChild(zone);
 }
 
 // Les questions de l'IA en cartes : une case réponse par question, réponses rapides à toucher.
@@ -809,10 +893,10 @@ function carteQuestions(m) {
 }
 
 function reafficherConversation() {
-  $("#fil").querySelectorAll(".bulle:not(:first-child), .cartes-questions").forEach((b) => b.remove());
+  $("#fil").querySelectorAll(".bulle:not(:first-child), .cartes-questions, .carte-metre").forEach((b) => b.remove());
   for (const m of conversation.historique) {
     if (m.role === "user") {
-      bulle("moi", esc(m.texte) + (m.images ?? []).map((i) => `<img src="${i}" alt="note">`).join(""));
+      bulle("moi", esc(m.texte) + (m.images ?? []).map(vignette).join(""));
     } else bulleIa(m);
   }
 }
@@ -847,7 +931,7 @@ async function envoyer() {
     attente.remove();
     if (data.demo) $("#bandeau-demo").hidden = false;
 
-    const reponse = { role: "assistant", texte: data.message, questions: data.questions, suggestions: data.suggestions ?? [], brut: data.brut };
+    const reponse = { role: "assistant", texte: data.message, questions: data.questions, suggestions: data.suggestions ?? [], metre: data.metre ?? [], brut: data.brut };
     conversation.historique.push(reponse);
     if (data.statut === "devis" && data.devis) {
       reponse.docId = await enregistrerDevis(data.devis);
