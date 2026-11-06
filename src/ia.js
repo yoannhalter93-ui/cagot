@@ -15,6 +15,7 @@ const Ligne = z.object({
     .enum(["grille", "estime"])
     .describe("'grille' si le prix vient de la grille de l'artisan, 'estime' si tu l'as estimé toi-même"),
   calcul: z.string().describe("Comment la quantité a été obtenue, ex: '(3,50+4,20)×2×2,50 − 1,7 porte − 1,8 fenêtre'. Chaîne vide si non applicable."),
+  option: z.boolean().describe("true si la ligne est proposée en option au client (non comptée dans le total tant qu'il ne la choisit pas), sinon false"),
 });
 
 const Devis = z.object({

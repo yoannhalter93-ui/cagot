@@ -244,6 +244,7 @@ function lireReponseIA(sortie) {
           prix_unitaire_ht: Number(l.prix_unitaire_ht) || 0,
           prix_source: l.prix_source === "grille" ? "grille" : "estime",
           calcul: String(l.calcul ?? ""),
+          ...(l.option === true ? { option: true } : {}),
         })),
       })),
       taux_tva: Number(d.taux_tva ?? 10),

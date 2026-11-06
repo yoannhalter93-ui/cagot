@@ -1009,6 +1009,7 @@ async function historiquePourIA() {
 }
 
 async function enregistrerDevis(devis) {
+  for (const l of (devis.sections ?? []).flatMap((s) => s.lignes ?? [])) if (!l.option) delete l.option;
   await completerDepuisCarnet(devis);
   memoriserClient(devis);
   conversation.titre ||= [devis.titre, devis.client_nom].filter(Boolean).join(" – ").slice(0, 200);

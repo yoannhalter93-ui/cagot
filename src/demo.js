@@ -61,7 +61,7 @@ export function devisDeDemo(historique) {
         {
           titre: "Préparation du chantier",
           lignes: [
-            { designation: "Protection des sols et mobilier", detail: "Bâche + adhésif de masquage", quantite: 14.7, unite: "m²", prix_unitaire_ht: 2.5, prix_source: "estime", calcul: "3,50 × 4,20" },
+            { designation: "Protection des sols et mobilier", detail: "Bâche + adhésif de masquage", quantite: 14.7, unite: "m²", prix_unitaire_ht: 2.5, prix_source: "estime", calcul: "3,50 × 4,20", option: false },
           ],
         },
         {

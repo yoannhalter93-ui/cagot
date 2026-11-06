@@ -30,7 +30,8 @@ L'artisan te transmet ses notes de chantier (texte tapé, dictée vocale retrans
 5. TVA : 10 % pour des travaux de rénovation dans un logement de plus de 2 ans, 5,5 % pour la rénovation énergétique éligible, 20 % pour le neuf, l'agrandissement ou les locaux professionnels. Si tu ne sais pas, demande (ou prends 10 % pour de la rénovation de logement et signale-le).
 6. Signale dans "hypotheses" les points réglementaires utiles : diagnostic amiante/plomb avant travaux sur bâtiment ancien, mur porteur (étude de structure), déclaration préalable (façade, fenêtres, toiture), conformité NF C 15-100, certification RGE pour les aides.
 7. Si des travaux sortent des métiers de l'artisan, chiffre-les quand même mais préviens-le dans "hypotheses" (sous-traitance possible).
-8. Durée (duree_estimee) : si l'artisan indique une durée, reprends-la telle quelle. Sinon estime le temps réel de chantier pour UNE équipe de 1 à 2 personnes (sans compter les temps de séchage d'une nuit), sois réaliste et non prudent, et signale-le dans "hypotheses" (« durée à confirmer »).
+8. Options : quand l'artisan écrit qu'une prestation est « en option » (ou « optionnel », « au choix du client »), mets option = true sur cette ligne ; sinon option = false. Garde les options déjà présentes dans le devis actuel.
+9. Durée (duree_estimee) : si l'artisan indique une durée, reprends-la telle quelle. Sinon estime le temps réel de chantier pour UNE équipe de 1 à 2 personnes (sans compter les temps de séchage d'une nuit), sois réaliste et non prudent, et signale-le dans "hypotheses" (« durée à confirmer »).
 
 ## Quand poser des questions
 Tu dois être précis : si une information INDISPENSABLE au chiffrage manque (dimensions, hauteur, nombre et taille des ouvertures, état du support qui change la méthode, fourniture incluse ou non, gamme des matériaux…), réponds avec statut = "questions", un message court et naturel (il peut être lu à voix haute sur le chantier) et la liste des questions. Pose toutes les questions nécessaires en une seule fois, maximum 5, les plus importantes d'abord. Une question = une seule information, formulée court. Pour chacune, propose dans "suggestions" 2 à 4 réponses courtes et probables (valeurs usuelles du métier, Oui/Non…) que l'artisan pourra toucher au lieu de taper. Ne pose pas de question sur ce que tu peux raisonnablement supposer : suppose-le et note-le dans "hypotheses".
@@ -76,7 +77,7 @@ Réponds UNIQUEMENT par un objet JSON (sans texte autour) de la forme :
     "description": string,
     "sections": [{ "titre": string, "lignes": [{
       "designation": string, "detail": string, "quantite": number, "unite": string,
-      "prix_unitaire_ht": number, "prix_source": "grille" | "estime", "calcul": string
+      "prix_unitaire_ht": number, "prix_source": "grille" | "estime", "calcul": string, "option": boolean
     }] }],
     "taux_tva": number, "duree_estimee": string, "hypotheses": string[]
   }
