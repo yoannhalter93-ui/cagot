@@ -514,3 +514,35 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .table-metre .source-estime small { color: #9a6700; }
 .table-metre tfoot td { font-weight: 800; padding-top: 8px; text-align: right; }
 .table-metre tfoot td:first-child { text-align: left; }
+
+/* --- Chantiers : liste et fiche en étapes --- */
+.centre { text-align: center; }
+.carte-fiche { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 14px; margin-bottom: 10px; border: 1px solid var(--bord); border-radius: 16px; background: var(--surface); color: var(--texte); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+.carte-fiche.fini { opacity: .75; }
+.ligne-fiche { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.ligne-fiche strong { font-size: 1.05rem; }
+.ligne-fiche b { white-space: nowrap; }
+.carte-fiche small { color: var(--gris); }
+.progression-fiche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.progression-fiche i { height: 6px; border-radius: 99px; background: var(--bord); }
+.progression-fiche i.fait { background: var(--vert); }
+.progression-fiche i.en-cours { background: var(--or); }
+.sous-titre-fiche { color: var(--gris); font-size: .85rem; }
+.etapes { list-style: none; margin: 0 0 14px; padding: 0; position: relative; }
+.etape { display: flex; gap: 12px; padding: 0 0 18px; position: relative; }
+.etape:not(:last-child)::before { content: ""; position: absolute; left: 17px; top: 36px; bottom: 0; width: 2px; background: var(--bord); }
+.etape.fait:not(:last-child)::before { background: var(--vert); }
+.pastille-etape { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--surface); border: 2px solid var(--bord); color: var(--gris); z-index: 1; }
+.etape.fait .pastille-etape { background: var(--vert); border-color: var(--vert); color: #fff; }
+.etape.en-cours .pastille-etape { background: var(--or); border-color: var(--or); color: #1c2430; }
+.corps-etape { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 12px; }
+.etape.en-cours .corps-etape { border-color: var(--or); box-shadow: 0 0 0 2px color-mix(in srgb, var(--or) 25%, transparent); }
+.etape.a-venir .corps-etape { opacity: .6; }
+.corps-etape strong { font-size: 1rem; }
+.corps-etape p { margin: 4px 0 8px; color: var(--gris); font-size: .9rem; overflow-wrap: anywhere; }
+.corps-etape p strong { color: var(--texte); }
+.action-doc:disabled { opacity: .45; cursor: default; }
+#etape-suivante { position: sticky; bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 8px); width: 100%; box-shadow: 0 6px 16px rgba(47,138,78,.35); }
+#etape-suivante[hidden] { display: none; }
+.entete-chantier #retour-conversation { text-decoration: none; font-weight: 600; white-space: nowrap; }
+.bulle .btn-secondaire { margin-top: 8px; }

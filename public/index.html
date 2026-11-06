@@ -18,16 +18,16 @@
   </header>
   <nav id="navigation" class="onglets no-print" hidden>
     <button data-vue="accueil"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg><span>Accueil</span></button>
-    <button data-vue="devis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></svg><span>Devis</span></button>
 
+    <button data-vue="chantiers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M6 18v-3a6 6 0 0 1 12 0v3"/><path d="M12 9V6M10 6h4"/></svg><span>Chantiers</span></button>
     <button data-vue="clients"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.4 0 4.1 1.5 4.6 4.3"/></svg><span>Clients</span></button>
-    <button data-vue="chantier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M6 18v-3a6 6 0 0 1 12 0v3"/><path d="M12 9V6M10 6h4"/></svg><span>Chantiers</span></button>
     <button data-vue="plus" id="onglet-plus"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Plus</span></button>
   </nav>
   <div id="menu-plus" class="feuille-plus no-print" hidden>
     <div class="feuille">
-      <button type="button" data-vue="factures">🧾 Factures</button>
-      <button type="button" data-vue="notes">🗒️ Mes notes</button>
+      <button type="button" data-vue="devis">📝 Tous les devis</button>
+      <button type="button" data-vue="factures">🧾 Toutes les factures</button>
+      <button type="button" data-vue="notes">🗒️ Toutes les notes</button>
       <button type="button" data-vue="parametres">⚙️ Réglages</button>
     </div>
   </div>
@@ -71,21 +71,14 @@
       <p id="nom-entreprise-accueil"></p>
     </section>
     <div id="activite-accueil" class="tuiles"></div>
-    <button type="button" id="r-devis" class="btn-devis-rapide">⚡ Créer un devis rapide</button>
-    <h3 class="titre-section">Mes accès rapides</h3>
-    <div class="raccourcis">
-      <button type="button" data-vue="notes"><span>🗒️</span>Notes</button>
-      <button type="button" data-vue="chantier"><span>🏗️</span>Chantier</button>
-      <button type="button" data-vue="clients"><span>👥</span>Clients</button>
-      <button type="button" data-vue="factures"><span>🧾</span>Factures</button>
-    </div>
-    <div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" id="voir-chantiers">Voir tout ›</button></div>
+    <button type="button" id="r-devis" class="btn-devis-rapide">＋ Nouveau chantier</button>
+    <p class="aide centre">Un chantier = le client, tes notes et photos, le devis et la facture, étape par étape.</p>
+    <div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" data-vue="chantiers">Voir tout ›</button></div>
     <div id="chantiers-accueil"></div>
   </main>
 
   <!-- ===== Notes de chantier : liste ===== -->
   <main id="vue-notes" class="vue" hidden>
-    <div class="segments"><button type="button" data-vue="chantier">💬 Avec l'IA</button><button type="button" data-vue="notes" class="actif">🗒️ Mes notes</button></div>
     <button id="nouvelle-note" class="btn-principal btn-large">+ Nouvelle note</button>
     <div class="import-notes">
       <button type="button" id="coller-note">📋 Coller une note</button>
@@ -122,11 +115,11 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
 
   <!-- ===== Vue chantier : conversation avec l'IA ===== -->
   <main id="vue-chantier" class="vue" hidden>
-    <div class="segments no-print"><button type="button" data-vue="chantier" class="actif">💬 Avec l'IA</button><button type="button" data-vue="notes">🗒️ Mes notes</button></div>
     <div class="entete-chantier no-print">
-      <button type="button" id="mes-chantiers" class="btn-secondaire">📋 Mes chantiers</button>
+      <button type="button" id="retour-conversation" class="lien" aria-label="Retour au chantier">← Chantier</button>
       <span id="titre-chantier" class="titre-chantier">Nouveau chantier</span>
-      <button type="button" id="nouveau" class="btn-secondaire">+ Nouveau</button>
+      <button type="button" id="mes-chantiers" class="btn-secondaire" hidden>📋</button>
+      <button type="button" id="nouveau" class="btn-secondaire" hidden>+</button>
     </div>
     <div id="liste-chantiers" class="liste-chantiers" hidden></div>
     <div id="zone-conversation">
@@ -153,6 +146,29 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
   </main>
 
   <!-- ===== Vue documents : liste + détail ===== -->
+  <!-- ===== Chantiers : liste et fiche (le cœur de l'appli) ===== -->
+  <main id="vue-chantiers" class="vue" hidden>
+    <div class="entete-documents"><h2>Chantiers</h2><button type="button" id="nouveau-chantier" class="btn-or">＋ Nouveau</button></div>
+    <div id="liste-fiches"></div>
+  </main>
+
+  <main id="vue-fiche" class="vue" hidden>
+    <div class="entete-document no-print">
+      <button id="retour-fiche" class="lien" aria-label="Retour aux chantiers">←</button>
+      <div class="titre-document"><strong id="titre-fiche"></strong><span id="client-fiche" class="sous-titre-fiche"></span></div>
+      <details class="menu-plus">
+        <summary aria-label="Plus d'actions">⋯</summary>
+        <div class="menu-plus-liste">
+          <button id="renommer-fiche">✏️ Renommer le chantier</button>
+          <button id="discuter-fiche">💬 Discuter avec l'IA</button>
+          <button id="supprimer-fiche" class="danger">🗑️ Supprimer le chantier</button>
+        </div>
+      </details>
+    </div>
+    <ol id="etapes-fiche" class="etapes"></ol>
+    <button type="button" id="etape-suivante" class="btn-action-principale"></button>
+  </main>
+
   <main id="vue-clients" class="vue" hidden>
     <div class="entete-clients">
       <input type="search" id="recherche-clients" placeholder="🔍 Chercher un client…" autocomplete="off">

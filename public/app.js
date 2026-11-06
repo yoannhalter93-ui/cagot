@@ -283,6 +283,7 @@ async function demarrerSession() {
 // Navigation
 // ---------------------------------------------------------------------------
 let typeDocs = "devis"; // onglet Devis ou Factures
+let ficheCourante = null; // chantier ouvert (pour revenir à sa fiche)
 let filtreDocs = "tout";
 
 function afficherVue(nom) {
@@ -293,21 +294,20 @@ function afficherVue(nom) {
     nom = "documents";
   }
   for (const v of document.querySelectorAll(".vue")) v.hidden = v.id !== `vue-${nom}`;
+  // Tout ce qui appartient à un chantier allume l'onglet « Chantiers »
+  if (["accueil", "chantiers", "clients", "documents", "notes", "parametres"].includes(nom)) ficheCourante = null;
   const onglet =
-    nom === "documents" || nom === "document"
-      ? typeDocs === "facture"
+    ["chantier", "fiche", "chantiers"].includes(nom) || (ficheCourante && ["note", "document"].includes(nom))
+      ? "chantiers"
+      : ["documents", "document", "notes", "note", "parametres"].includes(nom)
         ? "plus"
-        : "devis"
-      : ["note", "notes", "parametres"].includes(nom)
-        ? nom === "parametres"
-          ? "plus"
-          : "chantier"
         : nom;
   $("#menu-plus").hidden = true;
   for (const b of document.querySelectorAll("#navigation [data-vue]")) b.classList.toggle("actif", b.dataset.vue === onglet);
   $("#btn-reglages").classList.toggle("actif", nom === "parametres");
   if (nom !== "note") quitterNote();
   if (nom === "accueil") afficherAccueil();
+  if (nom === "chantiers") afficherFiches();
   if (nom === "notes") afficherNotes();
   if (nom === "documents") afficherListe();
   if (nom === "clients") afficherClients();
@@ -335,7 +335,7 @@ async function afficherAccueil() {
   $("#nom-entreprise-accueil").textContent = e.nom || "";
   const [docs, chantiers] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
-    sb.from("chantiers").select("id, titre, document_id, updated_at").order("updated_at", { ascending: false }).limit(3),
+    sb.from("chantiers").select("id, titre, document_id, updated_at").order("updated_at", { ascending: false }).limit(4),
   ]);
   if (!docs.error) {
     const { tuiles } = indicateurs(docs.data);
@@ -364,26 +364,12 @@ async function afficherAccueil() {
     .join("");
   for (const b of zone.querySelectorAll("[data-ouvrir-chantier]")) {
     b.onclick = async () => {
-      const { data: ch, error } = await sb.from("chantiers").select("*").eq("id", b.dataset.ouvrirChantier).single();
-      if (error) return erreur("Chantier introuvable.", error);
-      ouvrirConversation(ch);
-      montrerListeChantiers(false);
-      afficherVue("chantier");
+      ouvrirFiche(b.dataset.ouvrirChantier);
     };
   }
 }
 
-function devisRapide() {
-  nouvelleConversation();
-  montrerListeChantiers(false);
-  afficherVue("chantier");
-  $("#texte").focus();
-}
-$("#r-devis").onclick = devisRapide;
-$("#voir-chantiers").onclick = () => {
-  afficherVue("chantier");
-  montrerListeChantiers(true);
-};
+$("#r-devis").onclick = () => nouveauChantier();
 
 // Facture sans devis : un brouillon vierge à compléter.
 async function nouvelleFactureVierge() {
@@ -403,7 +389,7 @@ async function nouvelleFactureVierge() {
   if (error) return erreur("Facture non créée.", error);
   ouvrirDocument(data.id);
 }
-$("#nouveau-document").onclick = () => (typeDocs === "facture" ? nouvelleFactureVierge() : devisRapide());
+$("#nouveau-document").onclick = () => (typeDocs === "facture" ? nouvelleFactureVierge() : nouveauChantier());
 
 // Réglages en onglets
 for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
@@ -762,9 +748,18 @@ function bulle(classe, html) {
 function bulleIa(m) {
   const enAttente = m.questions?.length && conversation.historique.at(-1) === m;
   const questions = m.questions?.length && !enAttente ? `<ol>${m.questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>` : "";
-  const bouton = m.docId ? `<br><button class="btn-principal" data-doc="${esc(m.docId)}">Voir le devis</button>` : "";
+  const bouton = m.docId
+    ? `<br><button class="btn-principal" data-doc="${esc(m.docId)}">Voir le devis</button> <button class="btn-secondaire" data-retour-fiche>← Chantier</button>`
+    : "";
   const div = bulle("ia", esc(m.texte) + questions + bouton);
-  div.querySelector("[data-doc]")?.addEventListener("click", () => ouvrirDocument(m.docId));
+  div.querySelector("[data-doc]")?.addEventListener("click", () => {
+    ficheCourante = conversation.id ?? ficheCourante;
+    ouvrirDocument(m.docId);
+  });
+  div.querySelector("[data-retour-fiche]")?.addEventListener("click", async () => {
+    await fileChantiers;
+    if (conversation.id) ouvrirFiche(conversation.id);
+  });
   if (enAttente) carteQuestions(m);
   if (m.metre?.length) carteMetre(m);
 }
@@ -991,7 +986,7 @@ async function historiquePourIA() {
 async function enregistrerDevis(devis) {
   await completerDepuisCarnet(devis);
   memoriserClient(devis);
-  conversation.titre = [devis.titre, devis.client_nom].filter(Boolean).join(" – ").slice(0, 200);
+  conversation.titre ||= [devis.titre, devis.client_nom].filter(Boolean).join(" – ").slice(0, 200);
   const histo = historiqueSansPhotos(conversation.historique);
   if (conversation.docId) {
     const { data: existant } = await sb.from("documents").select("contenu").eq("id", conversation.docId).eq("type", "devis").maybeSingle();
@@ -1135,7 +1130,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden" && noteCourante) enregistrerNote();
 });
 
-$("#retour-notes").onclick = () => afficherVue("notes");
+$("#retour-notes").onclick = () => (ficheCourante ? ouvrirFiche(ficheCourante) : afficherVue("notes"));
 
 $("#micro-note").onclick = () =>
   reco
@@ -1158,7 +1153,6 @@ $("#envoyer-note").onclick = async () => {
   const contenu = $("#contenu-note").value.trim();
   const nbPhotos = (noteCourante.photos?.length ?? 0) + photosEnAttente.length;
   if (!contenu && nbPhotos === 0) return notifier("La note est vide.");
-  if (conversation.historique.length && !(await demander("Démarrer un nouveau chantier avec cette note ? La conversation en cours sera effacée (les devis restent enregistrés).", { ok: "Faire le devis" }))) return;
   const note = noteCourante;
   await enregistrerNote();
   if (plateforme.stockagePhotos && note.photos?.length) {
@@ -1172,9 +1166,13 @@ $("#envoyer-note").onclick = async () => {
     }
   }
   await sb.from("notes").update({ envoyee_at: new Date().toISOString() }).eq("id", note.id);
-  nouvelleConversation({ noteId: note.id, titre: note.titre || "" });
+  // Le chantier de cette note (créé avec elle), sinon un nouveau chantier
+  const { data: lies } = await sb.from("chantiers").select("*").eq("note_id", note.id).order("updated_at", { ascending: false }).limit(1);
+  if (lies?.length) ouvrirConversation(lies[0]);
+  else nouvelleConversation({ noteId: note.id, titre: note.titre || "" });
   montrerListeChantiers(false);
   afficherVue("chantier");
+  ficheCourante = conversation.id ?? null;
   $("#texte").value = note.titre ? `${note.titre}\n\n${contenu}` : contenu;
   envoyer();
 };
@@ -1415,6 +1413,249 @@ async function importerPartage() {
   await creerNoteImportee({ titre, contenu: [texte, url].filter(Boolean).join("\n"), fichiers });
 }
 
+// ---------------------------------------------------------------------------
+// Chantiers : liste et fiche en 4 étapes (notes → devis → envoi → facture)
+// ---------------------------------------------------------------------------
+async function etatsChantiers(chantiers) {
+  const ids = chantiers.map((c) => c.document_id).filter(Boolean);
+  const { data: docs } = ids.length
+    ? await sb.from("documents").select("id, type, statut, numero, contenu, devis_id, updated_at, created_at, date_document").limit(1000)
+    : { data: [] };
+  const parId = new Map((docs ?? []).map((d) => [d.id, d]));
+  const factureDe = new Map((docs ?? []).filter((d) => d.type === "facture" && d.devis_id).map((f) => [f.devis_id, f]));
+  return (c) => {
+    const devis = parId.get(c.document_id) ?? null;
+    const facture = devis ? factureDe.get(devis.id) ?? null : null;
+    let etape = 1;
+    let libelle = "Notes en cours";
+    if (devis) [etape, libelle] = [3, "Devis à envoyer"];
+    if (devis && devis.statut === "envoye") [etape, libelle] = [3, "Devis envoyé · en attente"];
+    if (devis && devis.statut === "refuse") [etape, libelle] = [3, "Devis refusé"];
+    if (devis && devis.statut === "accepte") [etape, libelle] = [4, "Accepté · à facturer"];
+    if (facture) [etape, libelle] = [4, facture.statut === "payee" ? "Payé ✓" : facture.statut === "emise" ? "Facture à encaisser" : "Facture à émettre"];
+    return { devis, facture, etape, libelle, fini: facture?.statut === "payee" };
+  };
+}
+
+async function afficherFiches() {
+  const zone = $("#liste-fiches");
+  if (!zone.innerHTML.trim()) zone.innerHTML = `<p class="aide">Chargement…</p>`;
+  await fileChantiers;
+  const { data, error } = await sb.from("chantiers").select("id, titre, document_id, note_id, updated_at").order("updated_at", { ascending: false }).limit(300);
+  if (error) {
+    zone.innerHTML = `<p class="aide">Impossible de charger les chantiers (connexion ?).</p>`;
+    return;
+  }
+  if (!data.length) {
+    zone.innerHTML = `<div class="vide-clients"><p><strong>Aucun chantier pour l'instant.</strong></p><p class="aide">Appuie sur « ＋ Nouveau » : tu notes le chantier, l'IA fait le devis, tu l'envoies, puis tu factures.</p></div>`;
+    return;
+  }
+  const etat = await etatsChantiers(data);
+  zone.innerHTML = data
+    .map((c) => {
+      const e = etat(c);
+      return `<button type="button" class="carte-fiche ${e.fini ? "fini" : ""}" data-fiche="${esc(c.id)}">
+        <span class="ligne-fiche"><strong>${esc(c.titre || "Chantier sans titre")}</strong><b>${e.devis ? euros(montantDoc(e.devis)) : ""}</b></span>
+        <span class="progression-fiche">${[1, 2, 3, 4].map((n) => `<i class="${e.fini || n < e.etape ? "fait" : n === e.etape ? "en-cours" : ""}"></i>`).join("")}</span>
+        <small>${esc(e.libelle)} · ${ilYa(c.updated_at)}</small>
+      </button>`;
+    })
+    .join("");
+  for (const b of zone.querySelectorAll("[data-fiche]")) b.onclick = () => ouvrirFiche(b.dataset.fiche);
+}
+
+function demanderTexte(titre, placeholder, valeur = "") {
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<form class="dialogue fiche-client"><h3></h3><input maxlength="200" required><div class="dialogue-actions"><button type="button" class="annuler">Annuler</button><button class="valider btn-principal">OK</button></div></form>`;
+    fond.querySelector("h3").textContent = titre;
+    const champ = fond.querySelector("input");
+    champ.placeholder = placeholder;
+    champ.value = valeur;
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.querySelector("form").onsubmit = (e) => {
+      e.preventDefault();
+      fermer(champ.value.trim() || null);
+    };
+    document.body.appendChild(fond);
+    champ.focus();
+  });
+}
+
+// Nouveau chantier : un nom (souvent le client), puis directement la note pour écrire.
+async function nouveauChantier(client = null) {
+  const titre = client ? client.nom : await demanderTexte("Nouveau chantier", "Ex. : Flora – peinture séjour");
+  if (!titre) return;
+  const contenu = client
+    ? [`Client : ${client.nom}`, client.adresse && `Adresse : ${client.adresse.replace(/\n/g, ", ")}`, client.telephone && `Tél. : ${client.telephone}`, client.email && `E-mail : ${client.email}`]
+        .filter(Boolean)
+        .join("\n") + "\n\n"
+    : "";
+  const { data: note, error } = await sb.from("notes").insert({ titre: titre.slice(0, 200), contenu }).select("*").single();
+  if (error) return erreur("Chantier non créé (connexion ?).", error);
+  const { data: ch, error: err2 } = await sb.from("chantiers").insert({ titre: titre.slice(0, 200), note_id: note.id, historique: [] }).select("*").single();
+  if (err2) return erreur("Chantier non créé (connexion ?).", err2);
+  ficheCourante = ch.id;
+  afficherEditeurNote(note);
+  notifier("Écris tes notes et ajoute tes photos, puis « Faire le devis avec l'IA ».");
+}
+$("#nouveau-chantier").onclick = () => nouveauChantier();
+
+let ficheDonnees = null;
+
+async function ouvrirFiche(id) {
+  await fileChantiers;
+  const { data: ch, error } = await sb.from("chantiers").select("*").eq("id", id).maybeSingle();
+  if (error || !ch) return erreur("Chantier introuvable.", error);
+  const [note, devis] = await Promise.all([
+    ch.note_id ? sb.from("notes").select("*").eq("id", ch.note_id).maybeSingle().then((r) => r.data) : null,
+    ch.document_id ? sb.from("documents").select("*").eq("id", ch.document_id).maybeSingle().then((r) => r.data) : null,
+  ]);
+  let facture = null;
+  if (devis) {
+    const { data: f } = await sb.from("documents").select("*").eq("devis_id", devis.id).eq("type", "facture").limit(1);
+    facture = f?.[0] ?? null;
+  }
+  ficheDonnees = { ch, note, devis, facture };
+  afficherVue("fiche");
+  ficheCourante = ch.id;
+  rendreFiche();
+}
+
+function rendreFiche() {
+  const { ch, note, devis, facture } = ficheDonnees;
+  $("#titre-fiche").textContent = ch.titre || "Chantier sans titre";
+  $("#client-fiche").textContent = devis?.contenu.client_nom || "";
+  $("#vue-fiche .menu-plus").open = false;
+  const nbPhotos = note?.photos?.length ?? 0;
+  const extrait = (note?.contenu ?? "").trim().split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" · ");
+  const s1 = !!(note && (note.contenu.trim() || nbPhotos));
+  const envoye = devis && ["envoye", "accepte", "refuse"].includes(devis.statut);
+  const accepte = devis?.statut === "accepte";
+  const paye = facture?.statut === "payee";
+  const etat = (fait, encours) => (fait ? "fait" : encours ? "en-cours" : "a-venir");
+  const bouton = (a, texte, principal = false, actif = true) =>
+    `<button type="button" class="action-doc ${principal ? "principal" : ""}" data-a="${a}" ${actif ? "" : "disabled"}>${texte}</button>`;
+  const etapes = [
+    {
+      n: 1, titre: "Notes et photos", etat: etat(s1, !s1),
+      detail: s1 ? `${esc(extrait.slice(0, 100))}${nbPhotos ? ` · 📷 ${nbPhotos}` : ""}` : "Décris le chantier : pièces, surfaces, travaux, photos.",
+      actions: bouton("note", s1 ? "Ouvrir mes notes" : "✍️ Écrire mes notes", !s1),
+    },
+    {
+      n: 2, titre: "Devis", etat: etat(!!devis, s1 && !devis),
+      detail: devis ? `${esc(devis.numero || "brouillon")} · <strong>${euros(montantDoc(devis))}</strong>` : "L'IA rédige le devis à partir de tes notes.",
+      actions: devis ? bouton("devis", "Voir / modifier") + bouton("ia", "💬 Modif par l'IA") : bouton("faire-devis", "🤖 Faire le devis avec l'IA", s1, s1),
+    },
+    {
+      n: 3, titre: "Envoi au client", etat: etat(accepte || !!facture, !!devis && !accepte),
+      detail: !devis ? "Après le devis." : devis.statut === "brouillon" ? "Pas encore envoyé." : devis.statut === "envoye" ? `Envoyé ${ilYa(dateSuivi(devis, "envoye") || devis.updated_at)} · en attente de réponse` : accepte ? "Accepté par le client 🎉" : "Refusé par le client",
+      actions: !devis ? "" : devis.statut === "brouillon" ? bouton("envoyer", "📤 Envoyer", true) + bouton("statut-envoye", "Déjà envoyé")
+        : devis.statut === "envoye" ? bouton("statut-accepte", "✅ Accepté", true) + bouton("statut-refuse", "❌ Refusé")
+        : devis.statut === "refuse" ? bouton("statut-envoye", "↩️ Remettre en attente") : "",
+    },
+    {
+      n: 4, titre: "Facture", etat: etat(paye, accepte && !paye),
+      detail: facture ? `${esc(facture.numero || "brouillon")} · ${LIBELLES_STATUT[facture.statut]} · <strong>${euros(montantDoc(facture))}</strong>` : accepte ? "Devis accepté : tu peux facturer." : "Une fois le devis accepté.",
+      actions: facture
+        ? bouton("facture", facture.statut === "brouillon" ? "Vérifier et émettre" : "Voir la facture", facture.statut === "brouillon") + (facture.statut === "emise" ? bouton("payee", "💶 Payée", true) : "")
+        : accepte ? bouton("facturer", "🧾 Créer la facture", true) : "",
+    },
+  ];
+  $("#etapes-fiche").innerHTML = etapes
+    .map((e) => `<li class="etape ${e.etat}"><span class="pastille-etape">${e.etat === "fait" ? "✓" : e.n}</span>
+      <div class="corps-etape"><strong>${e.titre}</strong><p>${e.detail}</p>${e.actions ? `<div class="actions-doc">${e.actions}</div>` : ""}</div></li>`)
+    .join("");
+  const suivante = !s1 ? ["✍️ Écrire mes notes", "note"]
+    : !devis ? ["🤖 Faire le devis avec l'IA", "faire-devis"]
+    : devis.statut === "brouillon" ? ["📤 Envoyer le devis", "envoyer"]
+    : devis.statut === "envoye" ? ["✅ Le client a accepté", "statut-accepte"]
+    : accepte && !facture ? ["🧾 Créer la facture", "facturer"]
+    : facture?.statut === "brouillon" ? ["✅ Vérifier et émettre la facture", "facture"]
+    : facture?.statut === "emise" ? ["💶 Marquer la facture payée", "payee"]
+    : null;
+  const gros = $("#etape-suivante");
+  gros.hidden = !suivante;
+  if (suivante) {
+    gros.textContent = suivante[0];
+    gros.dataset.a = suivante[1];
+  }
+}
+
+async function actionFiche(a) {
+  const { ch, note, devis, facture } = ficheDonnees;
+  ficheCourante = ch.id;
+  if (a === "note") {
+    if (note) return afficherEditeurNote(note);
+    const { data, error } = await sb.from("notes").insert({ titre: ch.titre, contenu: "" }).select("*").single();
+    if (error) return erreur("Note non créée.", error);
+    await sb.from("chantiers").update({ note_id: data.id }).eq("id", ch.id);
+    return afficherEditeurNote(data);
+  }
+  if (a === "faire-devis") {
+    afficherEditeurNote(note);
+    return $("#envoyer-note").click();
+  }
+  if (a === "ia") {
+    ouvrirConversation(ch);
+    montrerListeChantiers(false);
+    afficherVue("chantier");
+    ficheCourante = ch.id;
+    return $("#texte").focus();
+  }
+  if (a === "devis") return ouvrirDocument(devis.id);
+  if (a === "facture") return ouvrirDocument(facture.id);
+  if (a === "envoyer") {
+    await ouvrirDocument(devis.id);
+    return $("#partager").click();
+  }
+  if (a === "facturer") {
+    await ouvrirDocument(devis.id);
+    return $("#en-facture").click();
+  }
+  if (a === "payee") {
+    if (!(await demander(`Marquer ${facture.numero} comme payée (${euros(montantDoc(facture))}) ?`, { ok: "Payée 💶" }))) return;
+    if (await mettreStatut(facture, "payee")) notifier("Facture payée 💶");
+    return ouvrirFiche(ch.id);
+  }
+  if (a.startsWith("statut-")) {
+    const statut = a.slice(7);
+    if (await mettreStatut(devis, statut)) notifier({ accepte: "Devis accepté 🎉", refuse: "Devis marqué refusé", envoye: "Marqué comme envoyé" }[statut]);
+    return ouvrirFiche(ch.id);
+  }
+}
+
+$("#etapes-fiche").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-a]");
+  if (b && !b.disabled) actionFiche(b.dataset.a);
+});
+$("#etape-suivante").onclick = (ev) => actionFiche(ev.currentTarget.dataset.a);
+$("#retour-fiche").onclick = () => afficherVue("chantiers");
+$("#retour-conversation").onclick = () => (conversation.id ? ouvrirFiche(conversation.id) : afficherVue("chantiers"));
+$("#discuter-fiche").onclick = () => actionFiche("ia");
+$("#renommer-fiche").onclick = async () => {
+  const { ch } = ficheDonnees;
+  const titre = await demanderTexte("Renommer le chantier", "Nom du chantier", ch.titre);
+  if (!titre) return;
+  const { error } = await sb.from("chantiers").update({ titre: titre.slice(0, 200) }).eq("id", ch.id);
+  if (error) return erreur("Nom non modifié.", error);
+  if (conversation.id === ch.id) conversation.titre = titre;
+  ouvrirFiche(ch.id);
+};
+$("#supprimer-fiche").onclick = async () => {
+  const { ch } = ficheDonnees;
+  if (!(await demander("Supprimer ce chantier ? La conversation avec l'IA est effacée ; le devis, la facture et les notes restent enregistrés.", { ok: "Supprimer", danger: true }))) return;
+  const { error } = await sb.from("chantiers").delete().eq("id", ch.id);
+  if (error) return erreur("Suppression impossible.", error);
+  if (conversation.id === ch.id) nouvelleConversation();
+  afficherVue("chantiers");
+};
+
 // Choix de l'unité d'une ligne du devis (forfait, m², ml…).
 function choisirUnite(ligne) {
   return new Promise((resolve) => {
@@ -1550,7 +1791,7 @@ async function afficherClients() {
             ${c.notes ? `<p class="client-notes">${esc(c.notes)}</p>` : ""}
           </div>
           <div class="actions-doc">
-            <button type="button" class="action-doc principal" data-devis-client="${esc(c.id)}">📝 Nouveau devis</button>
+            <button type="button" class="action-doc principal" data-devis-client="${esc(c.id)}">🏗️ Nouveau chantier</button>
             <button type="button" class="action-doc" data-modifier-client="${esc(c.id)}">✏️ Modifier</button>
           </div>
         </div>`;
@@ -1563,14 +1804,7 @@ async function afficherClients() {
   }
   for (const b of zone.querySelectorAll("[data-devis-client]")) {
     b.onclick = () => {
-      const c = clients.find((x) => x.id === b.dataset.devisClient);
-      nouvelleConversation({ titre: c.nom });
-      montrerListeChantiers(false);
-      afficherVue("chantier");
-      $("#texte").value = [`Client : ${c.nom}`, c.adresse && `Adresse : ${c.adresse.replace(/\n/g, ", ")}`, c.telephone && `Tél. : ${c.telephone}`, c.email && `E-mail : ${c.email}`]
-        .filter(Boolean)
-        .join("\n") + "\n\nTravaux : ";
-      $("#texte").focus();
+      return nouveauChantier(clients.find((x) => x.id === b.dataset.devisClient));
     };
   }
 }
@@ -2201,7 +2435,7 @@ function rendreDocument() {
   }
 }
 
-$("#retour").onclick = () => afficherVue("documents");
+$("#retour").onclick = () => (ficheCourante ? ouvrirFiche(ficheCourante) : afficherVue("documents"));
 const chargerScript = (src) =>
   new Promise((ok, ko) => {
     if (document.querySelector(`script[src="${src}"]`)) return ok();
