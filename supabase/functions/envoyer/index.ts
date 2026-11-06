@@ -67,7 +67,11 @@ async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; replyTo?: s
       ...(m.pdf ? { attachments: [{ filename: m.nomFichier ?? "document.pdf", content: m.pdf, encoding: "base64" as const, contentType: "application/pdf" }] } : {}),
     });
   } finally {
-    await client.close().catch(() => {});
+    try {
+      await client.close();
+    } catch {
+      /* connexion déjà fermée */
+    }
   }
 }
 
