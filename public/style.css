@@ -547,3 +547,22 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .entete-chantier #retour-conversation { text-decoration: none; font-weight: 600; white-space: nowrap; }
 .bulle .btn-secondaire { margin-top: 8px; }
 .bandeau.hors-ligne { background: #263548; color: #fff; font-weight: 600; position: sticky; top: 64px; z-index: 9; }
+
+/* --- Options et devis interactif --- */
+.badge-option { display: inline-block; margin-top: 4px; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #fff4dc; color: #8a5a00; }
+.doc-table tr.non-retenue td { color: var(--gris); }
+.bascule-option { display: block; font-size: .78rem; margin-top: 2px; }
+.signature-client { display: block; max-width: 260px; max-height: 90px; margin-top: 8px; background: #fff; border: 1px solid var(--bord); border-radius: 8px; }
+.page-client { padding-bottom: 24px; }
+.vue-client { max-width: 760px; }
+.vue-client .carte { margin-top: 14px; }
+.option-client { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--bord); border-radius: 12px; margin-bottom: 8px; background: var(--surface); cursor: pointer; }
+.option-client input { width: 24px; height: 24px; margin: 2px 0 0; flex: none; }
+.option-client small { display: block; color: var(--gris); margin-top: 2px; }
+.pad-signature { width: 100%; height: auto; aspect-ratio: 600 / 220; background: #fff; border: 2px dashed var(--bord); border-radius: 12px; touch-action: none; }
+.case-accord { display: flex !important; gap: 10px; align-items: flex-start; margin: 12px 0; color: var(--texte) !important; }
+.case-accord input { width: 22px; height: 22px; flex: none; margin: 0; }
+.total-a-signer { font-size: 1.1rem; }
+.vue-client #signer { width: 100%; }
+.vue-client .btn-principal { width: 100%; padding: 13px; margin-top: 12px; }
+.page-client .toast { position: fixed; }

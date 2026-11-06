@@ -3,6 +3,9 @@
 
 export const arrondi = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
+// Une ligne « option » ne compte dans le total que si le client l'a retenue.
+export const compte = (ligne) => !ligne.option || ligne.option_retenue === true;
+
 export function calculerTotaux(devis) {
   const tauxTva = Number(devis.taux_tva ?? 10);
   let totalHt = 0;
@@ -12,10 +15,10 @@ export function calculerTotaux(devis) {
       const quantite = arrondi(ligne.quantite ?? 0);
       const prixUnitaire = arrondi(ligne.prix_unitaire_ht ?? 0);
       const total = arrondi(quantite * prixUnitaire);
-      totalHt += total;
+      if (compte(ligne)) totalHt += total;
       return { ...ligne, quantite, prix_unitaire_ht: prixUnitaire, total_ht: total };
     });
-    const sousTotal = arrondi(lignes.reduce((s, l) => s + l.total_ht, 0));
+    const sousTotal = arrondi(lignes.filter(compte).reduce((s, l) => s + l.total_ht, 0));
     return { ...section, lignes, sous_total_ht: sousTotal };
   });
 

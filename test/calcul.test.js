@@ -23,3 +23,18 @@ test("devis vide", () => {
   assert.equal(d.total_ttc, 0);
   assert.equal(d.taux_tva, 10);
 });
+
+test("une option non retenue ne compte pas dans le total", async () => {
+  const { calculerTotaux } = await import("../src/calcul.js");
+  const d = calculerTotaux({
+    taux_tva: 10,
+    sections: [{ titre: "A", lignes: [
+      { quantite: 10, prix_unitaire_ht: 10 },
+      { quantite: 1, prix_unitaire_ht: 50, option: true },
+      { quantite: 1, prix_unitaire_ht: 30, option: true, option_retenue: true },
+    ] }],
+  });
+  assert.equal(d.total_ht, 130);
+  assert.equal(d.sections[0].sous_total_ht, 130);
+  assert.equal(d.sections[0].lignes[1].total_ht, 50);
+});

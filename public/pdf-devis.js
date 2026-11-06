@@ -92,8 +92,9 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   for (const s of v.sections ?? []) {
     corps.push([{ content: propre(s.titre), colSpan: 5, styles: { fillColor: BLEU_CLAIR, fontStyle: "bold" } }]);
     for (const l of s.lignes ?? []) {
+      const option = l.option ? (l.option_retenue ? "[Option retenue] " : "[Option non retenue] ") : "";
       corps.push([
-        propre(l.detail ? `${l.designation}\n${l.detail}` : l.designation),
+        propre(`${option}${l.detail ? `${l.designation}\n${l.detail}` : l.designation}`),
         { content: propre(nombre(l.quantite)), styles: { halign: "right" } },
         propre(l.unite),
         { content: propre(euros(l.prix_unitaire_ht)), styles: { halign: "right" } },
@@ -156,7 +157,15 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     pdf.roundedRect(M + larg + 8, y, larg, 30, 2, 2);
     pdf.text("L'entreprise", M + 3, y + 5);
     pdf.text("Le client", M + larg + 11, y + 5);
-    pdf.setFontSize(7.5).setTextColor(...GRIS).text(propre("Date, signature et mention « Bon pour accord »"), M + larg + 11, y + 9.5);
+    const sig = elements.signature;
+    if (sig?.image) {
+      pdf.setFontSize(7.5).setTextColor(...GRIS).text(propre(`Bon pour accord – signé en ligne par ${sig.nom} le ${sig.date}`), M + larg + 11, y + 9.5, { maxWidth: larg - 6 });
+      try {
+        pdf.addImage(sig.image, "PNG", M + larg + 11, y + 12, Math.min(larg - 6, 50), 16);
+      } catch {
+        /* image de signature illisible */
+      }
+    } else pdf.setFontSize(7.5).setTextColor(...GRIS).text(propre("Date, signature et mention « Bon pour accord »"), M + larg + 11, y + 9.5);
   }
 
   // --- Pied de page

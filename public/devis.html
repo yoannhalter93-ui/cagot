@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f3b63">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Votre devis</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="/icones/icone-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-client">
+  <main class="vue vue-client">
+    <div id="chargement" class="carte"><p>Chargement de votre devis…</p></div>
+    <div id="erreur-client" class="carte" hidden></div>
+    <section id="devis-client" hidden>
+      <article id="document" class="document"></article>
+
+      <div id="bloc-options" class="carte" hidden>
+        <h2>Vos options</h2>
+        <p class="aide">Cochez les options que vous souhaitez : le total se met à jour.</p>
+        <div id="liste-options"></div>
+      </div>
+
+      <div id="bloc-signature" class="carte" hidden>
+        <h2>Bon pour accord</h2>
+        <p class="total-a-signer">Total : <strong id="total-signature"></strong></p>
+        <label>Votre nom et prénom <input id="nom-signataire" autocomplete="name" maxlength="120"></label>
+        <p class="aide">Signez avec le doigt dans le cadre :</p>
+        <canvas id="pad" class="pad-signature" width="600" height="220" aria-label="Zone de signature"></canvas>
+        <button type="button" id="effacer-signature" class="lien">Effacer la signature</button>
+        <label class="case-accord"><input type="checkbox" id="accord"> J'ai lu ce devis et je l'accepte (« Bon pour accord »), avec les options cochées ci-dessus.</label>
+        <button type="button" id="signer" class="btn-action-principale">✍️ Signer et accepter le devis</button>
+      </div>
+
+      <div id="bloc-signe" class="carte" hidden>
+        <h2>✅ Devis signé</h2>
+        <p id="texte-signe"></p>
+        <img id="image-signature" class="signature-client" alt="Signature">
+        <button type="button" id="pdf-client" class="btn-principal">📄 Télécharger le devis signé (PDF)</button>
+      </div>
+      <p class="aide centre">Document transmis via Cagot. Ce lien est personnel : ne le partagez pas.</p>
+    </section>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script type="module" src="devis-client.js"></script>
+</body>
+</html>

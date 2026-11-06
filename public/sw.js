@@ -29,7 +29,8 @@ self.addEventListener("fetch", (e) => {
 
 async function reseauPuisCopie(requete) {
   const cache = await caches.open(CACHE_APPLI);
-  const cle = requete.mode === "navigate" ? "/" : new URL(requete.url).pathname;
+  const chemin = new URL(requete.url).pathname;
+  const cle = requete.mode === "navigate" && (chemin === "/" || chemin === "/index.html") ? "/" : chemin;
   try {
     const ctrl = new AbortController();
     const minuterie = setTimeout(() => ctrl.abort(), 6000);

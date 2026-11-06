@@ -2260,6 +2260,7 @@ function rendreDocument() {
   const franchise = e.franchise_tva;
 
   $("#en-facture").hidden = facture;
+  $("#lien-signature").hidden = facture || !["brouillon", "envoye"].includes(d.statut);
   $("#modifier-ia").hidden = facture;
   $("#emettre").hidden = !(facture && d.statut === "brouillon");
   $("#payee").hidden = !(facture && d.statut === "emise");
@@ -2293,11 +2294,19 @@ function rendreDocument() {
         : `Facture <strong>${LIBELLES_STATUT[d.statut]}</strong> : elle est verrouillée (obligation légale). Pour corriger, il faudra faire un avoir.`;
   } else {
     // Le statut se lit dans le badge en haut et se change avec le gros bouton (ou ici, en détail)
-    info.hidden = true;
-    info.innerHTML = `Statut du devis : <select id="statut-devis">${["brouillon", "envoye", "accepte", "refuse"]
-      .map((s) => `<option value="${s}" ${s === d.statut ? "selected" : ""}>${LIBELLES_STATUT[s]}</option>`)
-      .join("")}</select>`;
-    $("#statut-devis").onchange = (ev) => changerStatut(ev.target.value);
+    info.hidden = !v.signature_client;
+    if (v.signature_client) {
+      signatureDuDevis(d).then((sig) => {
+        if (docCourant !== d || !sig) return;
+        info.innerHTML = `✍️ <strong>Signé en ligne par ${esc(sig.signataire_nom)}</strong> le ${dateFr(sig.signe_at)} à ${heureFr(sig.signe_at)}<br><img class="signature-client" src="${esc(sig.signature)}" alt="Signature du client">`;
+      });
+      info.innerHTML = `✍️ Signé en ligne par ${esc(v.signature_client.nom)}`;
+    } else {
+      info.innerHTML = `Statut du devis : <select id="statut-devis">${["brouillon", "envoye", "accepte", "refuse"]
+        .map((s) => `<option value="${s}" ${s === d.statut ? "selected" : ""}>${LIBELLES_STATUT[s]}</option>`)
+        .join("")}</select>`;
+      $("#statut-devis").onchange = (ev) => changerStatut(ev.target.value);
+    }
   }
 
   const estimes = v.sections.flatMap((s) => s.lignes).filter((l) => l.prix_source === "estime").length;
@@ -2313,15 +2322,19 @@ function rendreDocument() {
       ${s.lignes
         .map((l, li) => {
           const estime = l.prix_source === "estime" && !verrouille;
-          return `<tr${estime ? ' class="estime"' : ""}>
+          const option = !!l.option;
+          const nonRetenue = option && l.option_retenue !== true;
+          return `<tr class="${estime ? "estime" : ""} ${option ? "ligne-option" : ""} ${nonRetenue ? "non-retenue" : ""}">
             <td><div ${editable} data-champ="designation" data-s="${si}" data-l="${li}">${esc(l.designation)}</div>
               ${l.detail ? `<div class="detail" ${editable} data-champ="detail" data-s="${si}" data-l="${li}">${esc(l.detail)}</div>` : ""}
               ${l.calcul ? `<div class="calcul">${esc(l.calcul)}</div>` : ""}
+              ${option ? `<span class="badge-option">${l.option_retenue ? "Option retenue ✓" : "Option au choix du client"}</span>` : ""}
+              ${!verrouille && !facture ? `<button type="button" class="lien no-print bascule-option" data-option="${si}-${li}">${option ? "Ne plus proposer en option" : "Proposer en option"}</button>` : ""}
               ${estime ? `<div class="no-print"><span class="badge-estime">prix estimé</span> <button class="lien" data-grille="${si}-${li}">+ ajouter à ma grille</button></div>` : ""}</td>
             <td class="num" ${editable} data-champ="quantite" data-s="${si}" data-l="${li}">${nombre(l.quantite)}</td>
             <td>${verrouille ? esc(l.unite) : `<button type="button" class="choix-unite" data-unite="${si}-${li}" title="Changer l'unité">${esc(l.unite)} ▾</button>`}</td>
             <td class="num" ${editable} data-champ="prix_unitaire_ht" data-s="${si}" data-l="${li}">${nombre(l.prix_unitaire_ht)}</td>
-            <td class="num">${euros(l.total_ht)}${verrouille ? "" : ` <button class="suppr-ligne" data-suppr="${si}-${li}" title="Supprimer la ligne">✕</button>`}</td>
+            <td class="num">${nonRetenue ? `<s>${euros(l.total_ht)}</s>` : euros(l.total_ht)}${verrouille ? "" : ` <button class="suppr-ligne" data-suppr="${si}-${li}" title="Supprimer la ligne">✕</button>`}</td>
           </tr>`;
         })
         .join("")}
@@ -2412,6 +2425,18 @@ function rendreDocument() {
       }
     });
   }
+  for (const b of $("#document").querySelectorAll("[data-option]")) {
+    b.onclick = () => {
+      const [si, li] = b.dataset.option.split("-").map(Number);
+      majDocument((dv) => {
+        const l = dv.sections[si].lignes[li];
+        if (l.option) {
+          delete l.option;
+          delete l.option_retenue;
+        } else l.option = true;
+      });
+    };
+  }
   for (const b of $("#document").querySelectorAll("[data-unite]")) {
     b.onclick = async () => {
       const [si, li] = b.dataset.unite.split("-").map(Number);
@@ -2474,8 +2499,50 @@ const chargerScript = (src) =>
 async function pdfDocument(d) {
   if (!plateforme.scriptsPdf) return null;
   for (const src of plateforme.scriptsPdf) await chargerScript(src);
-  return genererPdf({ d, entreprise: profil.infos, elements: elementsDocument(d), euros, nombre, dateFr });
+  const elements = elementsDocument(d);
+  const sig = await signatureDuDevis(d);
+  if (sig) elements.signature = { image: sig.signature, nom: sig.signataire_nom, date: dateFr(sig.signe_at) };
+  return genererPdf({ d, entreprise: profil.infos, elements, euros, nombre, dateFr });
 }
+
+// --- Devis interactif : lien secret pour que le client choisisse ses options et signe ---
+function jetonAleatoire() {
+  const o = new Uint8Array(32);
+  crypto.getRandomValues(o);
+  return btoa(String.fromCharCode(...o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function lienSignature(d) {
+  const { data: existants, error } = await sb.from("partages_devis").select("jeton, signe_at, revoque, expire_at").eq("document_id", d.id).order("created_at", { ascending: false }).limit(5);
+  if (error) throw error;
+  let p = existants.find((x) => !x.revoque && !x.signe_at && new Date(x.expire_at) > new Date());
+  if (!p) {
+    p = { jeton: jetonAleatoire() };
+    const { error: err } = await sb.from("partages_devis").insert({ document_id: d.id, jeton: p.jeton });
+    if (err) throw err;
+  }
+  return `${location.origin}/devis.html#${p.jeton}`;
+}
+
+async function signatureDuDevis(d) {
+  if (d.type !== "devis" || !d.contenu.signature_client) return null;
+  const { data } = await sb.from("partages_devis").select("signataire_nom, signe_at, signature, options_retenues, preuve").eq("document_id", d.id).not("signe_at", "is", null).limit(1);
+  return data?.[0] ?? null;
+}
+
+$("#lien-signature").onclick = async () => {
+  const d = docCourant;
+  try {
+    const url = await lienSignature(d);
+    if (navigator.share) await navigator.share({ title: `Devis ${d.numero}`, text: "Consultez, choisissez vos options et signez votre devis :", url }).catch(() => {});
+    else {
+      await navigator.clipboard.writeText(url);
+      notifier("Lien copié : colle-le dans ton message au client.");
+    }
+  } catch (err) {
+    erreur("Lien de signature indisponible (mise à jour du serveur à faire ?).", err);
+  }
+};
 
 const titreFichier = (d) => `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero || "brouillon"} ${d.contenu.client_nom || ""}`.trim();
 
@@ -2491,7 +2558,11 @@ $("#partager").onclick = async () => {
   const d = docCourant;
   const e = profil.infos;
   const nom = d.type === "facture" ? "la facture" : "le devis";
-  const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
+  // Devis pas encore accepté : on ajoute le lien pour le signer en ligne (si le serveur le permet).
+  let lien = "";
+  if (d.type === "devis" && ["brouillon", "envoye"].includes(d.statut)) lien = await lienSignature(d).catch(() => "");
+  const options = d.contenu.sections?.some((s) => s.lignes?.some((l) => l.option));
+  const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.${lien ? `\n\nVous pouvez le consulter${options ? ", choisir les options" : ""} et le signer en ligne, directement sur votre téléphone :\n${lien}` : ""}\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
   const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero ?? ""} – ${d.contenu.titre}`;
   // Le PDF se prépare pendant qu'on choisit les destinataires.
   const pdfPret = pdfDocument(d).catch((err) => {
