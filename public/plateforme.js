@@ -69,23 +69,43 @@ export async function demarrerPlateforme() {
 
     // Envoi direct par Cagot (fonction « envoyer ») : renvoie true si parti,
     // false si l'envoi direct n'est pas activé (on passe alors par le partage du téléphone).
-    envoiDirect: !!config.envoiUrl,
+    // Pas encore activé côté serveur (pas de compte d'envoi) : on s'en souvient 12 h pour aller
+    // directement au partage du téléphone, sans attendre.
+    get envoiDirect() {
+      try {
+        return !!config.envoiUrl && Date.now() - Number(localStorage.getItem("cagot.envoi-inactif") || 0) > 12 * 3600e3;
+      } catch {
+        return !!config.envoiUrl;
+      }
+    },
     async envoyerEmail({ destinataires, sujet, texte, pdf, titre }, jeton) {
       const octets = new Uint8Array(await pdf.arrayBuffer());
       let binaire = "";
       for (let i = 0; i < octets.length; i += 0x8000) binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
       let rep;
+      const ctrl = new AbortController();
+      const minuterie = setTimeout(() => ctrl.abort(), 20000);
       try {
         rep = await fetch(config.envoiUrl, {
           method: "POST",
+          signal: ctrl.signal,
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${jeton}`, apikey: config.supabaseKey },
           body: JSON.stringify({ destinataires, sujet, texte, pdf: btoa(binaire), nom_fichier: `${nomFichier(titre)}.pdf` }),
         });
       } catch {
-        throw new Error("Pas de connexion internet : l'e-mail n'est pas parti.");
+        return false; // réseau lent ou coupé : on passe par le partage du téléphone
+      } finally {
+        clearTimeout(minuterie);
       }
       const data = await rep.json().catch(() => ({}));
-      if (data.non_configure || rep.status === 404) return false;
+      if (data.non_configure || rep.status === 404) {
+        try {
+          localStorage.setItem("cagot.envoi-inactif", String(Date.now()));
+        } catch {
+          /* rien */
+        }
+        return false;
+      }
       if (!rep.ok) throw new Error(data.erreur || "L'e-mail n'a pas pu partir.");
       return true;
     },

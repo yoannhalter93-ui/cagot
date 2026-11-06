@@ -145,6 +145,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
+const VERSION_APPLI = "6 nov. 2026 · signature en ligne";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -289,6 +290,7 @@ async function demarrerSession() {
   $("#navigation").hidden = false;
   $("#btn-reglages").hidden = false;
   $("#email-compte").textContent = utilisateur.email;
+  $("#version-appli").textContent = VERSION_APPLI;
   try {
     await chargerProfil();
   } catch (err) {
@@ -2581,7 +2583,9 @@ $("#partager").onclick = async () => {
   }
   const pdf = await pdfPret;
   // 1) Envoi direct par Cagot (PDF joint, adresses remplies)
+  let directTente = false;
   if (plateforme.envoiDirect && pdf && destinataires.length) {
+    directTente = true;
     const bouton = $("#partager");
     bouton.disabled = true;
     bouton.innerHTML = "<span>⏳</span>Envoi…";
@@ -2598,7 +2602,9 @@ $("#partager").onclick = async () => {
       bouton.innerHTML = "<span>✉️</span>Mail";
     }
   }
-  // 2) Sinon : partage du téléphone (Gmail, WhatsApp…)
+  // 2) Sinon : partage du téléphone (Gmail, WhatsApp…). Après une attente, le téléphone exige
+  // un nouvel appui pour ouvrir le partage : on le demande.
+  if (directTente && !(await demander("Choisis l'appli pour envoyer le devis (Gmail, WhatsApp…). Le PDF est joint et les adresses sont copiées.", { ok: "📤 Choisir l'appli" }))) return;
   const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), destinataires, notifier });
   if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
