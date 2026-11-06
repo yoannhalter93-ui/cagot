@@ -546,3 +546,4 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 #etape-suivante[hidden] { display: none; }
 .entete-chantier #retour-conversation { text-decoration: none; font-weight: 600; white-space: nowrap; }
 .bulle .btn-secondaire { margin-top: 8px; }
+.bandeau.hors-ligne { background: #263548; color: #fff; font-weight: 600; position: sticky; top: 64px; z-index: 9; }

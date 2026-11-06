@@ -1,18 +1,48 @@
 // Service worker de Cagot : reçoit ce qui est partagé depuis les autres applis du téléphone
 // (« Partager → Cagot » : texte de l'appli Notes, Keep, photos de la galerie…).
-// Il ne met rien d'autre en cache : l'appli se charge toujours depuis le réseau.
+// Il garde aussi une copie de l'appli elle-même pour qu'elle s'ouvre sans réseau (mode chantier) :
+// réseau d'abord (les mises à jour arrivent toujours), copie seulement si le réseau ne répond pas.
 const CACHE_PARTAGE = "cagot-partage";
+const CACHE_APPLI = "cagot-appli-v1";
+const COQUILLE = [
+  "/", "/index.html", "/style.css", "/app.js", "/plateforme.js", "/hors-ligne.js", "/calcul.js", "/corps-etat.js",
+  "/pdf-devis.js", "/logo.js", "/config.json", "/manifest.webmanifest", "/vendor/supabase.js",
+  "/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js", "/icones/icone-192.png",
+];
 
-self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("install", (e) => {
+  e.waitUntil(
+    caches.open(CACHE_APPLI)
+      .then((c) => Promise.allSettled(COQUILLE.map((u) => c.add(new Request(u, { cache: "no-cache" })))))
+      .then(() => self.skipWaiting()),
+  );
+});
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method === "POST" && url.origin === location.origin && url.pathname === "/partage") {
-    e.respondWith(recevoirPartage(e.request));
-  }
-  // Toutes les autres requêtes passent normalement par le réseau.
+  if (url.origin !== location.origin) return; // Supabase, IA : gérés par l'appli
+  if (e.request.method === "POST" && url.pathname === "/partage") return e.respondWith(recevoirPartage(e.request));
+  if (e.request.method !== "GET" || url.pathname.startsWith("/partage/") || url.pathname === "/sw.js") return;
+  e.respondWith(reseauPuisCopie(e.request));
 });
+
+async function reseauPuisCopie(requete) {
+  const cache = await caches.open(CACHE_APPLI);
+  const cle = requete.mode === "navigate" ? "/" : new URL(requete.url).pathname;
+  try {
+    const ctrl = new AbortController();
+    const minuterie = setTimeout(() => ctrl.abort(), 6000);
+    const rep = await fetch(requete, { signal: ctrl.signal });
+    clearTimeout(minuterie);
+    if (rep.ok) cache.put(cle, rep.clone()).catch(() => {});
+    return rep;
+  } catch (err) {
+    const copie = await cache.match(cle);
+    if (copie) return copie;
+    throw err;
+  }
+}
 
 async function recevoirPartage(requete) {
   try {

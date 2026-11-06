@@ -155,6 +155,28 @@ $("#micro-note").hidden = !plateforme.dictee;
 $("#option-mains-libres").hidden = !plateforme.dictee;
 $("#imprimer").innerHTML = `<span>📄</span>${plateforme.essai ? "Télécharger" : "PDF"}`;
 $("#photo").closest("label").hidden = plateforme.photos === false;
+// Bandeau « hors connexion » et synchronisation au retour du réseau
+function afficherEtatReseau() {
+  const attente = plateforme.horsLigne?.enAttente() ?? 0;
+  const bandeau = $("#bandeau-hors-ligne");
+  if (!navigator.onLine) {
+    bandeau.hidden = false;
+    bandeau.textContent = `📴 Hors connexion : tu peux continuer tes notes, photos et chantiers.${attente ? ` ${attente} modification${attente > 1 ? "s" : ""} en attente, envoyée${attente > 1 ? "s" : ""} au retour du réseau.` : ""}`;
+  } else if (attente) {
+    bandeau.hidden = false;
+    bandeau.textContent = `🔄 Synchronisation : ${attente} modification${attente > 1 ? "s" : ""} en cours d'envoi…`;
+  } else bandeau.hidden = true;
+}
+let attentePrecedente = plateforme.horsLigne?.enAttente() ?? 0;
+window.addEventListener("cagot-sync", (e) => {
+  if (attentePrecedente && !e.detail.attente && navigator.onLine) notifier("✅ Tout est synchronisé avec le serveur.");
+  attentePrecedente = e.detail.attente;
+  afficherEtatReseau();
+});
+window.addEventListener("online", afficherEtatReseau);
+window.addEventListener("offline", afficherEtatReseau);
+afficherEtatReseau();
+
 if (plateforme.partageTelephone && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch((err) => console.error(err));
 }
@@ -217,7 +239,9 @@ $("#form-nouveau-mdp").onsubmit = async (e) => {
 };
 
 $("#deconnexion").onclick = async () => {
+  if (plateforme.horsLigne?.enAttente() && !(await demander("Des modifications faites hors réseau ne sont pas encore envoyées. Te déconnecter les effacera de ce téléphone.", { ok: "Se déconnecter quand même", danger: true }))) return;
   if (utilisateur) local.effacer(`conversation.${utilisateur.id}`);
+  await plateforme.horsLigne?.oublier();
   await sb.auth.signOut();
 };
 
@@ -270,6 +294,7 @@ async function demarrerSession() {
   } catch (err) {
     erreur("Impossible de charger tes données. Vérifie ta connexion internet.", err);
   }
+  plateforme.horsLigne?.vider();
   conversation = local.lire(`conversation.${utilisateur.id}`, { historique: [], docId: null });
   reafficherConversation();
   // Chantier commencé avant la liste des chantiers : on l'enregistre en ligne.
@@ -1112,7 +1137,8 @@ function enregistrerNote() {
       return;
     }
     local.effacer(cleNoteLocale(id));
-    if (noteCourante?.id === id) etatNote(`Enregistrée à ${heureFr(new Date().toISOString())}`);
+    if (noteCourante?.id === id)
+      etatNote(plateforme.horsLigne?.enAttente() ? "📴 Gardée sur le téléphone · envoi au retour du réseau" : `Enregistrée à ${heureFr(new Date().toISOString())}`);
   });
   return enregistrementNote;
 }
@@ -1150,6 +1176,7 @@ $("#supprimer-note").onclick = async () => {
 };
 
 $("#envoyer-note").onclick = async () => {
+  if (!navigator.onLine) return notifier("📴 L'IA a besoin du réseau. Ta note et tes photos sont bien gardées : relance dès que tu as du réseau.", "erreur");
   const contenu = $("#contenu-note").value.trim();
   const nbPhotos = (noteCourante.photos?.length ?? 0) + photosEnAttente.length;
   if (!contenu && nbPhotos === 0) return notifier("La note est vide.");

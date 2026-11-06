@@ -2,6 +2,8 @@
 // Les adresses viennent de config.json : changer d'hébergeur = changer ce fichier.
 // La version d'essai sur claude.ai remplace ce fichier par scripts/essai/plateforme-essai.js.
 
+import { creerHorsLigne } from "/hors-ligne.js";
+
 const nomFichier = (titre) => String(titre || "document").replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "");
 
 function telecharger(blob, nom) {
@@ -15,12 +17,16 @@ function telecharger(blob, nom) {
 
 export async function demarrerPlateforme() {
   const config = await fetch("config.json", { cache: "no-store" }).then((r) => r.json());
-  const sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+  // Mode chantier sans connexion : lectures gardées, écritures mises en attente puis envoyées.
+  const horsLigne = creerHorsLigne();
+  window.__cagotCle = config.supabaseKey;
+  const sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey, { global: { fetch: horsLigne.fetch } });
   const espacePhotos = () => sb.storage.from("photos-notes");
   return {
     demo: !!config.demo,
     essai: false,
     sb,
+    horsLigne,
     partageTelephone: true, // « Partager → Cagot » depuis les autres applis (service worker)
 
     // Photos des notes, rangées dans un espace privé (<user_id>/<note_id>/<fichier>).
