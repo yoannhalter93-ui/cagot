@@ -219,6 +219,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <button type="button" data-onglet="entreprise" class="actif">Entreprise</button>
       <button type="button" data-onglet="perso">🎨 Logo &amp; couleurs</button>
       <button type="button" data-onglet="tarifs">Tarifs</button>
+      <button type="button" data-onglet="mail">📧 Ma boîte mail</button>
       <button type="button" data-onglet="compte">Compte</button>
     </div>
     <form id="form-entreprise" class="carte">
@@ -271,6 +272,35 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <div class="actions">
         <button id="ajouter-tarif">+ Ajouter un prix</button>
       </div>
+    </div>
+
+    <div class="carte" data-panneau="mail" hidden>
+      <h2>Ma boîte mail</h2>
+      <p class="aide">Branche ta boîte mail : tes devis et factures partent de <strong>ton adresse</strong>, avec le PDF joint, en un appui sur « Envoyer ». Ils apparaissent dans tes messages envoyés et ton client te répond directement.</p>
+      <div id="etat-boite" class="etat-boite"><p class="aide">Chargement…</p></div>
+      <form id="form-boite" hidden>
+        <label>Fournisseur
+          <select name="hote">
+            <option value="smtp.gmail.com">Gmail</option>
+            <option value="smtp.orange.fr">Orange / Wanadoo</option>
+            <option value="smtp.free.fr">Free</option>
+            <option value="smtp.sfr.fr">SFR</option>
+            <option value="smtp.bbox.fr">Bouygues (Bbox)</option>
+            <option value="smtp.laposte.net">La Poste</option>
+            <option value="ssl0.ovh.net">OVH (adresse pro)</option>
+            <option value="smtp.ionos.fr">IONOS (adresse pro)</option>
+            <option value="mail.gandi.net">Gandi (adresse pro)</option>
+            <option value="smtp.zoho.eu">Zoho</option>
+            <option value="smtp.mail.yahoo.com">Yahoo</option>
+          </select>
+        </label>
+        <div id="aide-boite" class="aide-boite"></div>
+        <label>Ton adresse e-mail <input name="email" type="email" inputmode="email" autocomplete="email" required maxlength="200"></label>
+        <label>Nom affiché pour tes clients <input name="nom_affiche" maxlength="120" placeholder="Ex. : PICTURA PEINTURE"></label>
+        <label id="libelle-mdp">Mot de passe d'application <input name="mdp" type="password" autocomplete="off" required maxlength="200" placeholder="16 lettres données par Google"></label>
+        <button class="btn-principal btn-enregistrer" id="brancher-boite">🔌 Brancher ma boîte mail</button>
+        <p class="aide">Cagot t'envoie un mail de test pour vérifier. Ton mot de passe d'application est chiffré sur le serveur et n'est jamais réaffiché. Tu peux le supprimer à tout moment dans ton compte e-mail.</p>
+      </form>
     </div>
 
     <div class="carte" id="carte-compte" data-panneau="compte" hidden>

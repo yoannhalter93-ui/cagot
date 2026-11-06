@@ -78,6 +78,30 @@ export async function demarrerPlateforme() {
         return !!config.envoiUrl;
       }
     },
+    envoiPossible: !!config.envoiUrl,
+    // Boîte mail de l'artisan branchée sur Cagot (réglages côté serveur, mot de passe chiffré).
+    async boiteMail(action, donnees, jeton) {
+      let rep;
+      try {
+        rep = await fetch(config.envoiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${jeton}`, apikey: config.supabaseKey },
+          body: JSON.stringify({ action, ...donnees }),
+        });
+      } catch {
+        throw new Error("Pas de connexion internet.");
+      }
+      const data = await rep.json().catch(() => ({}));
+      if (!rep.ok) throw new Error(data.erreur || "Réglage impossible, réessaie.");
+      if (action !== "boite-statut") {
+        try {
+          localStorage.removeItem("cagot.envoi-inactif");
+        } catch {
+          /* rien */
+        }
+      }
+      return data;
+    },
     async envoyerEmail({ destinataires, sujet, texte, pdf, titre }, jeton) {
       const octets = new Uint8Array(await pdf.arrayBuffer());
       let binaire = "";

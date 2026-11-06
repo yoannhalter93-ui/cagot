@@ -418,9 +418,85 @@ async function nouvelleFactureVierge() {
 }
 $("#nouveau-document").onclick = () => (typeDocs === "facture" ? nouvelleFactureVierge() : nouveauChantier());
 
+// --- Ma boîte mail (envoi depuis l'adresse de l'artisan) ---
+const AIDES_BOITE = {
+  "smtp.gmail.com": `<p><strong>Gmail : crée un « mot de passe d'application » (2 minutes)</strong></p><ol>
+    <li>Ouvre <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a> (connecté à ton Gmail).</li>
+    <li>Si Google le demande, active d'abord la <strong>validation en deux étapes</strong>.</li>
+    <li>Nom de l'application : <strong>Cagot</strong>, puis <strong>Créer</strong>.</li>
+    <li>Copie le code de 16 lettres et colle-le ci-dessous.</li></ol>`,
+  "smtp.orange.fr": "<p>Orange : utilise ton mot de passe de messagerie Orange (ou un mot de passe d'application si tu as la double authentification).</p>",
+  "smtp.mail.yahoo.com": "<p>Yahoo : crée un mot de passe d'application dans « Sécurité du compte ».</p>",
+  "smtp.zoho.eu": "<p>Zoho : crée un mot de passe d'application dans « Sécurité ».</p>",
+};
+
+async function afficherBoite() {
+  const etat = $("#etat-boite");
+  const form = $("#form-boite");
+  if (!plateforme.boiteMail || !plateforme.envoiPossible) {
+    etat.innerHTML = `<p class="aide">Disponible dans la version en ligne de Cagot.</p>`;
+    return;
+  }
+  try {
+    const { boite } = await plateforme.boiteMail("boite-statut", {}, await jetonAcces());
+    if (boite) {
+      form.hidden = true;
+      etat.innerHTML = `<div class="boite-ok">✅ Branchée sur <strong>${esc(boite.email)}</strong><br><small>Tes devis et factures partent de cette adresse.</small></div>
+        <button type="button" class="btn-secondaire" id="changer-boite">Changer</button> <button type="button" class="lien danger" id="debrancher-boite">Débrancher</button>`;
+      $("#changer-boite").onclick = () => {
+        form.hidden = false;
+        form.elements.email.value = boite.email;
+        form.elements.nom_affiche.value = boite.nom_affiche || profil.infos.nom || "";
+        form.elements.hote.value = boite.hote;
+        form.elements.hote.onchange();
+      };
+      $("#debrancher-boite").onclick = async () => {
+        if (!(await demander("Débrancher ta boîte mail ? Les envois repasseront par Gmail/WhatsApp de ton téléphone.", { ok: "Débrancher", danger: true }))) return;
+        await plateforme.boiteMail("boite-supprimer", {}, await jetonAcces()).catch((err) => erreur(err.message, err));
+        afficherBoite();
+      };
+    } else {
+      etat.innerHTML = `<p class="aide">Pas encore branchée.</p>`;
+      form.hidden = false;
+      form.elements.email.value ||= profil.infos.email || utilisateur?.email || "";
+      form.elements.nom_affiche.value ||= profil.infos.nom || "";
+      form.elements.hote.value = /@gmail\.com$/i.test(form.elements.email.value) ? "smtp.gmail.com" : form.elements.hote.value;
+      form.elements.hote.onchange();
+    }
+  } catch (err) {
+    etat.innerHTML = `<p class="aide">${esc(err.message)}</p>`;
+  }
+}
+
+$("#form-boite").elements.hote.onchange = () => {
+  const hote = $("#form-boite").elements.hote.value;
+  $("#aide-boite").innerHTML = AIDES_BOITE[hote] ?? "<p>Utilise le mot de passe de ta messagerie (ou un mot de passe d'application si ton fournisseur le propose).</p>";
+  $("#libelle-mdp").firstChild.textContent = hote === "smtp.gmail.com" ? "Mot de passe d'application " : "Mot de passe de la messagerie ";
+};
+
+$("#form-boite").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const f = ev.target.elements;
+  const bouton = $("#brancher-boite");
+  bouton.disabled = true;
+  bouton.textContent = "Test en cours…";
+  try {
+    const r = await plateforme.boiteMail("boite-enregistrer", { email: f.email.value.trim(), nom_affiche: f.nom_affiche.value.trim(), hote: f.hote.value, mdp: f.mdp.value }, await jetonAcces());
+    f.mdp.value = "";
+    notifier(`✅ Boîte mail branchée : un mail de test est parti vers ${r.email}.`);
+    afficherBoite();
+  } catch (err) {
+    erreur(err.message, err);
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = "🔌 Brancher ma boîte mail";
+  }
+};
+
 // Réglages en onglets
 for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
   b.onclick = () => {
+    if (b.dataset.onglet === "mail") afficherBoite();
     for (const x of document.querySelectorAll(".onglets-reglages [data-onglet]")) x.classList.toggle("actif", x === b);
     for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== b.dataset.onglet;
     $("#form-entreprise").hidden = !["entreprise", "perso"].includes(b.dataset.onglet);

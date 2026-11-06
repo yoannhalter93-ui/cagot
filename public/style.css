@@ -566,3 +566,11 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .vue-client #signer { width: 100%; }
 .vue-client .btn-principal { width: 100%; padding: 13px; margin-top: 12px; }
 .page-client .toast { position: fixed; }
+
+/* --- Ma boîte mail --- */
+.boite-ok { background: #e3f4ea; color: #1e7a45; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.boite-ok small { color: #2d6a45; }
+.aide-boite { background: var(--bleu-clair); border-radius: 12px; padding: 4px 12px; margin: 4px 0 12px; font-size: .9rem; }
+.aide-boite ol { padding-left: 20px; margin: 6px 0; }
+.aide-boite li { margin-bottom: 4px; }
+#form-boite select { width: 100%; font-size: 1rem; padding: 9px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); color: var(--texte); margin-top: 4px; }
