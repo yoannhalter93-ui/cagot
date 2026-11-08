@@ -1,6 +1,8 @@
 // Fabrication du PDF d'un devis / d'une facture (format A4), avec jsPDF + jspdf-autotable
 // chargés à la demande (window.jspdf). Les montants et mentions viennent de l'appli.
 
+import { labelsDe, modeleDe, piedDePage, textesDocument } from "/personnalisation.js";
+
 const BLEU_DEFAUT = [31, 78, 121];
 const GRIS = [107, 118, 132];
 const TEXTE = [28, 36, 48];
@@ -23,6 +25,10 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   const L = 210;
   const M = 15;
   const facture = d.type === "facture";
+  const modele = modeleDe(e);
+  const { intro, fin } = textesDocument(e, d.type);
+  const pied = pdf.splitTextToSize(propre(piedDePage(e)), L - 2 * M).slice(0, 3);
+  const basPage = 18 + pied.length * 3.2; // place réservée en bas de chaque page
   pdf.setProperties({ title: propre(`${elements.titre} – ${v.titre}`), creator: "Cagot" });
 
   // --- En-tête : entreprise (gauche) et client (droite)
@@ -73,9 +79,17 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
 
   // --- Titre, date, objet, description
   y = Math.max(yE, y - 5 + hauteurC) + 9;
-  pdf.setFont("helvetica", "bold").setFontSize(16).setTextColor(...BLEU);
-  pdf.text(propre(elements.titre), M, y);
-  y += 6;
+  if (modele === "moderne") {
+    pdf.setFillColor(...BLEU).roundedRect(M, y - 6.5, L - 2 * M, 10, 1.5, 1.5, "F");
+    pdf.setFont("helvetica", "bold").setFontSize(14).setTextColor(255, 255, 255);
+    pdf.text(propre(elements.titre), M + 4, y + 0.6);
+    y += 9;
+  } else {
+    pdf.setFont("helvetica", "bold").setFontSize(16).setTextColor(...(modele === "epure" ? TEXTE : BLEU));
+    pdf.text(propre(elements.titre), M, y);
+    if (modele === "epure") pdf.setDrawColor(...BLEU).setLineWidth(0.6).line(M, y + 2, M + 30, y + 2).setLineWidth(0.2);
+    y += modele === "epure" ? 7 : 6;
+  }
   pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(...GRIS);
   const meta = pdf.splitTextToSize(propre(`Date : ${dateFr(d.date_document)}  ·  Objet : ${v.titre}`), L - 2 * M);
   pdf.text(meta, M, y);
@@ -86,11 +100,17 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     pdf.text(desc, M, y);
     y += desc.length * 4.2 + 2;
   }
+  if (intro) {
+    pdf.setTextColor(...TEXTE);
+    const t = pdf.splitTextToSize(propre(intro), L - 2 * M);
+    pdf.text(t, M, y + 1);
+    y += t.length * 4.2 + 3;
+  }
 
   // --- Tableau des lignes, par section
   const corps = [];
   for (const s of v.sections ?? []) {
-    corps.push([{ content: propre(s.titre), colSpan: 5, styles: { fillColor: BLEU_CLAIR, fontStyle: "bold" } }]);
+    corps.push([{ content: propre(s.titre), colSpan: 5, styles: modele === "epure" ? { fontStyle: "bold", textColor: BLEU } : { fillColor: BLEU_CLAIR, fontStyle: "bold" } }]);
     for (const l of s.lignes ?? []) {
       const option = l.option ? (l.option_retenue ? "[Option retenue] " : "[Option non retenue] ") : "";
       corps.push([
@@ -104,13 +124,13 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   }
   pdf.autoTable({
     startY: y + 1,
-    margin: { left: M, right: M, bottom: 18 },
+    margin: { left: M, right: M, bottom: basPage },
     head: [["Désignation", "Qté", "Unité", "P.U. HT", "Total HT"]],
     body: corps,
-    theme: "grid",
+    theme: modele === "epure" ? "plain" : "grid",
     rowPageBreak: "avoid",
-    styles: { font: "helvetica", fontSize: 8.5, textColor: TEXTE, lineColor: [215, 221, 228], lineWidth: 0.2, cellPadding: 1.8, valign: "top" },
-    headStyles: { fillColor: BLEU, textColor: 255, fontStyle: "bold" },
+    styles: { font: "helvetica", fontSize: 8.5, textColor: TEXTE, lineColor: [215, 221, 228], lineWidth: modele === "epure" ? { bottom: 0.2 } : 0.2, cellPadding: 1.8, valign: "top" },
+    headStyles: modele === "epure" ? { textColor: BLEU, fontStyle: "bold", lineColor: BLEU, lineWidth: { bottom: 0.5 } } : { fillColor: BLEU, textColor: 255, fontStyle: "bold" },
     columnStyles: { 0: { cellWidth: "auto" }, 1: { cellWidth: 16 }, 2: { cellWidth: 16 }, 3: { cellWidth: 24 }, 4: { cellWidth: 27 } },
   });
   y = pdf.lastAutoTable.finalY + 4;
@@ -121,22 +141,35 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   totaux.push([elements.franchise ? "Net à payer" : "Total TTC", euros(elements.ttc)]);
   pdf.autoTable({
     startY: y,
-    margin: { left: L - M - 75, right: M, bottom: 18 },
+    margin: { left: L - M - 75, right: M, bottom: basPage },
     body: totaux.map(([a, b]) => [propre(a), { content: propre(b), styles: { halign: "right" } }]),
     theme: "plain",
     styles: { font: "helvetica", fontSize: 9.5, textColor: TEXTE, cellPadding: 1.4 },
     didParseCell: (c) => {
-      if (c.row.index === totaux.length - 1) Object.assign(c.cell.styles, { fontStyle: "bold", fontSize: 11.5, fillColor: BLEU_CLAIR });
+      if (c.row.index !== totaux.length - 1) return;
+      Object.assign(c.cell.styles, { fontStyle: "bold", fontSize: 11.5 }, modele === "moderne" ? { fillColor: BLEU, textColor: 255 } : modele === "epure" ? { textColor: BLEU, lineColor: BLEU, lineWidth: { top: 0.5 } } : { fillColor: BLEU_CLAIR });
     },
   });
   y = pdf.lastAutoTable.finalY + 6;
 
-  // --- Mentions légales
   const hauteurPage = pdf.internal.pageSize.getHeight();
+  // --- Texte de fin (remerciements…)
+  if (fin) {
+    pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(...TEXTE);
+    const t = pdf.splitTextToSize(propre(fin), L - 2 * M);
+    if (y + t.length * 4.2 > hauteurPage - basPage) {
+      pdf.addPage();
+      y = 18;
+    }
+    pdf.text(t, M, y);
+    y += t.length * 4.2 + 3;
+  }
+
+  // --- Mentions légales
   pdf.setFont("helvetica", "normal").setFontSize(7.8).setTextColor(...GRIS);
   for (const m of elements.mentions) {
     const lignes = pdf.splitTextToSize(propre(m), L - 2 * M);
-    if (y + lignes.length * 3.6 > hauteurPage - 18) {
+    if (y + lignes.length * 3.6 > hauteurPage - basPage) {
       pdf.addPage();
       y = 18;
     }
@@ -146,7 +179,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
 
   // --- Signatures (devis)
   if (!facture) {
-    if (y + 34 > hauteurPage - 18) {
+    if (y + 34 > hauteurPage - basPage) {
       pdf.addPage();
       y = 18;
     }
@@ -166,6 +199,29 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
         /* image de signature illisible */
       }
     } else pdf.setFontSize(7.5).setTextColor(...GRIS).text(propre("Date, signature et mention « Bon pour accord »"), M + larg + 11, y + 9.5);
+    y += 34;
+  }
+
+  // --- Labels et certifications (RGE, Qualibat…)
+  const labels = labelsDe(e);
+  if (labels.length) {
+    const h = 14;
+    if (y + h + 4 > hauteurPage - basPage) {
+      pdf.addPage();
+      y = 18;
+    }
+    let x = M;
+    for (const l of labels) {
+      try {
+        const { width, height } = pdf.getImageProperties(l);
+        const w = Math.min(36, (width / height) * h);
+        if (x + w > L - M) break;
+        pdf.addImage(l, l.startsWith("data:image/png") ? "PNG" : "JPEG", x, y + 2, w, (height / width) * w > h ? h : (height / width) * w);
+        x += w + 5;
+      } catch {
+        /* label illisible : ignoré */
+      }
+    }
   }
 
   // --- Pied de page
@@ -173,6 +229,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   for (let i = 1; i <= nb; i++) {
     pdf.setPage(i);
     pdf.setFontSize(7.5).setTextColor(...GRIS);
+    if (pied.length) pdf.setFontSize(6.8).text(pied, L / 2, hauteurPage - 10 - pied.length * 3.2, { align: "center" }).setFontSize(7.5);
     pdf.text(propre(`${e.nom || ""}${e.siret ? ` – SIRET ${e.siret}` : ""}`), M, hauteurPage - 8);
     pdf.text(`${propre(d.numero || "brouillon")} – page ${i}/${nb}`, L - M, hauteurPage - 8, { align: "right" });
   }

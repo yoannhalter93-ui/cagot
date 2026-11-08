@@ -3,6 +3,7 @@
 // dans les journaux des serveurs.
 import { calculerTotaux } from "/calcul.js";
 import { genererPdf } from "/pdf-devis.js";
+import { htmlPersonnalisation, modeleDe } from "/personnalisation.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -64,6 +65,7 @@ function rendre() {
         .join("")}`,
     )
     .join("");
+  const perso = htmlPersonnalisation(e, "devis", esc);
   $("#document").innerHTML = `
     <div class="doc-entete">
       <div class="entreprise">
@@ -76,13 +78,17 @@ function rendre() {
     <h2 class="doc-titre">DEVIS n° ${esc(donnees.numero)}</h2>
     <div class="doc-meta">Date : ${dateFr(donnees.date_document)} · Objet : ${esc(c.titre)}</div>
     ${c.description ? `<p>${esc(c.description)}</p>` : ""}
+    ${perso.intro}
     <table class="doc-table"><thead><tr><th>Désignation</th><th class="num">Qté</th><th class="num">P.U. HT</th><th class="num">Total HT</th></tr></thead><tbody>${lignes}</tbody></table>
     <table class="doc-totaux">
       <tr><td>Total HT</td><td class="num">${euros(c.total_ht)}</td></tr>
       ${franchise ? "" : `<tr><td>TVA ${nombre(c.taux_tva)} %</td><td class="num">${euros(c.montant_tva)}</td></tr>`}
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
-    <div class="doc-mentions">${mentions(e, c, ttc).map((m) => `<p>${esc(m)}</p>`).join("")}</div>`;
+    ${perso.fin}
+    <div class="doc-mentions">${mentions(e, c, ttc).map((m) => `<p>${esc(m)}</p>`).join("")}</div>
+    ${perso.labels}${perso.pied}`;
+  $("#document").dataset.modele = modeleDe(e);
   $("#total-signature").textContent = `${euros(ttc)}${franchise ? "" : " TTC"}`;
   $("#signer").textContent = `✍️ Signer et accepter le devis (${euros(ttc)}${franchise ? "" : " TTC"})`;
 }

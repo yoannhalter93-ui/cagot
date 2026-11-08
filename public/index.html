@@ -217,7 +217,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
   <main id="vue-parametres" class="vue" hidden>
     <div class="onglets-reglages" role="tablist">
       <button type="button" data-onglet="entreprise" class="actif">Entreprise</button>
-      <button type="button" data-onglet="perso">🎨 Logo &amp; couleurs</button>
+      <button type="button" data-onglet="perso">🎨 Personnalisation</button>
       <button type="button" data-onglet="tarifs">Tarifs</button>
       <button type="button" data-onglet="mail">📧 Ma boîte mail</button>
       <button type="button" data-onglet="comptable">🧮 Mon comptable</button>
@@ -260,7 +260,40 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
         <label class="ligne-couleur">Couleur des documents <input type="color" name="couleur" value="#1f3b63"></label>
         <button type="button" id="couleur-logo" class="btn" hidden>🎨 Prendre la couleur du logo</button>
       </div>
-      <label>Conditions particulières (ajoutées en bas de chaque devis et facture) <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
+
+      <h3 class="titre-reglage">Modèle de mise en page</h3>
+      <div class="choix-modeles">
+        <label class="modele"><input type="radio" name="modele" value="classique" checked><span class="mini mini-classique"><i></i><b></b><em></em><em></em><u></u></span><strong>Classique</strong><small>Sobre, tableau en couleur</small></label>
+        <label class="modele"><input type="radio" name="modele" value="moderne"><span class="mini mini-moderne"><i></i><b></b><em></em><em></em><u></u></span><strong>Moderne</strong><small>Bandeaux de couleur</small></label>
+        <label class="modele"><input type="radio" name="modele" value="epure"><span class="mini mini-epure"><i></i><b></b><em></em><em></em><u></u></span><strong>Épuré</strong><small>Lignes fines, sans aplats</small></label>
+      </div>
+
+      <h3 class="titre-reglage">Textes des devis</h3>
+      <label>Introduction (avant le détail des travaux) <textarea name="intro_devis" rows="2" maxlength="1500" placeholder="Ex : Suite à notre visite, voici notre proposition pour les travaux demandés."></textarea></label>
+      <label>Texte de fin <textarea name="fin_devis" rows="2" maxlength="1500" placeholder="Ex : Merci de votre confiance. Nous restons à votre disposition pour toute question."></textarea></label>
+      <label>Conditions particulières des devis <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
+
+      <h3 class="titre-reglage">Textes des factures</h3>
+      <label>Introduction <textarea name="intro_facture" rows="2" maxlength="1500" placeholder="Ex : Facture des travaux réalisés conformément au devis accepté."></textarea></label>
+      <label>Texte de fin <textarea name="fin_facture" rows="2" maxlength="1500" placeholder="Ex : Merci pour votre règlement et pour votre confiance."></textarea></label>
+      <label>Conditions particulières des factures <textarea name="conditions_facture" rows="3" maxlength="1500" placeholder="Laisse vide pour reprendre celles des devis."></textarea></label>
+
+      <h3 class="titre-reglage">Labels et certifications</h3>
+      <p class="aide">RGE, Qualibat, Handibat, Artisan de confiance… Ajoute leurs logos : ils apparaissent en bas de tes devis et factures et rassurent tes clients.</p>
+      <div id="liste-labels" class="liste-labels"></div>
+      <label class="btn" id="ajouter-label">+ Ajouter un label<input type="file" id="fichier-label" accept="image/*" hidden></label>
+      <input type="hidden" name="labels">
+
+      <h3 class="titre-reglage">Pied de page</h3>
+      <label>Texte en bas de chaque page <textarea name="pied_page" rows="2" maxlength="400" placeholder="Ex : SARL au capital de 5 000 € – RCS Lyon 123 456 789 – APE 4334Z"></textarea></label>
+
+      <h3 class="titre-reglage">Numérotation</h3>
+      <div class="ligne-prefixes">
+        <label>Début des n° de devis <input name="prefixe_devis" maxlength="10" placeholder="DEV" autocapitalize="characters"></label>
+        <label>Début des n° de factures <input name="prefixe_facture" maxlength="10" placeholder="FAC" autocapitalize="characters"></label>
+      </div>
+      <p class="aide" id="apercu-numeros"></p>
+      <button type="button" id="reprendre-numeros" class="lien">Je viens d'un autre logiciel : continuer ma numérotation de factures</button>
       </div>
 
       <button class="btn-principal btn-enregistrer">Enregistrer</button>

@@ -6,7 +6,7 @@ const CACHE_PARTAGE = "cagot-partage";
 const CACHE_APPLI = "cagot-appli-v1";
 const COQUILLE = [
   "/", "/index.html", "/style.css", "/app.js", "/plateforme.js", "/hors-ligne.js", "/calcul.js", "/corps-etat.js",
-  "/pdf-devis.js", "/logo.js", "/config.json", "/manifest.webmanifest", "/vendor/supabase.js",
+  "/pdf-devis.js", "/personnalisation.js", "/logo.js", "/config.json", "/manifest.webmanifest", "/vendor/supabase.js",
   "/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js", "/icones/icone-192.png",
 ];
 

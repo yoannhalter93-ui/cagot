@@ -3,6 +3,7 @@ import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
 import { genererPdf } from "/pdf-devis.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
+import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
 // ---------------------------------------------------------------------------
 // Utilitaires
@@ -145,7 +146,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "8 nov. 2026 · tarifs lisibles";
+const VERSION_APPLI = "8 nov. 2026 · personnalisation";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2329,7 +2330,7 @@ function appliquerCouleur(el, couleur) {
 
 // Prépare le logo : fond retiré, recadré au plus près, réduit (max 600 × 240 px),
 // et couleur principale proposée pour les documents.
-async function preparerLogo(fichier) {
+async function preparerLogo(fichier, { largeur = 600, hauteur = 240 } = {}) {
   const url = URL.createObjectURL(fichier);
   try {
     const img = await new Promise((ok, ko) => {
@@ -2350,7 +2351,7 @@ async function preparerLogo(fichier) {
     sctx.putImageData(pixels, 0, 0);
     const couleur = couleurDominante(pixels);
 
-    const echelle = Math.min(1, 600 / cadre.w, 240 / cadre.h);
+    const echelle = Math.min(1, largeur / cadre.w, hauteur / cadre.h);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(cadre.w * echelle));
     canvas.height = Math.max(1, Math.round(cadre.h * echelle));
@@ -2386,7 +2387,8 @@ function elementsDocument(d, e = profil.infos) {
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
   else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
-  if (e.conditions?.trim()) mentions.push(e.conditions.trim());
+  const conditions = conditionsDe(e, d.type);
+  if (conditions) mentions.push(conditions);
 
   const titre = facture ? (d.numero ? `FACTURE n° ${d.numero}` : "FACTURE (brouillon, non numérotée)") : `DEVIS n° ${d.numero}`;
   return { franchise, tauxTva, tva, ttc, mentions: mentions.filter(Boolean), titre };
@@ -2486,6 +2488,7 @@ function rendreDocument() {
 
   const { tauxTva, tva, ttc, mentions } = elementsDocument(d, e);
 
+  const perso = htmlPersonnalisation(e, d.type, esc);
   const titreDoc = facture
     ? d.numero ? `FACTURE n° ${esc(d.numero)}` : "FACTURE (brouillon, non numérotée)"
     : `DEVIS n° ${esc(d.numero)}`;
@@ -2512,6 +2515,7 @@ function rendreDocument() {
     <h2 class="doc-titre">${titreDoc}</h2>
     <div class="doc-meta">Date : ${dateFr(d.date_document)} · Objet : <span ${editable} data-champ="titre">${esc(v.titre)}</span></div>
     <p ${editable} data-champ="description">${esc(v.description)}</p>
+    ${perso.intro}
     <table class="doc-table">
       <thead><tr><th>Désignation</th><th class="num">Qté</th><th>Unité</th><th class="num">P.U. HT</th><th class="num">Total HT</th></tr></thead>
       <tbody>${lignes}</tbody>
@@ -2521,6 +2525,7 @@ function rendreDocument() {
       ${franchise ? "" : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
+    ${perso.fin}
     <div class="doc-mentions">${mentions
       .filter((m) => !m.startsWith("Durée estimée"))
       .map((m) => `<p>${esc(m)}</p>`)
@@ -2530,9 +2535,11 @@ function rendreDocument() {
         : `<p>Durée estimée des travaux : <span ${editable} data-champ="duree_estimee" class="champ-duree">${esc(v.duree_estimee) || "<em>à préciser (ex. 3 jours)</em>"}</span>.</p>`
     }</div>
     ${facture ? "" : `<div class="doc-signature"><div>L'entreprise</div><div>Le client<br><small>Date, signature et mention « Bon pour accord »</small></div></div>`}
+    ${perso.labels}${perso.pied}
   `;
 
   appliquerCouleur($("#document"), e.couleur);
+  $("#document").dataset.modele = modeleDe(e);
   if (verrouille) return;
   $("#choisir-client").onclick = async () => {
     const c = await choisirClient();
@@ -2833,11 +2840,14 @@ $("#supprimer").onclick = async () => {
 function afficherParametres() {
   const form = $("#form-entreprise");
   for (const champ of form.elements) {
-    if (!champ.name) continue;
+    if (!champ.name || champ.name === "labels") continue;
     if (champ.type === "checkbox") champ.checked = !!profil.infos[champ.name];
+    else if (champ.type === "radio") champ.checked = champ.value === modeleDe(profil.infos);
     else if (profil.infos[champ.name] !== undefined) champ.value = profil.infos[champ.name];
   }
   afficherLogo(profil.infos.logo);
+  afficherLabels(labelsDe(profil.infos));
+  afficherNumeros();
   $("#liste-metiers").innerHTML = CORPS_ETAT.map(
     (c) => `<label><input type="checkbox" value="${esc(c.id)}" ${profil.metiers.includes(c.id) ? "checked" : ""}> ${esc(c.nom)}</label>`,
   ).join("");
@@ -2897,18 +2907,90 @@ $("#fichier-logo").onchange = async (ev) => {
 };
 $("#retirer-logo").onclick = () => afficherLogo("");
 
+// --- Labels (RGE, Qualibat…) : petites images détourées, gardées dans les infos de l'entreprise
+function labelsFormulaire() {
+  return labelsDe({ labels: $("#form-entreprise [name=labels]").value });
+}
+function afficherLabels(labels) {
+  $("#form-entreprise [name=labels]").value = JSON.stringify(labels);
+  $("#liste-labels").innerHTML = labels.length
+    ? labels.map((l, i) => `<div class="label-reglage"><img src="${esc(l)}" alt="Label ${i + 1}"><button type="button" class="lien danger" data-retirer-label="${i}" aria-label="Retirer ce label">✕</button></div>`).join("")
+    : `<p class="aide">Aucun label pour l'instant.</p>`;
+  $("#ajouter-label").hidden = labels.length >= LABELS_MAX;
+  for (const b of $("#liste-labels").querySelectorAll("[data-retirer-label]")) {
+    b.onclick = () => {
+      const l = labelsFormulaire();
+      l.splice(Number(b.dataset.retirerLabel), 1);
+      afficherLabels(l);
+      notifier("Label retiré : appuie sur « Enregistrer ».");
+    };
+  }
+}
+$("#fichier-label").onchange = async (ev) => {
+  const fichier = ev.target.files?.[0];
+  ev.target.value = "";
+  if (!fichier) return;
+  try {
+    const { donnees } = await preparerLogo(fichier, { largeur: 320, hauteur: 160 });
+    afficherLabels([...labelsFormulaire(), donnees].slice(0, LABELS_MAX));
+    notifier("Label ajouté : appuie sur « Enregistrer ».");
+  } catch (err) {
+    erreur("Ce fichier n'est pas une image utilisable (PNG ou JPEG).", err);
+  }
+};
+
+// --- Numérotation : aperçu des prochains numéros et reprise depuis un autre logiciel
+async function afficherNumeros() {
+  const zone = $("#apercu-numeros");
+  const { data, error } = await sb.rpc("numerotation");
+  if (error) {
+    zone.textContent = "";
+    $("#reprendre-numeros").hidden = true;
+    return null;
+  }
+  zone.innerHTML = `Prochain devis : <strong>${esc(data.devis)}</strong> · prochaine facture : <strong>${esc(data.facture)}</strong>`;
+  $("#reprendre-numeros").hidden = false;
+  return data;
+}
+$("#reprendre-numeros").onclick = async () => {
+  const data = await afficherNumeros();
+  if (!data) return erreur("Numérotation indisponible (connexion ?).");
+  const saisie = await demanderTexte(
+    `Numéro de ta prochaine facture ${new Date().getFullYear()} (ex. : ta dernière était la n° 57 → tape 58)`,
+    "Numéro",
+    String(data.facture_suivante),
+  );
+  if (saisie === null) return;
+  const n = Number(String(saisie).replace(/\D/g, ""));
+  if (!n || n < data.facture_suivante) return erreur(`Le numéro ne peut qu'avancer (au moins ${data.facture_suivante}) : sinon deux factures auraient le même numéro.`);
+  const { error } = await sb.rpc("numerotation", { p_prochain_facture: n });
+  if (error) return erreur("Numérotation non modifiée.", error);
+  await afficherNumeros();
+  notifier("Numérotation des factures mise à jour.");
+};
+
 $("#form-entreprise").onsubmit = async (ev) => {
   ev.preventDefault();
   const infos = {};
   for (const champ of ev.target.elements) {
     if (!champ.name) continue;
+    if (champ.type === "radio") {
+      if (champ.checked) infos[champ.name] = champ.value;
+      continue;
+    }
     infos[champ.name] = champ.type === "checkbox" ? champ.checked : champ.value.trim();
+  }
+  infos.labels = labelsDe(infos);
+  for (const k of ["prefixe_devis", "prefixe_facture"]) {
+    infos[k] = (infos[k] || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+    ev.target.elements[k].value = infos[k];
   }
   const metiers = [...$("#liste-metiers").querySelectorAll("input:checked")].map((i) => i.value);
   const { error } = await sb.from("entreprises").upsert({ user_id: utilisateur.id, infos, metiers, updated_at: new Date().toISOString() });
   if (error) return erreur("Informations non enregistrées.", error);
   profil = { infos, metiers };
   notifier("Informations enregistrées.");
+  afficherNumeros();
 };
 
 function optionsCorps(selection) {

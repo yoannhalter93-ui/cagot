@@ -2,6 +2,7 @@
 // qui l'ont invité. Tout passe par des fonctions du serveur qui vérifient l'accès à chaque appel
 // (invitation acceptée, non retirée) : le comptable ne peut ni lire autre chose, ni modifier.
 import { genererPdf } from "/pdf-devis.js";
+import { conditionsDe } from "/personnalisation.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -314,7 +315,7 @@ function elementsFacture(f, e) {
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
   else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
-  if (e.conditions?.trim()) mentions.push(e.conditions.trim());
+  if (conditionsDe(e, "facture")) mentions.push(conditionsDe(e, "facture"));
   return {
     franchise,
     tauxTva,

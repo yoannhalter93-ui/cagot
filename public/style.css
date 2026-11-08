@@ -596,3 +596,45 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .page-comptable .ligne-doc small { display: block; }
 .periode-perso[hidden] { display: none; }
 .page-comptable .pastille { white-space: nowrap; }
+
+/* --- Personnalisation : réglages --- */
+.titre-reglage { font-size: 1rem; color: var(--bleu); margin: 22px 0 6px; padding-top: 14px; border-top: 1px solid var(--bord); }
+.choix-modeles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.choix-modeles .modele { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; border: 2px solid var(--bord); border-radius: 12px; padding: 10px 6px; cursor: pointer; background: var(--surface); margin: 0; }
+.choix-modeles .modele:has(input:checked) { border-color: var(--vert); box-shadow: 0 0 0 2px rgba(47,138,78,.15); }
+.choix-modeles .modele { position: relative; min-width: 0; }
+.choix-modeles input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+.choix-modeles small { color: var(--gris); font-size: .72rem; line-height: 1.2; }
+.mini { width: 64px; height: 84px; border: 1px solid var(--bord); border-radius: 4px; background: #fff; padding: 6px 5px; display: flex; flex-direction: column; gap: 4px; }
+.mini i { height: 6px; width: 40%; background: var(--bleu); border-radius: 2px; }
+.mini b { height: 7px; width: 70%; background: var(--bleu); border-radius: 2px; }
+.mini em { height: 4px; background: #e2e6ea; border-radius: 1px; }
+.mini u { margin-top: auto; align-self: flex-end; height: 7px; width: 45%; background: var(--bleu-clair); border-radius: 2px; }
+.mini-moderne b { width: 100%; height: 10px; }
+.mini-moderne u { background: var(--bleu); }
+.mini-epure i, .mini-epure b { background: none; border-bottom: 2px solid var(--bleu); border-radius: 0; }
+.mini-epure b { border-color: var(--texte); }
+.mini-epure u { background: none; border-top: 2px solid var(--bleu); border-radius: 0; }
+.liste-labels { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 10px; }
+.label-reglage { position: relative; border: 1px solid var(--bord); border-radius: 10px; padding: 6px; background: #fff; }
+.label-reglage img { height: 48px; max-width: 120px; object-fit: contain; display: block; }
+.label-reglage button { position: absolute; top: -10px; right: -10px; background: var(--surface); border: 1px solid var(--bord); border-radius: 50%; width: 26px; height: 26px; padding: 0; text-decoration: none; }
+#ajouter-label { display: inline-block; width: auto; margin: 0; padding: 10px 14px; border: 1px dashed var(--bleu); border-radius: 10px; color: var(--bleu); font-weight: 600; cursor: pointer; }
+#ajouter-label input { display: none; }
+#ajouter-label[hidden] { display: none; }
+.ligne-prefixes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ligne-prefixes input { text-transform: uppercase; }
+
+/* --- Personnalisation : document (écran et page client) --- */
+.doc-intro, .doc-fin { white-space: normal; margin: 10px 0; }
+.doc-labels { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 16px; }
+.doc-labels img { height: 44px; max-width: 130px; object-fit: contain; }
+.doc-pied { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--bord); text-align: center; color: var(--gris); font-size: 11px; }
+.document[data-modele="moderne"] .doc-titre { background: var(--bleu); color: #fff; padding: 8px 12px; border-radius: 6px; }
+.document[data-modele="moderne"] .doc-totaux .ttc td { background: var(--bleu); color: #fff; border-top: 0; }
+.document[data-modele="moderne"] .doc-totaux .ttc td:first-child { border-radius: 6px 0 0 6px; }
+.document[data-modele="moderne"] .doc-totaux .ttc td:last-child { border-radius: 0 6px 6px 0; }
+.document[data-modele="epure"] .doc-titre { color: var(--texte); border-bottom: 2px solid var(--bleu); display: inline-block; padding-bottom: 4px; }
+.document[data-modele="epure"] .doc-table th { background: none; color: var(--bleu); border-bottom: 2px solid var(--bleu); }
+.document[data-modele="epure"] .doc-table .section td { background: none; color: var(--bleu); }
+.document[data-modele="epure"] .doc-entete .client { border: 0; border-left: 3px solid var(--bleu); border-radius: 0; }
