@@ -258,7 +258,7 @@ button, input, textarea { font: inherit; }
   border: 0; background: var(--rouge); color: #fff; font-size: 13px; line-height: 24px; cursor: pointer;
 }
 .photo-note.envoi img { opacity: .45; }
-.doc-mentions .champ-duree { color: var(--texte, #1c2430); font-weight: 600; border-bottom: 1px dashed var(--bleu); padding: 0 2px; }
+.doc-mentions .champ-duree { color: var(--texte, #1c2430); font-weight: 600; border-bottom: 1px dashed var(--bleu); padding: 0 2px; display: inline-block; min-width: 6em; }
 .doc-mentions .champ-duree:focus { outline: none; background: #fffbe6; }
 
 /* --- Personnalisation (logo, couleur) --- */
@@ -638,3 +638,11 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .document[data-modele="epure"] .doc-table th { background: none; color: var(--bleu); border-bottom: 2px solid var(--bleu); }
 .document[data-modele="epure"] .doc-table .section td { background: none; color: var(--bleu); }
 .document[data-modele="epure"] .doc-entete .client { border: 0; border-left: 3px solid var(--bleu); border-radius: 0; }
+
+/* --- Mentions légales du document : type de client, rétractation, autoliquidation --- */
+.cadre-legal { background: var(--bleu-clair); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.cadre-legal .choix-client { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.cadre-legal label { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-weight: 400; }
+.cadre-legal input { width: auto; margin-top: 2px; }
+.formulaire-retractation { margin-top: 16px; border: 1px dashed var(--bord); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+.formulaire-retractation summary { cursor: pointer; font-weight: 600; }

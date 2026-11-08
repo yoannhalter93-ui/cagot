@@ -1,6 +1,7 @@
 // Fabrication du PDF d'un devis / d'une facture (format A4), avec jsPDF + jspdf-autotable
 // chargés à la demande (window.jspdf). Les montants et mentions viennent de l'appli.
 
+import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement } from "/mentions-legales.js";
 import { labelsDe, modeleDe, piedDePage, textesDocument } from "/personnalisation.js";
 
 const BLEU_DEFAUT = [31, 78, 121];
@@ -69,6 +70,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     ...pdf.splitTextToSize(propre(v.client_adresse || ""), largeurC - 6),
     ...(v.client_telephone ? [propre(`Tél. ${v.client_telephone}`)] : []),
     ...(v.client_email ? pdf.splitTextToSize(propre(v.client_email), largeurC - 6) : []),
+    ...(!estParticulier(v) && v.client_siren ? [propre(`SIREN ${v.client_siren}`)] : []),
     ...(v.adresse_chantier ? pdf.splitTextToSize(propre(`Chantier : ${v.adresse_chantier}`), largeurC - 6) : []),
   ];
   const hauteurC = 9 + Math.max(lignesClient.length, 2) * 4.4;
@@ -137,7 +139,8 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
 
   // --- Totaux
   const totaux = [["Total HT", euros(v.total_ht)]];
-  if (!elements.franchise) totaux.push([`TVA ${nombre(elements.tauxTva)} %`, euros(elements.tva)]);
+  if (autoliquidation(v)) totaux.push(["TVA autoliquidée", euros(0)]);
+  else if (!elements.franchise) totaux.push([`TVA ${nombre(elements.tauxTva)} %`, euros(elements.tva)]);
   totaux.push([elements.franchise ? "Net à payer" : "Total TTC", euros(elements.ttc)]);
   pdf.autoTable({
     startY: y,
@@ -221,6 +224,23 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
       } catch {
         /* label illisible : ignoré */
       }
+    }
+  }
+
+  // --- Formulaire de rétractation (devis signé chez un particulier)
+  if (!facture && horsEtablissement(v)) {
+    const f = formulaireRetractation(e, d);
+    pdf.addPage();
+    y = 22;
+    pdf.setDrawColor(...GRIS).setLineDashPattern([2, 1.5], 0).line(M, 14, L - M, 14).setLineDashPattern([], 0);
+    pdf.setFontSize(7).setTextColor(...GRIS).text(propre("À découper ou à recopier"), M, 12);
+    pdf.setFont("helvetica", "bold").setFontSize(14).setTextColor(...TEXTE).text(propre(f.titre), M, y);
+    y += 9;
+    pdf.setFont("helvetica", "normal").setFontSize(10);
+    for (const l of f.lignes) {
+      const t = pdf.splitTextToSize(propre(l), L - 2 * M);
+      pdf.text(t, M, y);
+      y += t.length * 5 + 4;
     }
   }
 

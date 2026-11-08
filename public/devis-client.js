@@ -4,6 +4,7 @@
 import { calculerTotaux } from "/calcul.js";
 import { genererPdf } from "/pdf-devis.js";
 import { htmlPersonnalisation, modeleDe } from "/personnalisation.js";
+import { autoliquidation, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -33,13 +34,21 @@ function totaux() {
 
 function mentions(e, c, ttc) {
   const m = [`Devis valable ${e.validite || 30} jours à compter du ${dateFr(donnees.date_document)}. Devis gratuit.`];
-  if (Number(e.acompte)) m.push(`Acompte de ${e.acompte} % à la signature (${euros((ttc * Number(e.acompte)) / 100)}), solde à la fin des travaux.`);
+  if (Number(e.acompte)) m.push(texteAcompte(c, Number(e.acompte), euros((ttc * Number(e.acompte)) / 100)));
   if (c.duree_estimee) m.push(`Durée estimée des travaux : ${c.duree_estimee}.`);
+  m.push(...mentionsClient({ type: "devis", numero: donnees.numero, contenu: c }, e, dateFr));
   if (e.franchise_tva) m.push("TVA non applicable, art. 293 B du CGI.");
-  else if (Number(c.taux_tva) < 20) m.push(`Taux de TVA réduit de ${nombre(c.taux_tva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans, sur déclaration du client.`);
+  else if (autoliquidation(c)) {
+    // mention d'autoliquidation déjà ajoutée
+  } else if (Number(c.taux_tva) < 20) m.push(`Taux de TVA réduit de ${nombre(c.taux_tva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans, sur déclaration du client.`);
   if (e.assurance) m.push(`Assurance décennale : ${e.assurance}.`);
   if (e.conditions) m.push(e.conditions);
   return m;
+}
+
+function formulaireHtml(e) {
+  const f = formulaireRetractation(e, { numero: donnees.numero, contenu });
+  return `<details class="formulaire-retractation"><summary>${esc(f.titre)}</summary>${f.lignes.filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join("")}</details>`;
 }
 
 function rendre() {
@@ -87,7 +96,8 @@ function rendre() {
     </table>
     ${perso.fin}
     <div class="doc-mentions">${mentions(e, c, ttc).map((m) => `<p>${esc(m)}</p>`).join("")}</div>
-    ${perso.labels}${perso.pied}`;
+    ${perso.labels}${perso.pied}
+    ${horsEtablissement(c) ? formulaireHtml(e) : ""}`;
   $("#document").dataset.modele = modeleDe(e);
   $("#total-signature").textContent = `${euros(ttc)}${franchise ? "" : " TTC"}`;
   $("#signer").textContent = `✍️ Signer et accepter le devis (${euros(ttc)}${franchise ? "" : " TTC"})`;

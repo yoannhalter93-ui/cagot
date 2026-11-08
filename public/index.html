@@ -195,6 +195,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
           <button id="en-facture">🧾 Créer la facture</button>
           <button id="emettre">✅ Émettre la facture</button>
           <button id="payee">💶 Marquer payée</button>
+          <button id="faire-avoir">↩️ Faire un avoir (annuler la facture)</button>
           <button id="supprimer" class="danger">🗑️ Supprimer</button>
         </div>
       </details>
@@ -235,6 +236,8 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <label>N° TVA intracommunautaire <input name="tva_intra" maxlength="20"></label>
       <label><input type="checkbox" name="franchise_tva"> Auto-entrepreneur (TVA non applicable, art. 293 B du CGI)</label>
       <label>Assurance décennale (assureur, n° de contrat, zone) <textarea name="assurance" rows="2" maxlength="500"></textarea></label>
+      <label>Médiateur de la consommation (nom et site internet) <input name="mediateur" maxlength="200" placeholder="Ex. : CM2C – www.cm2c.net"></label>
+      <p class="aide">Obligatoire quand tu travailles pour des particuliers. Ta chambre des métiers ou ta fédération (CAPEB, FFB) t'en propose un, souvent gratuit ou à quelques euros par an.</p>
       <label>IBAN (affiché sur les factures) <input name="iban" maxlength="40"></label>
       <label>Validité des devis (jours) <input name="validite" type="number" min="1" value="30"></label>
       <label>Acompte demandé à la signature (%) <input name="acompte" type="number" min="0" max="100" value="30"></label>

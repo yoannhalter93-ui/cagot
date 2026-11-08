@@ -3,6 +3,7 @@
 // (invitation acceptée, non retirée) : le comptable ne peut ni lire autre chose, ni modifier.
 import { genererPdf } from "/pdf-devis.js";
 import { conditionsDe } from "/personnalisation.js";
+import { autoliquidation, mentionsClient } from "/mentions-legales.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -267,7 +268,7 @@ function rendreDossier() {
           return `<div class="element-liste carte-doc">
             <div class="ligne-doc">
               <div><strong>${esc(x.contenu.client_nom || x.contenu.titre || "Client")}</strong>
-                <small>Facture ${esc(x.numero)} · ${dateFr(x.date_document)}${x.contenu.titre ? ` · ${esc(x.contenu.titre)}` : ""}</small>
+                <small>${x.contenu.avoir ? "Avoir" : "Facture"} ${esc(x.numero)} · ${dateFr(x.date_document)}${x.contenu.titre ? ` · ${esc(x.contenu.titre)}` : ""}</small>
                 <small>HT ${euros(m.ht)} · TVA ${euros(m.tva)}</small></div>
               <div class="droite"><strong>${euros(m.ttc)}</strong><br><span class="pastille statut-${x.statut}">${x.statut === "payee" ? "Payée" : "À encaisser"}</span></div>
             </div>
@@ -306,14 +307,19 @@ function elementsFacture(f, e) {
   const v = f.contenu;
   const franchise = !!e.franchise_tva;
   const tauxTva = franchise ? 0 : v.taux_tva;
-  const mentions = [
-    `Date d'échéance : ${dateFr(ajouterJours(f.date_document, e.delai_paiement || 30))}.`,
-    v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
-    "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
-    e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
-  ];
+  const mentions = v.avoir
+    ? []
+    : [
+        `Date d'échéance : ${dateFr(ajouterJours(f.date_document, e.delai_paiement || 30))}.`,
+        v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
+        "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
+        e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
+      ];
+  mentions.push(...mentionsClient(f, e, dateFr));
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
-  else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
+  else if (autoliquidation(v)) {
+    // mention d'autoliquidation déjà ajoutée
+  } else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
   if (conditionsDe(e, "facture")) mentions.push(conditionsDe(e, "facture"));
   return {
@@ -322,7 +328,7 @@ function elementsFacture(f, e) {
     tva: franchise ? 0 : v.montant_tva,
     ttc: franchise ? v.total_ht : v.total_ttc,
     mentions: mentions.filter(Boolean),
-    titre: `FACTURE n° ${f.numero}`,
+    titre: `${v.avoir ? "AVOIR" : "FACTURE"} n° ${f.numero}`,
   };
 }
 

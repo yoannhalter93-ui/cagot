@@ -99,7 +99,7 @@ begin
       'assurance', e->>'assurance', 'validite', e->>'validite', 'acompte', e->>'acompte', 'conditions', e->>'conditions',
       'logo', e->>'logo', 'couleur', e->>'couleur',
       'modele', e->>'modele', 'intro_devis', e->>'intro_devis', 'fin_devis', e->>'fin_devis',
-      'pied_page', e->>'pied_page', 'labels', e->'labels'),
+      'pied_page', e->>'pied_page', 'labels', e->'labels', 'mediateur', e->>'mediateur'),
     'signe_at', v.signe_at, 'signataire_nom', v.signataire_nom, 'signature', v.signature,
     'expire_at', v.expire_at);
 end;

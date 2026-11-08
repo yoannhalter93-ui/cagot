@@ -3,6 +3,7 @@ import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
 import { genererPdf } from "/pdf-devis.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
+import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
 // ---------------------------------------------------------------------------
@@ -146,7 +147,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "8 nov. 2026 · personnalisation";
+const VERSION_APPLI = "8 nov. 2026 · mentions légales";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -1175,6 +1176,12 @@ async function enregistrerDevis(devis) {
         client_telephone: devis.client_telephone || ancien.client_telephone || "",
         ...(ancien.suivi ? { suivi: ancien.suivi } : {}),
       };
+      // Les choix légaux faits à la main restent (type de client, rétractation, dates, autoliquidation).
+      for (const k of ["client_type", "client_siren", "hors_etablissement", "date_debut", "autoliquidation", "taux_tva_avant"]) {
+        if (ancien[k] !== undefined && contenu[k] === undefined) contenu[k] = ancien[k];
+      }
+      if (!contenu.adresse_chantier && ancien.adresse_chantier) contenu.adresse_chantier = ancien.adresse_chantier;
+      if (contenu.autoliquidation) Object.assign(contenu, calculerTotaux({ ...contenu, taux_tva: 0 }));
       const { error } = await sb.from("documents").update({ contenu, conversation: histo }).eq("id", conversation.docId);
       if (error) throw new Error("Le devis n'a pas pu être enregistré.");
       return conversation.docId;
@@ -2095,6 +2102,7 @@ async function choisirClient() {
 // ---------------------------------------------------------------------------
 // Liste des documents
 // ---------------------------------------------------------------------------
+const nomDoc = (d) => (d.type === "devis" ? "Devis" : d.contenu?.avoir ? "Avoir" : "Facture");
 const LIBELLES_STATUT = {
   brouillon: "brouillon",
   envoye: "envoyé",
@@ -2255,7 +2263,7 @@ function carteDocument(d, factureDe) {
   return `<div class="element-liste carte-doc statut-${d.statut}" data-id="${esc(d.id)}">
     <div class="ligne-doc">
       <div><strong>${esc(c.client_nom || c.titre || "Sans titre")}</strong>
-        <small>${esc(d.type === "devis" ? "Devis" : "Facture")} ${esc(d.numero || "brouillon")}${c.client_nom ? ` · ${esc(c.titre)}` : ""}</small></div>
+        <small>${esc(nomDoc(d))} ${esc(d.numero || "brouillon")}${c.client_nom ? ` · ${esc(c.titre)}` : ""}</small></div>
       <div class="droite"><strong>${euros(montantDoc(d))}</strong><br><span class="pastille ${d.type} statut-${d.statut}">${LIBELLES_STATUT[d.statut]}</span></div>
     </div>
     <div class="etat-doc">${etat}</div>
@@ -2371,8 +2379,11 @@ function elementsDocument(d, e = profil.infos) {
   const tva = franchise ? 0 : v.montant_tva;
   const ttc = franchise ? v.total_ht : v.total_ttc;
   const acompte = Number(e.acompte || 0);
+  const avoir = facture && !!v.avoir;
 
-  const mentions = facture
+  const mentions = avoir
+    ? []
+    : facture
     ? [
         d.statut !== "brouillon" ? `Date d'échéance : ${dateFr(ajouterJours(d.date_document, e.delai_paiement || 30))}.` : "",
         v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
@@ -2381,16 +2392,20 @@ function elementsDocument(d, e = profil.infos) {
       ]
     : [
         `Devis valable ${e.validite || 30} jours à compter du ${dateFr(d.date_document)}. Devis gratuit.`,
-        acompte ? `Acompte de ${acompte} % à la signature (${euros((ttc * acompte) / 100)}), solde à la fin des travaux.` : "",
+        texteAcompte(v, acompte, euros((ttc * acompte) / 100)),
         v.duree_estimee ? `Durée estimée des travaux : ${v.duree_estimee}.` : "",
       ];
+  mentions.push(...mentionsClient(d, e, dateFr));
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
-  else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
+  else if (autoliquidation(v)) {
+    // mention d'autoliquidation déjà ajoutée
+  } else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
   const conditions = conditionsDe(e, d.type);
   if (conditions) mentions.push(conditions);
 
-  const titre = facture ? (d.numero ? `FACTURE n° ${d.numero}` : "FACTURE (brouillon, non numérotée)") : `DEVIS n° ${d.numero}`;
+  const nom = avoir ? "AVOIR" : "FACTURE";
+  const titre = facture ? (d.numero ? `${nom} n° ${d.numero}` : `${nom} (brouillon, non numéroté${avoir ? "" : "e"})`) : `DEVIS n° ${d.numero}`;
   return { franchise, tauxTva, tva, ttc, mentions: mentions.filter(Boolean), titre };
 }
 
@@ -2408,9 +2423,10 @@ function rendreDocument() {
   $("#modifier-ia").hidden = facture;
   $("#emettre").hidden = !(facture && d.statut === "brouillon");
   $("#payee").hidden = !(facture && d.statut === "emise");
+  $("#faire-avoir").hidden = !(facture && !v.avoir && d.statut !== "brouillon");
   $("#supprimer").hidden = verrouille;
   $(".menu-plus").open = false;
-  $("#numero-document").textContent = `${facture ? "Facture" : "Devis"} ${d.numero || "brouillon"}`;
+  $("#numero-document").textContent = `${nomDoc(d)} ${d.numero || "brouillon"}`;
   const badge = $("#badge-statut");
   badge.textContent = LIBELLES_STATUT[d.statut];
   badge.className = `badge-statut statut-${d.statut}`;
@@ -2456,6 +2472,9 @@ function rendreDocument() {
   const estimes = v.sections.flatMap((s) => s.lignes).filter((l) => l.prix_source === "estime").length;
   const hyp = [...(v.hypotheses ?? [])];
   if (estimes && !verrouille) hyp.unshift(`${estimes} prix estimé(s) par l'IA (surlignés en jaune) : vérifie-les et ajoute-les à ta grille.`);
+  if (estParticulier(v) && !e.mediateur?.trim()) hyp.push("Médiateur de la consommation non renseigné (Réglages → Entreprise) : obligatoire quand le client est un particulier.");
+  if (facture && !v.avoir && !v.date_travaux?.trim()) hyp.push("Indique la date (ou la période) des travaux réalisés, en bas de la facture.");
+  if (!estParticulier(v) && !v.client_siren?.trim()) hyp.push("Client professionnel : ajoute son SIREN dans le cadre « Client ».");
   $("#hypotheses").hidden = hyp.length === 0 || verrouille;
   $("#hypotheses").innerHTML = `<strong>À vérifier avant d'envoyer :</strong><ul>${hyp.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`;
 
@@ -2486,14 +2505,24 @@ function rendreDocument() {
     )
     .join("");
 
-  const { tauxTva, tva, ttc, mentions } = elementsDocument(d, e);
+  const { tauxTva, tva, ttc, mentions, titre } = elementsDocument(d, e);
 
   const perso = htmlPersonnalisation(e, d.type, esc);
-  const titreDoc = facture
-    ? d.numero ? `FACTURE n° ${esc(d.numero)}` : "FACTURE (brouillon, non numérotée)"
-    : `DEVIS n° ${esc(d.numero)}`;
+  const titreDoc = esc(titre);
+  const pro = !estParticulier(v);
+  const cadreLegal = verrouille || v.avoir
+    ? ""
+    : `<div class="cadre-legal no-print">
+      <div class="choix-client">Client :
+        <label><input type="radio" name="type-client" value="particulier" ${pro ? "" : "checked"}> Particulier</label>
+        <label><input type="radio" name="type-client" value="pro" ${pro ? "checked" : ""}> Professionnel</label>
+      </div>
+      ${!pro && !facture ? `<label class="case-legal"><input type="checkbox" id="hors-etablissement" ${horsEtablissement(v) ? "checked" : ""}> Devis signé chez le client ou à distance → droit de rétractation de 14 jours (formulaire joint au PDF)</label>` : ""}
+      ${pro ? `<label class="case-legal"><input type="checkbox" id="autoliquidation" ${v.autoliquidation ? "checked" : ""}> Sous-traitance pour une entreprise du bâtiment → autoliquidation (pas de TVA facturée)</label>` : ""}
+    </div>`;
 
   $("#document").innerHTML = `
+    ${cadreLegal}
     <div class="doc-entete">
       <div class="entreprise">
         ${logoValide(e.logo) ? `<img class="doc-logo" src="${esc(e.logo)}" alt="">` : ""}
@@ -2508,8 +2537,9 @@ function rendreDocument() {
         <div ${editable} data-champ="client_adresse">${esc(v.client_adresse) || "<em>Adresse du client</em>"}</div>
         <div ${editable} inputmode="tel" data-champ="client_telephone">${esc(v.client_telephone) || (verrouille ? "" : "<em>Téléphone du client</em>")}</div>
         <div ${editable} inputmode="email" data-champ="client_email" class="champ-email">${esc(v.client_email) || (verrouille ? "" : "<em>E-mail du client</em>")}</div>
+        ${pro ? `<div>SIREN : <span ${editable} inputmode="numeric" data-champ="client_siren">${esc(v.client_siren) || (verrouille ? "" : "<em>à compléter</em>")}</span></div>` : ""}
         ${verrouille ? "" : `<button type="button" id="choisir-client" class="lien no-print">👤 Choisir dans mes clients</button>`}
-        ${v.adresse_chantier ? `<small>Chantier : ${esc(v.adresse_chantier)}</small>` : ""}
+        ${v.adresse_chantier || !verrouille ? `<small>Adresse du chantier : <span ${editable} data-champ="adresse_chantier">${esc(v.adresse_chantier) || "<em>si différente</em>"}</span></small>` : ""}
       </div>
     </div>
     <h2 class="doc-titre">${titreDoc}</h2>
@@ -2522,18 +2552,26 @@ function rendreDocument() {
     </table>
     <table class="doc-totaux">
       <tr><td>Total HT</td><td class="num">${euros(v.total_ht)}</td></tr>
-      ${franchise ? "" : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
+      ${franchise ? "" : autoliquidation(v) ? `<tr><td>TVA autoliquidée</td><td class="num">${euros(0)}</td></tr>` : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
     ${perso.fin}
-    <div class="doc-mentions">${mentions
-      .filter((m) => !m.startsWith("Durée estimée"))
+    <div class="doc-mentions">${
+      facture || (verrouille && !v.date_debut)
+        ? ""
+        : `<p>Date de début prévue des travaux : <span ${editable} data-champ="date_debut" class="champ-duree">${esc(v.date_debut) || "<em>à préciser (ex. 15 janvier 2027)</em>"}</span>.</p>`
+    }${
+      !facture || v.avoir || (verrouille && !v.date_travaux)
+        ? ""
+        : `<p>Date d'exécution des travaux : <span ${editable} data-champ="date_travaux" class="champ-duree">${esc(v.date_travaux) || "<em>à préciser (ex. du 3 au 7 novembre 2026)</em>"}</span>.</p>`
+    }${mentions
+      .filter((m) => !m.startsWith("Durée estimée") && !m.startsWith("Date de début prévue") && !m.startsWith("Date d'exécution"))
       .map((m) => `<p>${esc(m)}</p>`)
       .join("")}${
       facture || (verrouille && !v.duree_estimee)
         ? ""
         : `<p>Durée estimée des travaux : <span ${editable} data-champ="duree_estimee" class="champ-duree">${esc(v.duree_estimee) || "<em>à préciser (ex. 3 jours)</em>"}</span>.</p>`
-    }</div>
+    }${!facture && horsEtablissement(v) ? `<p class="no-print aide">📄 Le formulaire de rétractation est ajouté automatiquement à la fin du PDF.</p>` : ""}</div>
     ${facture ? "" : `<div class="doc-signature"><div>L'entreprise</div><div>Le client<br><small>Date, signature et mention « Bon pour accord »</small></div></div>`}
     ${perso.labels}${perso.pied}
   `;
@@ -2548,10 +2586,42 @@ function rendreDocument() {
     notifier(`Client « ${c.nom} » ajouté au devis.`);
   };
 
+  // Type de client, rétractation, autoliquidation
+  for (const r of $("#document").querySelectorAll("[name=type-client]")) {
+    r.onchange = () =>
+      majDocument((dv) => {
+        dv.client_type = r.value;
+        if (r.value === "particulier" && dv.autoliquidation) {
+          dv.autoliquidation = false;
+          dv.taux_tva = dv.taux_tva_avant ?? 10;
+        }
+      });
+  }
+  const caseHors = $("#hors-etablissement");
+  if (caseHors) caseHors.onchange = () => majDocument((dv) => (dv.hors_etablissement = caseHors.checked));
+  const caseAuto = $("#autoliquidation");
+  if (caseAuto) {
+    caseAuto.onchange = () =>
+      majDocument((dv) => {
+        if (caseAuto.checked) {
+          dv.taux_tva_avant = dv.taux_tva;
+          dv.taux_tva = 0;
+        } else dv.taux_tva = dv.taux_tva_avant ?? 20;
+        dv.autoliquidation = caseAuto.checked;
+      });
+  }
+
   // Édition directe dans le document
   for (const el of $("#document").querySelectorAll("[contenteditable]")) {
     el.addEventListener("focus", () => {
-      if (el.querySelector("em")) el.textContent = "";
+      if (!el.querySelector("em")) return;
+      el.textContent = "";
+      // Curseur remis dans le champ vidé (sinon la saisie peut partir dans le vide)
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(true);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
     });
     el.addEventListener("blur", () => {
       const { champ, s, l } = el.dataset;
@@ -2693,7 +2763,7 @@ $("#lien-signature").onclick = async () => {
   }
 };
 
-const titreFichier = (d) => `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero || "brouillon"} ${d.contenu.client_nom || ""}`.trim();
+const titreFichier = (d) => `${nomDoc(d)} ${d.numero || "brouillon"} ${d.contenu.client_nom || ""}`.trim();
 
 $("#imprimer").onclick = async () => {
   try {
@@ -2706,13 +2776,13 @@ $("#imprimer").onclick = async () => {
 $("#partager").onclick = async () => {
   const d = docCourant;
   const e = profil.infos;
-  const nom = d.type === "facture" ? "la facture" : "le devis";
+  const nom = d.type === "facture" ? (d.contenu.avoir ? "l'avoir" : "la facture") : "le devis";
   // Devis pas encore accepté : on ajoute le lien pour le signer en ligne (si le serveur le permet).
   let lien = "";
   if (d.type === "devis" && ["brouillon", "envoye"].includes(d.statut)) lien = await lienSignature(d).catch(() => "");
   const options = d.contenu.sections?.some((s) => s.lignes?.some((l) => l.option));
   const texte = `Bonjour,\n\nVeuillez trouver ci-joint ${nom} n° ${d.numero ?? "(brouillon)"} (${d.contenu.titre}) d'un montant de ${euros(e.franchise_tva ? d.contenu.total_ht : d.contenu.total_ttc)}${e.franchise_tva ? "" : " TTC"}.${lien ? `\n\nVous pouvez le consulter${options ? ", choisir les options" : ""} et le signer en ligne, directement sur votre téléphone :\n${lien}` : ""}\n\nCordialement,\n${e.nom || ""}${e.telephone ? `\n${e.telephone}` : ""}`;
-  const sujet = `${d.type === "facture" ? "Facture" : "Devis"} ${d.numero ?? ""} – ${d.contenu.titre}`;
+  const sujet = `${nomDoc(d)} ${d.numero ?? ""} – ${d.contenu.titre}`;
   // Le PDF se prépare pendant qu'on choisit les destinataires.
   const pdfPret = pdfDocument(d).catch((err) => {
     erreur("PDF impossible à fabriquer, envoi du texte seul.", err);
@@ -2768,7 +2838,7 @@ for (const b of document.querySelectorAll(".menu-plus-liste button")) b.addEvent
 
 $("#en-facture").onclick = async () => {
   if (!(await demander("Créer une facture (brouillon) à partir de ce devis ?", { ok: "Créer la facture" }))) return;
-  const { suivi, ...base } = structuredClone(docCourant.contenu);
+  const { suivi, signature_client, hors_etablissement, date_debut, ...base } = structuredClone(docCourant.contenu);
   const contenu = { ...base, hypotheses: [], devis_numero: docCourant.numero };
   const { data, error } = await sb
     .from("documents")
@@ -2781,11 +2851,36 @@ $("#en-facture").onclick = async () => {
 };
 
 $("#emettre").onclick = async () => {
+  if (!docCourant.contenu.avoir && !docCourant.contenu.date_travaux?.trim()) {
+    const quand = await demanderTexte("Date (ou période) des travaux réalisés — obligatoire sur la facture", "Ex. : du 3 au 7 novembre 2026", dateFr(new Date().toISOString()));
+    if (!quand) return;
+    await majDocument((dv) => (dv.date_travaux = quand));
+  }
   if (!(await demander("Émettre la facture ? Elle recevra son numéro définitif et ne pourra plus être modifiée.", { ok: "Émettre" }))) return;
   const { data, error } = await sb.rpc("emettre_facture", { p_id: docCourant.id });
   if (error) return erreur("Émission impossible.", error);
   docCourant = data;
   rendreDocument();
+};
+
+// Avoir : nouvelle facture (brouillon) aux montants négatifs, qui annule la facture émise.
+$("#faire-avoir").onclick = async () => {
+  const f = docCourant;
+  if (!(await demander(`Faire un avoir qui annule la facture ${f.numero} (${euros(montantDoc(f))}) ? Tu pourras le vérifier avant de l'émettre.`, { ok: "Faire l'avoir" }))) return;
+  const { suivi, date_travaux, hypotheses, ...base } = structuredClone(f.contenu);
+  const contenu = calculerTotaux({
+    ...base,
+    hypotheses: [],
+    avoir: true,
+    facture_origine: f.numero,
+    facture_origine_date: f.date_document,
+    titre: `Avoir – ${base.titre}`,
+    sections: (base.sections ?? []).map((s) => ({ ...s, lignes: (s.lignes ?? []).filter((l) => !l.option || l.option_retenue).map((l) => ({ ...l, quantite: -Math.abs(l.quantite) })) })),
+  });
+  const { data, error } = await sb.from("documents").insert({ type: "facture", devis_id: f.devis_id, contenu }).select("id").single();
+  if (error) return erreur("Avoir non créé.", error);
+  notifier("Avoir créé en brouillon : vérifie-le puis émets-le.");
+  ouvrirDocument(data.id);
 };
 
 $("#payee").onclick = async () => {
