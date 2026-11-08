@@ -145,7 +145,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "8 nov. 2026 · accès expert-comptable";
+const VERSION_APPLI = "8 nov. 2026 · tarifs lisibles";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -559,6 +559,7 @@ for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
   b.onclick = () => {
     if (b.dataset.onglet === "mail") afficherBoite();
     if (b.dataset.onglet === "comptable") afficherComptables();
+    if (b.dataset.onglet === "tarifs") requestAnimationFrame(ajusterNomsTarifs);
     for (const x of document.querySelectorAll(".onglets-reglages [data-onglet]")) x.classList.toggle("actif", x === b);
     for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== b.dataset.onglet;
     $("#form-entreprise").hidden = !["entreprise", "perso"].includes(b.dataset.onglet);
@@ -2920,6 +2921,16 @@ const groupesFermes = new Set();
 
 // Grille de prix en cartes (lisible sur téléphone) : nom complet sur plusieurs lignes,
 // prix et unité en dessous, rangée par métier, avec recherche.
+// Hauteur des noms de prestation selon leur texte. Calculée seulement quand l'onglet « Tarifs »
+// est affiché : sur un onglet caché, la hauteur mesurée vaut 0 et le texte était coupé.
+function ajusterHauteur(champ) {
+  if (!champ.offsetParent) return;
+  champ.style.height = "auto";
+  champ.style.height = `${champ.scrollHeight + 2}px`;
+}
+const ajusterNomsTarifs = () => document.querySelectorAll("#grille-tarifs textarea[data-k]").forEach(ajusterHauteur);
+window.addEventListener("resize", ajusterNomsTarifs);
+
 function rendreTarifs() {
   const zone = $("#grille-tarifs");
   if (!tarifs.length) {
@@ -2979,16 +2990,15 @@ function rendreTarifs() {
     r.setSelectionRange(pos, pos);
   };
   for (const d of zone.querySelectorAll("details[data-groupe]")) {
-    d.ontoggle = () => (d.open ? groupesFermes.delete(d.dataset.groupe) : groupesFermes.add(d.dataset.groupe));
-  }
-  for (const champ of zone.querySelectorAll("textarea[data-k]")) {
-    const ajuster = () => {
-      champ.style.height = "auto";
-      champ.style.height = `${champ.scrollHeight}px`;
+    d.ontoggle = () => {
+      if (d.open) {
+        groupesFermes.delete(d.dataset.groupe);
+        ajusterNomsTarifs();
+      } else groupesFermes.add(d.dataset.groupe);
     };
-    ajuster();
-    champ.addEventListener("input", ajuster);
   }
+  for (const champ of zone.querySelectorAll("textarea[data-k]")) champ.addEventListener("input", () => ajusterHauteur(champ));
+  ajusterNomsTarifs();
   for (const champ of zone.querySelectorAll("[data-k]")) {
     champ.onchange = async () => {
       const valeur = champ.dataset.k === "prix" ? lireNombre(champ.value) : champ.value.trim();

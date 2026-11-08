@@ -326,7 +326,7 @@ div.ligne-couleur label { margin-bottom: 0; }
 .groupe-tarifs[open] summary::before { transform: rotate(90deg); }
 .groupe-tarifs .nb { font-size: .75rem; background: var(--bleu-clair); color: var(--bleu); border-radius: 99px; padding: 1px 8px; }
 .carte-tarif { border: 1px solid var(--bord); border-radius: 12px; padding: 10px; margin-bottom: 8px; background: var(--surface); }
-.carte-tarif textarea[data-k=designation] { width: 100%; box-sizing: border-box; resize: none; overflow: hidden; font: inherit; font-size: 1rem; font-weight: 600; line-height: 1.35; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--texte); }
+.carte-tarif textarea[data-k=designation] { field-sizing: content; min-height: 2.3em; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; font: inherit; font-size: 1rem; font-weight: 600; line-height: 1.35; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--texte); }
 .carte-tarif textarea[data-k=designation]:focus { border-color: var(--bleu); background: var(--fond); outline: none; }
 .ligne-prix { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .carte label.champ-prix { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--gris); }
