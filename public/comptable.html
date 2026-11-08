@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f3b63">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Cagot – Espace comptable</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="/icones/icone-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-comptable">
+  <header class="barre">
+    <h1 class="logo"><svg viewBox="0 0 32 28" aria-hidden="true"><path d="M3 14 16 3l13 11" /><path d="M7 11v14h18V11" /></svg>Cagot <span>Pro</span></h1>
+    <button type="button" id="deconnexion" class="btn-deconnexion" hidden>Se déconnecter</button>
+  </header>
+
+  <main id="vue-chargement" class="vue vue-comptable"><div class="carte"><p>Chargement…</p></div></main>
+
+  <!-- ===== Connexion du comptable ===== -->
+  <main id="vue-connexion" class="vue vue-comptable" hidden>
+    <div id="bandeau-invitation" class="carte invitation" hidden>
+      <h2>🧮 Espace expert-comptable</h2>
+      <p>Un artisan vous invite à consulter ses factures sur Cagot, <strong>en lecture seule</strong>. Créez votre compte gratuit (ou connectez-vous) pour accéder à son dossier.</p>
+    </div>
+    <form id="form-connexion" class="carte connexion">
+      <h2 id="titre-connexion">Connexion</h2>
+      <label>E-mail <input name="email" type="email" autocomplete="email" required></label>
+      <label id="champ-mdp">Mot de passe <input name="mdp" type="password" autocomplete="current-password" minlength="10"></label>
+      <p id="message-connexion" class="message" hidden></p>
+      <button id="btn-connexion" class="btn-principal">Se connecter</button>
+      <div class="liens-connexion">
+        <button type="button" class="lien" id="vers-inscription">Créer un compte</button>
+        <button type="button" class="lien" id="vers-oubli">Mot de passe oublié</button>
+      </div>
+    </form>
+  </main>
+
+  <main id="vue-nouveau-mdp" class="vue vue-comptable" hidden>
+    <form id="form-nouveau-mdp" class="carte connexion">
+      <h2>Nouveau mot de passe</h2>
+      <label>Nouveau mot de passe (10 caractères minimum) <input name="mdp" type="password" autocomplete="new-password" minlength="10" required></label>
+      <button class="btn-principal">Enregistrer</button>
+    </form>
+  </main>
+
+  <!-- ===== Dossiers (artisans) ===== -->
+  <main id="vue-dossiers" class="vue vue-comptable" hidden>
+    <h2>Mes dossiers</h2>
+    <p class="aide">Les artisans qui vous ont donné accès à leurs factures (lecture seule).</p>
+    <div id="liste-dossiers"></div>
+  </main>
+
+  <!-- ===== Factures d'un dossier ===== -->
+  <main id="vue-dossier" class="vue vue-comptable" hidden>
+    <div class="entete-document">
+      <a href="#" id="retour-dossiers" aria-label="Retour aux dossiers" hidden>←</a>
+      <div><h2 id="nom-dossier"></h2><small id="siret-dossier" class="aide"></small></div>
+    </div>
+    <div id="periodes" class="filtres-docs"></div>
+    <div id="periode-perso" class="periode-perso" hidden>
+      <label>Du <input type="date" id="date-debut"></label>
+      <label>Au <input type="date" id="date-fin"></label>
+    </div>
+    <div id="resume" class="tuiles"></div>
+    <div id="tva-par-taux"></div>
+    <div class="actions-comptable">
+      <button type="button" id="export-csv" class="btn-principal">📊 Exporter le tableau (Excel / CSV)</button>
+    </div>
+    <div id="liste-factures"></div>
+    <p class="aide centre">Accès en lecture seule accordé par l'artisan. Il peut le retirer à tout moment.</p>
+  </main>
+
+  <script src="/vendor/supabase.js"></script>
+  <script type="module" src="comptable.js"></script>
+</body>
+</html>

@@ -574,3 +574,25 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .aide-boite ol { padding-left: 20px; margin: 6px 0; }
 .aide-boite li { margin-bottom: 4px; }
 #form-boite select { width: 100%; font-size: 1rem; padding: 9px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); color: var(--texte); margin-top: 4px; }
+
+/* --- Expert-comptable : invitations (réglages de l'artisan) et espace comptable --- */
+.acces-comptable { border: 1px solid var(--bord); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface); }
+.acces-comptable small, .acces-comptable span { display: block; color: var(--gris); font-size: .85rem; }
+.acces-comptable span { margin-top: 4px; color: var(--texte); }
+.acces-comptable .actions-doc { margin-top: 8px; }
+.action-doc.danger { color: var(--rouge); }
+.btn-deconnexion { background: transparent; border: 1px solid rgba(255,255,255,.4); color: var(--blanc); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.vue-comptable { max-width: 900px; }
+.vue-comptable .invitation { border-left: 4px solid var(--or); }
+.vue-comptable h2 { margin: 4px 0; }
+.vue-comptable .dossier { width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--texte); }
+.periode-perso { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.periode-perso label { flex: 1; min-width: 140px; }
+.table-tva { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; overflow: hidden; margin-bottom: 12px; font-size: .9rem; }
+.table-tva th, .table-tva td { padding: 8px 10px; border-bottom: 1px solid var(--bord); text-align: left; }
+.table-tva .num { text-align: right; }
+.actions-comptable { margin-bottom: 12px; }
+.actions-comptable .btn-principal { width: 100%; padding: 12px; }
+.page-comptable .ligne-doc small { display: block; }
+.periode-perso[hidden] { display: none; }
+.page-comptable .pastille { white-space: nowrap; }

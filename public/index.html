@@ -220,6 +220,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <button type="button" data-onglet="perso">🎨 Logo &amp; couleurs</button>
       <button type="button" data-onglet="tarifs">Tarifs</button>
       <button type="button" data-onglet="mail">📧 Ma boîte mail</button>
+      <button type="button" data-onglet="comptable">🧮 Mon comptable</button>
       <button type="button" data-onglet="compte">Compte</button>
     </div>
     <form id="form-entreprise" class="carte">
@@ -300,6 +301,18 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
         <label id="libelle-mdp">Mot de passe d'application <input name="mdp" type="password" autocomplete="off" required maxlength="200" placeholder="16 lettres données par Google"></label>
         <button class="btn-principal btn-enregistrer" id="brancher-boite">🔌 Brancher ma boîte mail</button>
         <p class="aide">Cagot t'envoie un mail de test pour vérifier. Ton mot de passe d'application est chiffré sur le serveur et n'est jamais réaffiché. Tu peux le supprimer à tout moment dans ton compte e-mail.</p>
+      </form>
+    </div>
+
+    <div class="carte" data-panneau="comptable" hidden>
+      <h2>Mon expert-comptable</h2>
+      <p class="aide">Donne à ton expert-comptable un accès direct, <strong>en lecture seule</strong>, à tes <strong>factures émises et payées</strong> : il les consulte, télécharge les PDF et exporte le tableau pour ta compta et ta TVA. Il ne voit ni tes devis, ni tes chantiers, ni tes notes, et ne peut rien modifier. Tu peux retirer l'accès à tout moment.</p>
+      <div id="liste-comptables"></div>
+      <form id="form-comptable">
+        <label>Nom du comptable ou du cabinet <input name="nom" maxlength="120" required placeholder="Ex. : Cabinet Martin"></label>
+        <label>Son adresse e-mail <input name="email" type="email" inputmode="email" maxlength="200" required></label>
+        <button class="btn-principal btn-enregistrer" id="inviter-comptable">✉️ Inviter mon comptable</button>
+        <p class="aide">Cagot prépare un lien d'invitation personnel (valable 30 jours) que tu lui envoies par mail, WhatsApp ou SMS. Il crée son compte Cagot gratuit avec ce lien.</p>
       </form>
     </div>
 

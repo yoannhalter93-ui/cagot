@@ -145,7 +145,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "6 nov. 2026 · signature en ligne";
+const VERSION_APPLI = "8 nov. 2026 · accès expert-comptable";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -493,10 +493,72 @@ $("#form-boite").onsubmit = async (ev) => {
   }
 };
 
+// --- Expert-comptable : accès direct en lecture seule aux factures émises et payées ---
+const lienComptable = (jeton) => `${location.origin}/comptable.html#invitation=${jeton}`;
+
+async function envoyerInvitationComptable(a) {
+  const lien = lienComptable(a.jeton);
+  const nomEntreprise = profil.infos.nom || "mon entreprise";
+  const texte = `Bonjour${a.nom ? ` ${a.nom}` : ""},\n\nJe vous donne un accès en lecture seule à mes factures (${nomEntreprise}) sur Cagot : vous pourrez les consulter, télécharger les PDF et exporter le tableau pour la comptabilité et la TVA.\n\nOuvrez ce lien personnel (valable 30 jours) et créez votre compte gratuit avec votre adresse e-mail :\n${lien}\n\nCordialement,\n${[profil.infos.prenom, nomEntreprise].filter(Boolean).join(" ")}`;
+  try {
+    await navigator.clipboard.writeText(lien);
+  } catch {
+    // presse-papiers refusé : le lien est dans le message
+  }
+  await plateforme.partager({ sujet: `Accès à mes factures – ${nomEntreprise}`, texte, destinataires: a.email ? [a.email] : [], notifier });
+}
+
+async function afficherComptables() {
+  const zone = $("#liste-comptables");
+  const { data, error } = await sb.from("acces_comptables").select("id, nom, email, jeton, accepte_at, consulte_at, revoque, created_at").order("created_at", { ascending: false });
+  if (error) {
+    zone.innerHTML = `<p class="aide">${/acces_comptables/.test(error.message) ? "Fonction pas encore activée sur le serveur." : "Impossible de charger (connexion ?)."}</p>`;
+    return;
+  }
+  const actifs = data.filter((a) => !a.revoque && !(!a.accepte_at && joursDepuis(a.created_at) > 30));
+  zone.innerHTML = actifs
+    .map((a) => {
+      const etat = a.accepte_at
+        ? `✅ Accès actif depuis le ${dateFr(a.accepte_at)}${a.consulte_at ? ` · dernière consultation ${ilYa(a.consulte_at)}` : ""}`
+        : `⏳ Invitation envoyée ${ilYa(a.created_at)} · pas encore acceptée`;
+      return `<div class="acces-comptable">
+        <div><strong>${esc(a.nom || a.email)}</strong><small>${esc(a.email)}</small><span>${etat}</span></div>
+        <div class="actions-doc">
+          ${a.accepte_at ? "" : `<button type="button" class="action-doc" data-renvoyer="${esc(a.id)}">📤 Renvoyer le lien</button>`}
+          <button type="button" class="action-doc danger" data-retirer="${esc(a.id)}">Retirer l'accès</button>
+        </div></div>`;
+    })
+    .join("");
+  for (const b of zone.querySelectorAll("[data-renvoyer]")) b.onclick = () => envoyerInvitationComptable(data.find((a) => a.id === b.dataset.renvoyer));
+  for (const b of zone.querySelectorAll("[data-retirer]")) {
+    b.onclick = async () => {
+      const a = data.find((x) => x.id === b.dataset.retirer);
+      if (!(await demander(`Retirer l'accès de ${a.nom || a.email} ? Il ne verra plus tes factures.`, { ok: "Retirer l'accès", danger: true }))) return;
+      const { error: err } = await sb.from("acces_comptables").update({ revoque: true }).eq("id", a.id);
+      if (err) return erreur("Accès non retiré.", err);
+      notifier("Accès retiré.");
+      afficherComptables();
+    };
+  }
+}
+
+$("#form-comptable").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const f = ev.target.elements;
+  const a = { nom: f.nom.value.trim(), email: f.email.value.trim().toLowerCase(), jeton: jetonAleatoire() };
+  if (a.email === utilisateur?.email?.toLowerCase()) return erreur("Mets l'adresse de ton comptable, pas la tienne.");
+  const { error } = await sb.from("acces_comptables").insert(a);
+  if (error) return erreur("Invitation impossible (connexion ?).", error);
+  ev.target.reset();
+  afficherComptables();
+  await envoyerInvitationComptable(a);
+};
+
 // Réglages en onglets
 for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
   b.onclick = () => {
     if (b.dataset.onglet === "mail") afficherBoite();
+    if (b.dataset.onglet === "comptable") afficherComptables();
     for (const x of document.querySelectorAll(".onglets-reglages [data-onglet]")) x.classList.toggle("actif", x === b);
     for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== b.dataset.onglet;
     $("#form-entreprise").hidden = !["entreprise", "perso"].includes(b.dataset.onglet);
