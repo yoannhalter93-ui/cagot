@@ -69,17 +69,16 @@
       <h2 id="bonjour">Bonjour 👋</h2>
       <p id="nom-entreprise-accueil"></p>
     </section>
-    <div id="blocs-accueil">
-      <div data-bloc="activite"><div id="activite-accueil" class="tuiles"></div></div>
-      <div data-bloc="nouveau">
-        <button type="button" id="r-devis" class="btn-devis-rapide">＋ Nouveau chantier</button>
-        <p class="aide centre">Un chantier = le client, tes notes et photos, le devis et la facture, étape par étape.</p>
-      </div>
-      <div data-bloc="chantiers">
-        <div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" data-vue="chantiers">Voir tout ›</button></div>
-        <div id="chantiers-accueil"></div>
-      </div>
+    <div id="barre-perso-accueil" class="barre-perso" hidden>
+      <span>✋ Glisse les cases pour les ranger.</span>
+      <button type="button" id="fin-perso" class="btn-principal">✓ Terminé</button>
     </div>
+    <div id="blocs-accueil" class="grille-accueil"></div>
+    <div id="ajout-cases" class="ajout-cases" hidden>
+      <h3>Ajouter une case</h3>
+      <div id="liste-ajout-cases"></div>
+    </div>
+    <button type="button" id="perso-accueil" class="lien perso-accueil">✏️ Personnaliser mon accueil</button>
   </main>
 
   <!-- ===== Notes de chantier : liste ===== -->
@@ -378,8 +377,8 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <p class="aide">Tes 3 raccourcis préférés (le bouton « Plus » reste toujours à droite).</p>
       <div id="choix-raccourcis" class="choix-raccourcis"></div>
       <h3 class="titre-reglage">Page d'accueil</h3>
-      <p class="aide">Ce que tu veux voir en ouvrant Cagot, dans l'ordre que tu veux.</p>
-      <div id="choix-blocs" class="choix-blocs"></div>
+      <p class="aide">Range les cases au doigt, agrandis-les, retire celles qui ne te servent pas ou ajoutes-en d'autres (devis à relancer, factures en retard, actions rapides…).</p>
+      <button type="button" id="organiser-accueil" class="btn-secondaire">✏️ Organiser mon accueil</button>
       <button type="button" id="interface-origine" class="lien">↩️ Revenir à l'interface d'origine</button>
     </div>
 

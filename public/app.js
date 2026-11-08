@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · mon interface";
+const VERSION_APPLI = "9 nov. 2026 · accueil à ma façon";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -344,6 +344,7 @@ function afficherVue(nom) {
   for (const b of document.querySelectorAll("#navigation [data-vue]")) b.classList.toggle("actif", b.dataset.vue === onglet);
   $("#btn-reglages").classList.toggle("actif", nom === "parametres");
   if (nom !== "note") quitterNote();
+  if (nom !== "accueil") persoAccueil = false;
   if (nom === "accueil") afficherAccueil();
   if (nom === "chantiers") afficherFiches();
   if (nom === "notes") afficherNotes();
@@ -367,54 +368,199 @@ document.addEventListener("click", (ev) => {
 // ---------------------------------------------------------------------------
 // Accueil
 // ---------------------------------------------------------------------------
+// L'accueil est une grille de cases que l'artisan range comme il veut (mode « Personnaliser »).
+let persoAccueil = false;
+let donneesAccueil = { docs: [], chantiers: [], erreurChantiers: false };
+
 async function afficherAccueil() {
   const e = profil.infos;
-  const conteneur = $("#blocs-accueil");
-  for (const b of reglagesInterface.accueil) {
-    const el = conteneur.querySelector(`[data-bloc="${b.id}"]`);
-    if (!el) continue;
-    el.hidden = !b.visible;
-    conteneur.appendChild(el);
-  }
   $("#bonjour").textContent = `Bonjour${e.prenom ? ` ${e.prenom}` : ""} 👋`;
   $("#nom-entreprise-accueil").textContent = e.nom || "";
+  rendreAccueil();
   const [docs, chantiers] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
     sb.from("chantiers").select("id, titre, document_id, updated_at").order("updated_at", { ascending: false }).limit(4),
   ]);
-  if (!docs.error) {
-    const { tuiles } = indicateurs(docs.data);
-    $("#activite-accueil").innerHTML = Object.entries(tuiles).map(([id, t]) => htmlTuile(id, t)).join("");
-    for (const b of $("#activite-accueil").querySelectorAll("[data-filtre]")) {
-      b.onclick = () => {
-        afficherVue(b.dataset.type === "facture" ? "factures" : "devis");
-        filtreDocs = b.dataset.filtre;
-        afficherListe();
-      };
+  donneesAccueil = { docs: docs.data ?? [], chantiers: chantiers.data ?? [], erreurChantiers: !!chantiers.error };
+  rendreAccueil();
+}
+
+function htmlCase(id) {
+  const { docs, chantiers, erreurChantiers } = donneesAccueil;
+  const { tuiles, par } = indicateurs(docs);
+  if (tuiles[id]) return htmlTuile(id, tuiles[id]);
+  const delai = Number(profil.infos.delai_paiement || 30);
+  const mini = (titre, valeur, detail) => `<div class="tuile tuile-info"><small>${titre}</small><strong>${valeur}</strong><span>${detail}</span></div>`;
+  const ligneDoc = (d, info) => `<button type="button" class="carte-chantier" data-ouvrir-doc="${esc(d.id)}"><span class="icone-chantier">${d.type === "devis" ? "📝" : "🧾"}</span>
+      <span><strong>${esc(d.contenu.client_nom || d.contenu.titre || "Sans titre")}</strong><small>${esc(d.numero || "")} · ${info}</small></span><span class="montant">${euros(montantDoc(d))}</span></button>`;
+  switch (id) {
+    case "ca-mois": {
+      const debut = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      const liste = docs.filter((d) => d.type === "facture" && d.statut !== "brouillon" && new Date(d.date_document) >= debut);
+      const ht = liste.reduce((t, d) => t + Number(d.contenu.total_ht || 0), 0);
+      return mini("📈 Facturé ce mois", euros(ht), `HT · ${liste.length} facture${liste.length > 1 ? "s" : ""}`);
+    }
+    case "taux-acceptation": {
+      const decides = par.accepte.length + par.refuse.length;
+      return mini("🎯 Taux d'acceptation", decides ? `${Math.round((100 * par.accepte.length) / decides)} %` : "—", `${par.accepte.length} accepté${par.accepte.length > 1 ? "s" : ""} · ${par.refuse.length} refusé${par.refuse.length > 1 ? "s" : ""}`);
+    }
+    case "nouveau":
+      return `<button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouveau chantier</button>
+        <p class="aide centre">Un chantier = le client, tes notes et photos, le devis et la facture, étape par étape.</p>`;
+    case "raccourcis":
+      return `<div class="titre-section"><h3>⚡ Actions rapides</h3></div><div class="actions-rapides">
+        <button type="button" data-action-accueil="chantier">🏗️<span>Chantier</span></button>
+        <button type="button" data-action-accueil="note">🗒️<span>Note</span></button>
+        <button type="button" data-action-accueil="facture">🧾<span>Facture</span></button>
+        <button type="button" data-action-accueil="client">👤<span>Client</span></button></div>`;
+    case "chantiers":
+      return `<div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" data-vue="chantiers">Voir tout ›</button></div>
+        ${
+          chantiers.length
+            ? chantiers
+                .map(
+                  (ch) => `<button type="button" class="carte-chantier" data-ouvrir-chantier="${esc(ch.id)}">
+            <span class="icone-chantier">🏗️</span><span><strong>${esc(ch.titre || "Chantier sans titre")}</strong><small>${ilYa(ch.updated_at)}</small></span>
+            <span class="pastille ${ch.document_id ? "statut-accepte" : "statut-envoye"}">${ch.document_id ? "devis fait" : "en cours"}</span></button>`,
+                )
+                .join("")
+            : `<p class="aide">${erreurChantiers ? "Liste indisponible (connexion ?)." : "Pas encore de chantier. Appuie sur « Nouveau chantier » pour commencer."}</p>`
+        }`;
+    case "relances": {
+      const liste = par.envoye.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7);
+      return `<div class="titre-section"><h3>⏰ Devis à relancer</h3></div>${liste.length ? liste.slice(0, 5).map((d) => ligneDoc(d, `envoyé ${ilYa(dateSuivi(d, "envoye") || d.updated_at)}`)).join("") : `<p class="aide">Aucun devis à relancer 👍</p>`}`;
+    }
+    case "retards": {
+      const liste = par["a-encaisser"].filter((d) => joursDepuis(d.date_document) > delai);
+      return `<div class="titre-section"><h3>⚠️ Factures en retard</h3></div>${liste.length ? liste.slice(0, 5).map((d) => ligneDoc(d, `échéance ${dateFr(ajouterJours(d.date_document, delai))}`)).join("") : `<p class="aide">Aucune facture en retard 👍</p>`}`;
     }
   }
-  const zone = $("#chantiers-accueil");
-  if (chantiers.error || !chantiers.data.length) {
-    zone.innerHTML = `<p class="aide">${chantiers.error ? "La liste des chantiers sera disponible après la mise à jour du serveur." : "Pas encore de chantier. Appuie sur « Créer un devis rapide » pour commencer."}</p>`;
-    return;
-  }
-  zone.innerHTML = chantiers.data
+  return "";
+}
+
+function rendreAccueil() {
+  const grille = $("#blocs-accueil");
+  const cases = reglagesInterface.accueil.filter((b) => b.visible);
+  grille.classList.toggle("en-perso", persoAccueil);
+  grille.innerHTML = cases
     .map(
-      (ch) => `<button type="button" class="carte-chantier" data-ouvrir-chantier="${esc(ch.id)}">
-        <span class="icone-chantier">🏗️</span>
-        <span><strong>${esc(ch.titre || "Chantier sans titre")}</strong><small>${ilYa(ch.updated_at)}</small></span>
-        <span class="pastille ${ch.document_id ? "statut-accepte" : "statut-envoye"}">${ch.document_id ? "devis fait" : "en cours"}</span>
-      </button>`,
+      (b) => `<div class="case-accueil ${b.taille}" data-case="${b.id}">
+        ${persoAccueil ? `<div class="outils-case"><span class="poignee" aria-hidden="true">⠿</span><button type="button" data-taille-case="${b.id}" aria-label="Changer la taille">${b.taille === "large" ? "↙︎ Petite" : "↗︎ Grande"}</button><button type="button" data-masquer-case="${b.id}" aria-label="Retirer">✕</button></div>` : ""}
+        <div class="contenu-case">${htmlCase(b.id)}</div></div>`,
     )
     .join("");
-  for (const b of zone.querySelectorAll("[data-ouvrir-chantier]")) {
-    b.onclick = async () => {
-      ouvrirFiche(b.dataset.ouvrirChantier);
+  $("#barre-perso-accueil").hidden = !persoAccueil;
+  $("#perso-accueil").hidden = persoAccueil;
+  const masquees = reglagesInterface.accueil.filter((b) => !b.visible);
+  $("#ajout-cases").hidden = !persoAccueil || !masquees.length;
+  $("#liste-ajout-cases").innerHTML = masquees.map((b) => `<button type="button" class="ajout-case" data-ajouter-case="${b.id}">${BLOCS_ACCUEIL[b.id].icone} ${esc(BLOCS_ACCUEIL[b.id].nom)} <b>＋</b></button>`).join("");
+  if (persoAccueil) return;
+  for (const t of grille.querySelectorAll(".tuile[data-filtre]")) {
+    t.onclick = () => {
+      afficherVue(t.dataset.type === "facture" ? "factures" : "devis");
+      filtreDocs = t.dataset.filtre;
+      afficherListe();
+    };
+  }
+  for (const b of grille.querySelectorAll("[data-ouvrir-chantier]")) b.onclick = () => ouvrirFiche(b.dataset.ouvrirChantier);
+  for (const b of grille.querySelectorAll("[data-ouvrir-doc]")) b.onclick = () => ouvrirDocument(b.dataset.ouvrirDoc);
+  for (const b of grille.querySelectorAll("[data-action-accueil]")) {
+    b.onclick = () => {
+      const a = b.dataset.actionAccueil;
+      if (a === "chantier") return nouveauChantier();
+      if (a === "facture") return nouvelleFactureVierge();
+      if (a === "note") {
+        afficherVue("notes");
+        return $("#nouvelle-note").click();
+      }
+      afficherVue("clients");
+      editerClient(null);
     };
   }
 }
 
-$("#r-devis").onclick = () => nouveauChantier();
+function modifierCases(modif) {
+  const i = structuredClone(reglagesInterface);
+  modif(i.accueil);
+  mettreInterface(i);
+  rendreAccueil();
+}
+
+$("#perso-accueil").onclick = () => {
+  persoAccueil = true;
+  rendreAccueil();
+};
+$("#fin-perso").onclick = () => {
+  persoAccueil = false;
+  rendreAccueil();
+  notifier("Accueil enregistré ✓");
+};
+$("#vue-accueil").addEventListener("click", (ev) => {
+  const t = ev.target.closest("[data-taille-case]");
+  const m = ev.target.closest("[data-masquer-case]");
+  const a = ev.target.closest("[data-ajouter-case]");
+  if (t) modifierCases((l) => {
+    const b = l.find((x) => x.id === t.dataset.tailleCase);
+    b.taille = b.taille === "large" ? "petit" : "large";
+  });
+  if (m) modifierCases((l) => (l.find((x) => x.id === m.dataset.masquerCase).visible = false));
+  if (a) modifierCases((l) => {
+    const i = l.findIndex((x) => x.id === a.dataset.ajouterCase);
+    const [b] = l.splice(i, 1);
+    b.visible = true;
+    const dernier = l.map((x) => x.visible).lastIndexOf(true);
+    l.splice(dernier + 1, 0, b);
+  });
+});
+
+// Glisser-déposer au doigt (ou à la souris) : la case suit le doigt, les autres se poussent.
+(() => {
+  const grille = $("#blocs-accueil");
+  let glisse = null;
+  grille.addEventListener("pointerdown", (ev) => {
+    if (!persoAccueil || ev.target.closest("button")) return;
+    const c = ev.target.closest(".case-accueil");
+    if (!c) return;
+    ev.preventDefault();
+    const r = c.getBoundingClientRect();
+    glisse = { c, dx: ev.clientX - r.left, dy: ev.clientY - r.top, id: ev.pointerId, fantome: c.cloneNode(true) };
+    glisse.fantome.classList.add("fantome");
+    Object.assign(glisse.fantome.style, { width: `${r.width}px`, height: `${r.height}px`, left: `${r.left}px`, top: `${r.top}px` });
+    document.body.appendChild(glisse.fantome);
+    c.classList.add("en-glisse");
+    grille.setPointerCapture(ev.pointerId);
+  });
+  grille.addEventListener("pointermove", (ev) => {
+    if (!glisse || ev.pointerId !== glisse.id) return;
+    glisse.fantome.style.left = `${ev.clientX - glisse.dx}px`;
+    glisse.fantome.style.top = `${ev.clientY - glisse.dy}px`;
+    // défilement auto près des bords
+    if (ev.clientY < 90) window.scrollBy(0, -12);
+    else if (ev.clientY > innerHeight - 110) window.scrollBy(0, 12);
+    const cible = [...grille.querySelectorAll(".case-accueil:not(.en-glisse)")].find((x) => {
+      const r = x.getBoundingClientRect();
+      return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+    });
+    if (!cible) return;
+    const r = cible.getBoundingClientRect();
+    const apres = cible.classList.contains("large") ? ev.clientY > r.top + r.height / 2 : ev.clientX > r.left + r.width / 2 || ev.clientY > r.bottom - 8;
+    grille.insertBefore(glisse.c, apres ? cible.nextSibling : cible);
+  });
+  const finir = (ev) => {
+    if (!glisse || ev.pointerId !== glisse.id) return;
+    glisse.fantome.remove();
+    glisse.c.classList.remove("en-glisse");
+    const ordre = [...grille.querySelectorAll(".case-accueil")].map((x) => x.dataset.case);
+    glisse = null;
+    modifierCases((l) => {
+      const visibles = ordre.map((id) => l.find((x) => x.id === id));
+      const autres = l.filter((x) => !ordre.includes(x.id));
+      l.splice(0, l.length, ...visibles, ...autres);
+    });
+  };
+  grille.addEventListener("pointerup", finir);
+  grille.addEventListener("pointercancel", finir);
+})();
 
 // Facture sans devis : un brouillon vierge à compléter.
 async function nouvelleFactureVierge() {
@@ -615,12 +761,6 @@ function rendreReglagesInterface() {
   for (const r of document.querySelectorAll("[name=taille-interface]")) r.checked = r.value === i.taille;
   const options = (choisi) => Object.entries(RACCOURCIS).map(([id, r]) => `<option value="${id}" ${id === choisi ? "selected" : ""}>${esc(r.nom)}</option>`).join("");
   $("#choix-raccourcis").innerHTML = i.raccourcis.map((id, n) => `<label>Raccourci ${n + 1}<select data-raccourci-choix="${n}">${options(id)}</select></label>`).join("");
-  $("#choix-blocs").innerHTML = i.accueil
-    .map(
-      (b, n) => `<div class="bloc-reglage"><label><input type="checkbox" data-bloc-visible="${n}" ${b.visible ? "checked" : ""}> ${esc(BLOCS_ACCUEIL[b.id])}</label>
-        <span><button type="button" data-bloc-monter="${n}" ${n === 0 ? "disabled" : ""} aria-label="Monter">↑</button><button type="button" data-bloc-descendre="${n}" ${n === i.accueil.length - 1 ? "disabled" : ""} aria-label="Descendre">↓</button></span></div>`,
-    )
-    .join("");
 }
 
 $("#vue-parametres").addEventListener("change", (ev) => {
@@ -635,21 +775,14 @@ $("#vue-parametres").addEventListener("change", (ev) => {
     const autre = i.raccourcis.indexOf(c.value);
     if (autre !== -1) i.raccourcis[autre] = ancien; // échange si déjà dans la barre
     i.raccourcis[n] = c.value;
-  } else if (c.dataset.blocVisible !== undefined) i.accueil[Number(c.dataset.blocVisible)].visible = c.checked;
-  else return;
+  } else return;
   mettreInterface(i);
   rendreReglagesInterface();
 });
-$("#vue-parametres").addEventListener("click", (ev) => {
-  const b = ev.target.closest("[data-bloc-monter], [data-bloc-descendre]");
-  if (!b) return;
-  const i = structuredClone(reglagesInterface);
-  const n = Number(b.dataset.blocMonter ?? b.dataset.blocDescendre);
-  const m = b.dataset.blocMonter !== undefined ? n - 1 : n + 1;
-  [i.accueil[n], i.accueil[m]] = [i.accueil[m], i.accueil[n]];
-  mettreInterface(i);
-  rendreReglagesInterface();
-});
+$("#organiser-accueil").onclick = () => {
+  persoAccueil = true;
+  afficherVue("accueil");
+};
 rendreBarreDuBas();
 $("#interface-origine").onclick = () => {
   mettreInterface(structuredClone(INTERFACE_DEFAUT));

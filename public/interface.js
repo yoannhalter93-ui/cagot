@@ -22,10 +22,19 @@ export const RACCOURCIS = {
   notes: { nom: "Notes", svg: '<path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
 };
 
+// Cases de l'accueil : l'artisan les déplace au doigt, les agrandit, les masque ou en ajoute.
 export const BLOCS_ACCUEIL = {
-  activite: "Mes chiffres (devis, factures, encaissé)",
-  nouveau: "Bouton « Nouveau chantier »",
-  chantiers: "Mes chantiers en cours",
+  envoye: { nom: "Devis en attente", icone: "⏳", taille: "petit" },
+  accepte: { nom: "Devis acceptés", icone: "✅", taille: "petit" },
+  "a-encaisser": { nom: "À encaisser", icone: "💶", taille: "petit" },
+  payee: { nom: "Encaissé", icone: "🏦", taille: "petit" },
+  "ca-mois": { nom: "Facturé ce mois", icone: "📈", taille: "petit" },
+  "taux-acceptation": { nom: "Taux d'acceptation", icone: "🎯", taille: "petit" },
+  nouveau: { nom: "Bouton « Nouveau chantier »", icone: "＋", taille: "large" },
+  raccourcis: { nom: "Actions rapides", icone: "⚡", taille: "large" },
+  chantiers: { nom: "Mes chantiers en cours", icone: "🏗️", taille: "large" },
+  relances: { nom: "Devis à relancer", icone: "⏰", taille: "large" },
+  retards: { nom: "Factures en retard", icone: "⚠️", taille: "large" },
 };
 
 export const TAILLES = { normale: 1, grande: 1.12, "tres-grande": 1.25 };
@@ -36,9 +45,17 @@ export const INTERFACE_DEFAUT = {
   taille: "normale",
   raccourcis: ["accueil", "chantiers", "clients"],
   accueil: [
-    { id: "activite", visible: true },
-    { id: "nouveau", visible: true },
-    { id: "chantiers", visible: true },
+    { id: "envoye", visible: true, taille: "petit" },
+    { id: "accepte", visible: true, taille: "petit" },
+    { id: "a-encaisser", visible: true, taille: "petit" },
+    { id: "payee", visible: true, taille: "petit" },
+    { id: "nouveau", visible: true, taille: "large" },
+    { id: "chantiers", visible: true, taille: "large" },
+    { id: "raccourcis", visible: false, taille: "large" },
+    { id: "relances", visible: false, taille: "large" },
+    { id: "retards", visible: false, taille: "large" },
+    { id: "ca-mois", visible: false, taille: "petit" },
+    { id: "taux-acceptation", visible: false, taille: "petit" },
   ],
 };
 
@@ -51,9 +68,23 @@ export function interfaceValide(i) {
   const r = Array.isArray(v.raccourcis) ? v.raccourcis.filter((x) => x in RACCOURCIS) : [];
   v.raccourcis = [...new Set(r)].slice(0, 3);
   for (const x of INTERFACE_DEFAUT.raccourcis) if (v.raccourcis.length < 3 && !v.raccourcis.includes(x)) v.raccourcis.push(x);
-  const blocs = Array.isArray(v.accueil) ? v.accueil.filter((b) => b && b.id in BLOCS_ACCUEIL) : [];
-  const vus = new Set(blocs.map((b) => b.id));
-  v.accueil = [...blocs.map((b) => ({ id: b.id, visible: b.visible !== false })), ...INTERFACE_DEFAUT.accueil.filter((b) => !vus.has(b.id))];
+  // Ancien réglage : une case « activite » regroupait les 4 chiffres.
+  const brut = (Array.isArray(v.accueil) ? v.accueil : []).flatMap((b) =>
+    b?.id === "activite" ? ["envoye", "accepte", "a-encaisser", "payee"].map((id) => ({ id, visible: b.visible !== false })) : [b],
+  );
+  const blocs = brut.filter((b) => b && b.id in BLOCS_ACCUEIL);
+  const vus = new Set();
+  v.accueil = [];
+  for (const b of [...blocs, ...INTERFACE_DEFAUT.accueil]) {
+    if (vus.has(b.id)) continue;
+    vus.add(b.id);
+    const vientDuDefaut = !blocs.some((x) => x.id === b.id);
+    v.accueil.push({
+      id: b.id,
+      visible: vientDuDefaut && blocs.length ? false : b.visible !== false,
+      taille: ["petit", "large"].includes(b.taille) ? b.taille : BLOCS_ACCUEIL[b.id].taille,
+    });
+  }
   return v;
 }
 
