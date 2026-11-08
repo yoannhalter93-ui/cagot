@@ -651,3 +651,31 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .barre .logo-image { height: 42px; width: auto; background: #fff; border-radius: 10px; padding: 2px 6px; box-sizing: content-box; display: block; }
 .logo-connexion { display: block; width: 200px; border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,.06); max-width: 70%; height: auto; margin: 8px auto -8px; }
 .doc-entete .client small { display: block; margin-top: 4px; }
+
+/* --- Mon interface --- */
+body { zoom: var(--zoom, 1); }
+.choix-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.choix-themes .theme { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; border: 2px solid var(--bord); border-radius: 12px; background: var(--surface); cursor: pointer; margin: 0; font-size: .85rem; text-align: center; }
+.choix-themes .theme.choisi { border-color: var(--vert); box-shadow: 0 0 0 2px rgba(47,138,78,.18); }
+.choix-themes input, .segments input { position: absolute; opacity: 0; pointer-events: none; }
+.choix-themes .pastilles { display: flex; }
+.choix-themes .pastilles i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -6px; }
+.choix-themes .pastilles i:first-child { margin-left: 0; width: 28px; height: 28px; }
+.segments { display: flex; gap: 6px; flex-wrap: wrap; }
+.segments label { position: relative; margin: 0; flex: 1; min-width: 90px; }
+.segments span { display: block; text-align: center; padding: 10px 8px; border: 2px solid var(--bord); border-radius: 12px; background: var(--surface); cursor: pointer; font-weight: 600; }
+.segments input:checked + span { border-color: var(--vert); background: var(--bleu-clair); }
+.segments .a-moyen { font-size: 1.1em; }
+.segments .a-grand { font-size: 1.22em; }
+.choix-raccourcis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.choix-raccourcis label { margin: 0; font-size: .85rem; }
+.choix-raccourcis select { width: 100%; }
+.bloc-reglage { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--bord); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; background: var(--surface); }
+.bloc-reglage label { margin: 0; display: flex; gap: 8px; align-items: center; }
+.bloc-reglage label input { width: auto; }
+.bloc-reglage button { border: 1px solid var(--bord); background: var(--surface); color: var(--texte); border-radius: 8px; width: 34px; height: 34px; margin-left: 4px; cursor: pointer; }
+.bloc-reglage button:disabled { opacity: .35; cursor: default; }
+#interface-origine { margin-top: 14px; }
+[data-bloc][hidden] { display: none; }
+.choix-raccourcis select { padding: 9px 8px; border-radius: 10px; border: 1px solid var(--bord); background: var(--surface); color: var(--texte); font-size: .95rem; margin-top: 4px; }
+.bloc-reglage > span { display: flex; flex: none; }

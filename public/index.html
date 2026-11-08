@@ -18,10 +18,6 @@
     <button type="button" id="btn-reglages" class="btn-reglages" data-vue="parametres" aria-label="Réglages" hidden>⚙️</button>
   </header>
   <nav id="navigation" class="onglets no-print" hidden>
-    <button data-vue="accueil"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg><span>Accueil</span></button>
-
-    <button data-vue="chantiers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M6 18v-3a6 6 0 0 1 12 0v3"/><path d="M12 9V6M10 6h4"/></svg><span>Chantiers</span></button>
-    <button data-vue="clients"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.4 0 4.1 1.5 4.6 4.3"/></svg><span>Clients</span></button>
     <button data-vue="plus" id="onglet-plus"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Plus</span></button>
   </nav>
   <div id="menu-plus" class="feuille-plus no-print" hidden>
@@ -73,11 +69,17 @@
       <h2 id="bonjour">Bonjour 👋</h2>
       <p id="nom-entreprise-accueil"></p>
     </section>
-    <div id="activite-accueil" class="tuiles"></div>
-    <button type="button" id="r-devis" class="btn-devis-rapide">＋ Nouveau chantier</button>
-    <p class="aide centre">Un chantier = le client, tes notes et photos, le devis et la facture, étape par étape.</p>
-    <div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" data-vue="chantiers">Voir tout ›</button></div>
-    <div id="chantiers-accueil"></div>
+    <div id="blocs-accueil">
+      <div data-bloc="activite"><div id="activite-accueil" class="tuiles"></div></div>
+      <div data-bloc="nouveau">
+        <button type="button" id="r-devis" class="btn-devis-rapide">＋ Nouveau chantier</button>
+        <p class="aide centre">Un chantier = le client, tes notes et photos, le devis et la facture, étape par étape.</p>
+      </div>
+      <div data-bloc="chantiers">
+        <div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" data-vue="chantiers">Voir tout ›</button></div>
+        <div id="chantiers-accueil"></div>
+      </div>
+    </div>
   </main>
 
   <!-- ===== Notes de chantier : liste ===== -->
@@ -224,6 +226,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <button type="button" data-onglet="tarifs">Tarifs</button>
       <button type="button" data-onglet="mail">📧 Ma boîte mail</button>
       <button type="button" data-onglet="comptable">🧮 Mon comptable</button>
+      <button type="button" data-onglet="interface">🖌️ Mon interface</button>
       <button type="button" data-onglet="compte">Compte</button>
     </div>
     <form id="form-entreprise" class="carte">
@@ -352,6 +355,32 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
         <button class="btn-principal btn-enregistrer" id="inviter-comptable">✉️ Inviter mon comptable</button>
         <p class="aide">Cagot prépare un lien d'invitation personnel (valable 30 jours) que tu lui envoies par mail, WhatsApp ou SMS. Il crée son compte Cagot gratuit avec ce lien.</p>
       </form>
+    </div>
+
+    <div class="carte" data-panneau="interface" hidden>
+      <h2>Mon interface</h2>
+      <p class="aide">Choisis l'apparence de Cagot. Tout s'applique tout de suite et se retrouve sur ton téléphone comme sur ta tablette.</p>
+      <h3 class="titre-reglage">Couleurs</h3>
+      <div id="choix-themes" class="choix-themes"></div>
+      <h3 class="titre-reglage">Clair ou sombre</h3>
+      <div class="segments" id="choix-mode">
+        <label><input type="radio" name="mode-interface" value="clair"><span>☀️ Clair</span></label>
+        <label><input type="radio" name="mode-interface" value="sombre"><span>🌙 Sombre</span></label>
+        <label><input type="radio" name="mode-interface" value="auto"><span>📱 Comme le téléphone</span></label>
+      </div>
+      <h3 class="titre-reglage">Taille du texte</h3>
+      <div class="segments" id="choix-taille">
+        <label><input type="radio" name="taille-interface" value="normale"><span>Normale</span></label>
+        <label><input type="radio" name="taille-interface" value="grande"><span class="a-moyen">Grande</span></label>
+        <label><input type="radio" name="taille-interface" value="tres-grande"><span class="a-grand">Très grande</span></label>
+      </div>
+      <h3 class="titre-reglage">Barre du bas</h3>
+      <p class="aide">Tes 3 raccourcis préférés (le bouton « Plus » reste toujours à droite).</p>
+      <div id="choix-raccourcis" class="choix-raccourcis"></div>
+      <h3 class="titre-reglage">Page d'accueil</h3>
+      <p class="aide">Ce que tu veux voir en ouvrant Cagot, dans l'ordre que tu veux.</p>
+      <div id="choix-blocs" class="choix-blocs"></div>
+      <button type="button" id="interface-origine" class="lien">↩️ Revenir à l'interface d'origine</button>
     </div>
 
     <div class="carte" id="carte-compte" data-panneau="compte" hidden>

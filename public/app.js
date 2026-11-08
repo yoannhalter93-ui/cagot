@@ -4,6 +4,7 @@ import { demarrerPlateforme } from "/plateforme.js";
 import { genererPdf } from "/pdf-devis.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
 import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
+import { BLOCS_ACCUEIL, INTERFACE_DEFAUT, RACCOURCIS, THEMES, appliquerInterface, interfaceValide } from "/interface.js";
 import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,11 @@ const local = {
     }
   },
 };
+
+// Interface choisie (couleurs, sombre, taille, barre du bas, accueil) : appliquée dès l'ouverture
+// avec la copie gardée sur l'appareil, puis avec celle du compte une fois connecté.
+let reglagesInterface = interfaceValide(local.lire("interface", null));
+appliquerInterface(reglagesInterface, local.lire("couleur-logo", null));
 
 // Messages et confirmations dans la page (les fenêtres alert/confirm du navigateur
 // ne sont pas disponibles partout).
@@ -147,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "8 nov. 2026 · icône escargot";
+const VERSION_APPLI = "9 nov. 2026 · mon interface";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -286,6 +292,7 @@ async function chargerProfil() {
   if (ent.error || tar.error) throw ent.error || tar.error;
   if (ent.data) profil = { infos: { ...profil.infos, ...ent.data.infos }, metiers: ent.data.metiers ?? [] };
   tarifs = tar.data;
+  if (profil.infos.interface) mettreInterface(profil.infos.interface, { enregistrer: false });
 }
 
 async function demarrerSession() {
@@ -325,8 +332,10 @@ function afficherVue(nom) {
   for (const v of document.querySelectorAll(".vue")) v.hidden = v.id !== `vue-${nom}`;
   // Tout ce qui appartient à un chantier allume l'onglet « Chantiers »
   if (["accueil", "chantiers", "clients", "documents", "notes", "parametres"].includes(nom)) ficheCourante = null;
-  const onglet =
-    ["chantier", "fiche", "chantiers"].includes(nom) || (ficheCourante && ["note", "document"].includes(nom))
+  const raccourci = nom === "documents" || nom === "document" ? (typeDocs === "facture" ? "factures" : "devis") : nom === "note" ? "notes" : nom;
+  const onglet = !ficheCourante && reglagesInterface.raccourcis.includes(raccourci) && !["chantier", "fiche"].includes(nom)
+    ? raccourci
+    : ["chantier", "fiche", "chantiers"].includes(nom) || (ficheCourante && ["note", "document"].includes(nom))
       ? "chantiers"
       : ["documents", "document", "notes", "note", "parametres"].includes(nom)
         ? "plus"
@@ -360,6 +369,13 @@ document.addEventListener("click", (ev) => {
 // ---------------------------------------------------------------------------
 async function afficherAccueil() {
   const e = profil.infos;
+  const conteneur = $("#blocs-accueil");
+  for (const b of reglagesInterface.accueil) {
+    const el = conteneur.querySelector(`[data-bloc="${b.id}"]`);
+    if (!el) continue;
+    el.hidden = !b.visible;
+    conteneur.appendChild(el);
+  }
   $("#bonjour").textContent = `Bonjour${e.prenom ? ` ${e.prenom}` : ""} 👋`;
   $("#nom-entreprise-accueil").textContent = e.nom || "";
   const [docs, chantiers] = await Promise.all([
@@ -556,11 +572,97 @@ $("#form-comptable").onsubmit = async (ev) => {
   await envoyerInvitationComptable(a);
 };
 
+// --- Mon interface : couleurs, sombre, taille du texte, barre du bas, accueil ---
+let minuterieInterface = null;
+function mettreInterface(i, { enregistrer = true } = {}) {
+  reglagesInterface = appliquerInterface(i, profil.infos.couleur);
+  local.ecrire("interface", reglagesInterface);
+  local.ecrire("couleur-logo", profil.infos.couleur ?? null);
+  rendreBarreDuBas();
+  if (!enregistrer || !utilisateur) return;
+  clearTimeout(minuterieInterface);
+  minuterieInterface = setTimeout(async () => {
+    profil.infos = { ...profil.infos, interface: reglagesInterface };
+    const { error } = await sb.from("entreprises").upsert({ user_id: utilisateur.id, infos: profil.infos, metiers: profil.metiers, updated_at: new Date().toISOString() });
+    if (error) erreur("Interface non enregistrée en ligne (elle reste sur cet appareil).", error);
+  }, 700);
+}
+window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => appliquerInterface(reglagesInterface, profil.infos.couleur));
+
+function rendreBarreDuBas() {
+  const nav = $("#navigation");
+  for (const b of nav.querySelectorAll("[data-raccourci]")) b.remove();
+  const plus = $("#onglet-plus");
+  for (const id of reglagesInterface.raccourcis) {
+    const r = RACCOURCIS[id];
+    const b = document.createElement("button");
+    b.dataset.vue = id;
+    b.dataset.raccourci = id;
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${r.svg}</svg><span>${esc(r.nom)}</span>`;
+    nav.insertBefore(b, plus);
+  }
+}
+
+function rendreReglagesInterface() {
+  const i = reglagesInterface;
+  $("#choix-themes").innerHTML = THEMES.map((t) => {
+    const c = t.principal ?? (couleurValide(profil.infos.couleur) ? profil.infos.couleur : "#1f3b63");
+    return `<label class="theme ${t.id === i.theme ? "choisi" : ""}"><input type="radio" name="theme-interface" value="${t.id}" ${t.id === i.theme ? "checked" : ""}>
+      <span class="pastilles"><i data-couleur="${c}"></i><i data-couleur="${t.action}"></i><i data-couleur="${t.accent}"></i></span><strong>${esc(t.nom)}</strong></label>`;
+  }).join("");
+  for (const p of $("#choix-themes").querySelectorAll("[data-couleur]")) p.style.background = p.dataset.couleur; // (CSP : pas de style en ligne)
+  for (const r of document.querySelectorAll("[name=mode-interface]")) r.checked = r.value === i.mode;
+  for (const r of document.querySelectorAll("[name=taille-interface]")) r.checked = r.value === i.taille;
+  const options = (choisi) => Object.entries(RACCOURCIS).map(([id, r]) => `<option value="${id}" ${id === choisi ? "selected" : ""}>${esc(r.nom)}</option>`).join("");
+  $("#choix-raccourcis").innerHTML = i.raccourcis.map((id, n) => `<label>Raccourci ${n + 1}<select data-raccourci-choix="${n}">${options(id)}</select></label>`).join("");
+  $("#choix-blocs").innerHTML = i.accueil
+    .map(
+      (b, n) => `<div class="bloc-reglage"><label><input type="checkbox" data-bloc-visible="${n}" ${b.visible ? "checked" : ""}> ${esc(BLOCS_ACCUEIL[b.id])}</label>
+        <span><button type="button" data-bloc-monter="${n}" ${n === 0 ? "disabled" : ""} aria-label="Monter">↑</button><button type="button" data-bloc-descendre="${n}" ${n === i.accueil.length - 1 ? "disabled" : ""} aria-label="Descendre">↓</button></span></div>`,
+    )
+    .join("");
+}
+
+$("#vue-parametres").addEventListener("change", (ev) => {
+  const c = ev.target;
+  const i = structuredClone(reglagesInterface);
+  if (c.name === "theme-interface") i.theme = c.value;
+  else if (c.name === "mode-interface") i.mode = c.value;
+  else if (c.name === "taille-interface") i.taille = c.value;
+  else if (c.dataset.raccourciChoix !== undefined) {
+    const n = Number(c.dataset.raccourciChoix);
+    const ancien = i.raccourcis[n];
+    const autre = i.raccourcis.indexOf(c.value);
+    if (autre !== -1) i.raccourcis[autre] = ancien; // échange si déjà dans la barre
+    i.raccourcis[n] = c.value;
+  } else if (c.dataset.blocVisible !== undefined) i.accueil[Number(c.dataset.blocVisible)].visible = c.checked;
+  else return;
+  mettreInterface(i);
+  rendreReglagesInterface();
+});
+$("#vue-parametres").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-bloc-monter], [data-bloc-descendre]");
+  if (!b) return;
+  const i = structuredClone(reglagesInterface);
+  const n = Number(b.dataset.blocMonter ?? b.dataset.blocDescendre);
+  const m = b.dataset.blocMonter !== undefined ? n - 1 : n + 1;
+  [i.accueil[n], i.accueil[m]] = [i.accueil[m], i.accueil[n]];
+  mettreInterface(i);
+  rendreReglagesInterface();
+});
+rendreBarreDuBas();
+$("#interface-origine").onclick = () => {
+  mettreInterface(structuredClone(INTERFACE_DEFAUT));
+  rendreReglagesInterface();
+  notifier("Interface d'origine remise.");
+};
+
 // Réglages en onglets
 for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
   b.onclick = () => {
     if (b.dataset.onglet === "mail") afficherBoite();
     if (b.dataset.onglet === "comptable") afficherComptables();
+    if (b.dataset.onglet === "interface") rendreReglagesInterface();
     if (b.dataset.onglet === "tarifs") requestAnimationFrame(ajusterNomsTarifs);
     for (const x of document.querySelectorAll(".onglets-reglages [data-onglet]")) x.classList.toggle("actif", x === b);
     for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== b.dataset.onglet;
@@ -3066,7 +3168,7 @@ $("#reprendre-numeros").onclick = async () => {
 
 $("#form-entreprise").onsubmit = async (ev) => {
   ev.preventDefault();
-  const infos = {};
+  const infos = { ...profil.infos }; // garde ce qui n'est pas dans le formulaire (interface…)
   for (const champ of ev.target.elements) {
     if (!champ.name) continue;
     if (champ.type === "radio") {
