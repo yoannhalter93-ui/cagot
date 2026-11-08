@@ -1,0 +1,76 @@
+:root {
+  --marine: #1f3b63;
+  --orange: #f07c1e;
+  --orange-fonce: #d9650c;
+  --or: #f2b632;
+  --turquoise: #1aa3b8;
+  --fond: #fbf8f3;
+  --texte: #1c2430;
+  --gris: #5d6878;
+  --bord: #e3e0da;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--texte);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); line-height: 1.5; }
+img { max-width: 100%; height: auto; }
+a { color: var(--marine); }
+h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; color: var(--marine); }
+
+.haut { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: rgba(251, 248, 243, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--bord); }
+.marque img { height: 46px; width: auto; display: block; }
+
+.bouton { display: inline-block; background: var(--orange); color: #fff; font-weight: 700; text-decoration: none; padding: 14px 22px; border-radius: 14px; box-shadow: 0 6px 18px rgba(240, 124, 30, .28); transition: transform .15s, background .15s; }
+.bouton:hover { background: var(--orange-fonce); transform: translateY(-1px); }
+.bouton-clair { background: #fff; color: var(--marine); border: 1px solid var(--bord); box-shadow: none; padding: 9px 14px; font-size: .95rem; }
+.bouton-clair:hover { background: #fff; }
+
+main > section { max-width: 1080px; margin: 0 auto; padding: 48px 16px; }
+
+.accroche { display: grid; grid-template-columns: 1.1fr .9fr; gap: 32px; align-items: center; }
+.sur-titre { display: inline-block; margin: 0 0 12px; background: #fde9d7; color: var(--orange-fonce); font-weight: 700; font-size: .85rem; padding: 4px 10px; border-radius: 99px; }
+.accroche h1 { font-size: clamp(2rem, 5vw, 3.1rem); letter-spacing: -.5px; }
+.accroche h1 span { color: var(--orange); }
+.intro { font-size: 1.15rem; color: var(--gris); max-width: 34em; }
+.actions { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin: 22px 0 10px; }
+.actions .lien { font-weight: 600; }
+.petit { color: var(--gris); font-size: .9rem; }
+.telephones { position: relative; min-height: 460px; }
+.telephone { position: absolute; width: 58%; border-radius: 26px; border: 7px solid #18263b; box-shadow: 0 18px 40px rgba(31, 59, 99, .25); background: #fff; }
+.telephone.arriere { left: 0; top: 0; transform: rotate(-4deg); }
+.telephone.avant { right: 0; top: 40px; transform: rotate(3deg); }
+
+.etapes { text-align: center; }
+.etapes ol { list-style: none; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: left; }
+.etapes li { background: #fff; border: 1px solid var(--bord); border-radius: 18px; padding: 20px; }
+.etapes li b { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--marine); color: #fff; margin-bottom: 12px; }
+.etapes p, .atouts p, .perso p { color: var(--gris); margin: 0; }
+
+.atouts h2, .final h2 { text-align: center; }
+.grille { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 24px; }
+.grille article { background: #fff; border: 1px solid var(--bord); border-radius: 16px; padding: 18px; }
+.grille article span { font-size: 1.6rem; }
+.grille h3 { font-size: 1.05rem; margin: 6px 0; }
+
+.perso { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.perso > div { background: var(--marine); color: #fff; border-radius: 20px; padding: 26px; }
+.perso h2 { color: var(--or); }
+.perso p { color: #d9e3f0; }
+
+.final { text-align: center; }
+.final img { width: 170px; border-radius: 22px; background: #fff; box-shadow: 0 4px 16px rgba(0, 0, 0, .06); }
+.final p { color: var(--gris); margin-bottom: 22px; }
+
+.bas { text-align: center; padding: 30px 16px 40px; border-top: 1px solid var(--bord); color: var(--gris); font-size: .9rem; }
+.bas p { margin: 4px 0; }
+
+@media (max-width: 760px) {
+  main > section { padding: 34px 16px; }
+  .accroche, .perso { grid-template-columns: 1fr; }
+  .telephones { min-height: 0; height: 120vw; max-height: 520px; }
+  .telephone { width: 56%; border-width: 5px; border-radius: 20px; }
+  .etapes ol, .grille { grid-template-columns: 1fr; }
+  .bouton { width: 100%; text-align: center; }
+  .bouton-clair { width: auto; }
+}
