@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Accueil corrigé";
+const VERSION_APPLI = "10 nov. 2026 · Pages légales";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -204,6 +204,7 @@ function afficherModeConnexion(mode) {
   $("#titre-connexion").textContent = titres[mode];
   $("#btn-connexion").textContent = boutons[mode];
   $("#champ-mdp").hidden = mode === "oubli";
+  $("#champ-cgu").hidden = mode !== "inscription";
   $("#form-connexion [name=mdp]").required = mode !== "oubli";
   $("#form-connexion [name=mdp]").autocomplete = mode === "inscription" ? "new-password" : "current-password";
   $("#vers-inscription").textContent = mode === "connexion" ? "Créer un compte" : "J'ai déjà un compte";
@@ -228,7 +229,8 @@ $("#form-connexion").onsubmit = async (e) => {
       if (error) messageConnexion("E-mail ou mot de passe incorrect (ou compte pas encore confirmé).");
     } else if (modeConnexion === "inscription") {
       if (password.length < 10) return messageConnexion("Le mot de passe doit faire au moins 10 caractères.");
-      const { error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin } });
+      if (!e.target.cgu.checked) return messageConnexion("Coche la case pour accepter les conditions d'utilisation.");
+      const { error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin, data: { cgu_acceptees: new Date().toISOString(), cgu_version: "2026-11-10" } } });
       if (error) messageConnexion(`Inscription impossible : ${error.message}`);
       else messageConnexion("Compte créé ! Clique sur le lien reçu par e-mail pour l'activer, puis connecte-toi.");
     } else {

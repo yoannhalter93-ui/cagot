@@ -786,3 +786,6 @@ body { zoom: var(--zoom, 1); }
 .raccourcis-chantier h3 { margin: 0 0 4px; }
 .raccourcis-chantier .btn-secondaire { text-align: left; }
 .pastille.statut-brouillon { background: #e8edf3; color: #3d4b5c; }
+.liens-legaux-appli { text-align: center; font-size: .82rem; color: var(--gris); margin: 12px 0 0; }
+.liens-legaux-appli a { color: inherit; }
+#champ-cgu[hidden] { display: none !important; }
