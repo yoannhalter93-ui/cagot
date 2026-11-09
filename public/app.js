@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · Clôtures";
+const VERSION_APPLI = "10 nov. 2026 · Glisser pour supprimer";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -1992,12 +1992,12 @@ function rendreChantiers(tous) {
     const [quoi, date] = quand({ c, e });
     const nomClient = e.devis?.contenu.client_nom;
     const docs = [e.devis && `Devis ${e.devis.numero} du ${dateFr(e.devis.date_document)}`, e.facture?.numero && `Facture ${e.facture.numero}`].filter(Boolean).join(" · ");
-    return `<button type="button" class="carte-fiche ${e.fini ? "fini" : ""}" data-fiche="${esc(c.id)}">
+    return `<div class="glisse"><span class="fond-glisse fond-raccourcis" aria-hidden="true">⚡ Raccourcis</span><span class="fond-glisse fond-supprimer" aria-hidden="true">Supprimer 🗑️</span><button type="button" class="carte-fiche ${e.fini ? "fini" : ""}" data-fiche="${esc(c.id)}">
         <span class="ligne-fiche"><strong>${esc(c.titre || "Chantier sans titre")}</strong><b>${e.devis ? euros(montantDoc(e.devis)) : ""}</b></span>
         ${nomClient && !(c.titre || "").includes(nomClient) ? `<span class="client-fiche">👤 ${esc(nomClient)}</span>` : ""}
         <span class="progression-fiche">${[1, 2, 3, 4].map((n) => `<i class="${e.fini || n < e.etape ? "fait" : n === e.etape ? "en-cours" : ""}"></i>`).join("")}</span>
         <small>${esc(e.libelle)} · ${esc(quoi.toLowerCase())} ${ilYa(date)}${docs ? `<br>${esc(docs)}` : ""}</small>
-      </button>`;
+      </button></div>`;
   };
 
   if (!liste.length) zone.innerHTML = `<p class="aide">Aucun chantier ne correspond.</p>`;
@@ -2010,7 +2010,11 @@ function rendreChantiers(tous) {
     }).join("");
   } else zone.innerHTML = liste.map(carte).join("");
 
-  for (const b of zone.querySelectorAll("[data-fiche]")) b.onclick = () => ouvrirFiche(b.dataset.fiche);
+  for (const b of zone.querySelectorAll("[data-fiche]")) {
+    const x = tous.find((t) => t.c.id === b.dataset.fiche);
+    b.onclick = () => ouvrirFiche(b.dataset.fiche);
+    activerGlissement(b, { gauche: () => supprimerChantierListe(x), droite: () => raccourcisChantier(x) });
+  }
   for (const b of $("#filtres-chantiers").querySelectorAll("[data-filtre-chantier]")) {
     b.onclick = () => {
       vueChantiers.filtre = b.dataset.filtreChantier;
@@ -2026,6 +2030,116 @@ function rendreChantiers(tous) {
     rendreChantiers(tous);
     $("#recherche-chantiers").focus();
   };
+}
+
+// Glisser une carte du doigt : vers la gauche → supprimer, vers la droite → raccourcis.
+function activerGlissement(carte, { gauche, droite }) {
+  const conteneur = carte.parentElement;
+  let depart = null;
+  let dx = 0;
+  let horizontal = null;
+  let glisseA = 0;
+  carte.addEventListener("click", (ev) => {
+    if (Date.now() - glisseA < 500) {
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+    }
+  }, { capture: true });
+  const seuil = () => Math.min(120, carte.offsetWidth * 0.3);
+  const remettre = () => {
+    carte.style.transition = "transform .2s";
+    carte.style.transform = "";
+    conteneur.classList.remove("vers-gauche", "vers-droite", "pret");
+  };
+  carte.addEventListener("pointerdown", (ev) => {
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    depart = [ev.clientX, ev.clientY];
+    dx = 0;
+    horizontal = null;
+    carte.style.transition = "none";
+  });
+  carte.addEventListener("pointermove", (ev) => {
+    if (!depart) return;
+    const ddx = ev.clientX - depart[0];
+    const ddy = ev.clientY - depart[1];
+    if (horizontal === null && Math.hypot(ddx, ddy) > 10) {
+      horizontal = Math.abs(ddx) > Math.abs(ddy) * 1.3;
+      if (horizontal) carte.setPointerCapture(ev.pointerId);
+    }
+    if (!horizontal) return;
+    dx = ddx;
+    carte.style.transform = `translateX(${dx}px)`;
+    conteneur.classList.toggle("vers-gauche", dx < 0);
+    conteneur.classList.toggle("vers-droite", dx > 0);
+    conteneur.classList.toggle("pret", Math.abs(dx) > seuil());
+  });
+  const fin = () => {
+    if (!depart) return;
+    const action = horizontal && Math.abs(dx) > seuil() ? (dx < 0 ? gauche : droite) : null;
+    if (horizontal) glisseA = Date.now(); // pas d'ouverture du chantier juste après un glissement
+    depart = null;
+    remettre();
+    if (action) action();
+  };
+  carte.addEventListener("pointerup", fin);
+  carte.addEventListener("pointercancel", () => {
+    depart = null;
+    remettre();
+  });
+}
+
+// Suppression depuis la liste : le chantier et son devis (une facture émise ne se supprime jamais).
+async function supprimerChantierListe({ c, e }) {
+  const f = e.facture;
+  if (f && f.statut !== "brouillon") {
+    return demander(`Impossible de supprimer : la facture ${f.numero} est émise. La loi interdit de supprimer une facture ; pour l'annuler, ouvre-la et fais un avoir.`, { ok: "Compris" });
+  }
+  const d = e.devis;
+  const quoi = d ? `le devis ${d.numero || "brouillon"}${f ? " et la facture brouillon" : ""} (« ${c.titre || "sans titre"} »)` : `le chantier « ${c.titre || "sans titre"} »`;
+  const signe = d?.statut === "accepte" ? " Attention : ce devis a été accepté par le client." : "";
+  if (!(await demander(`Supprimer définitivement ${quoi} ?${signe}`, { ok: "Supprimer", danger: true }))) return;
+  for (const doc of [f, d].filter(Boolean)) {
+    const { error } = await sb.from("documents").delete().eq("id", doc.id);
+    if (error) return erreur("Suppression impossible.", error);
+    if (conversation.docId === doc.id) {
+      conversation.docId = null;
+      sauverConversation();
+    }
+  }
+  const { error } = await sb.from("chantiers").delete().eq("id", c.id);
+  if (error) return erreur("Suppression impossible.", error);
+  if (conversation.id === c.id) nouvelleConversation();
+  notifier("Supprimé.");
+  afficherFiches();
+}
+
+// Raccourcis d'un chantier (glisser vers la droite).
+function raccourcisChantier({ c, e }) {
+  const d = e.devis;
+  const f = e.facture;
+  const actions = [
+    ["🗒️ Ouvrir le chantier", () => ouvrirFiche(c.id)],
+    d && ["📝 Voir le devis", () => ouvrirDocument(d.id)],
+    d && ["brouillon", "envoye"].includes(d.statut) && ["📤 Envoyer le devis", async () => (await ouvrirDocument(d.id), $("#partager").click())],
+    d && !f && ["envoye", "accepte"].includes(d.statut) && ["🧾 Faire la facture", async () => (await ouvrirDocument(d.id), $("#en-facture").click())],
+    f && ["💶 Voir la facture", () => ouvrirDocument(f.id)],
+    f?.statut === "emise" && ["✅ Enregistrer un paiement", async () => (await ouvrirDocument(f.id), $("#payee").click())],
+    d?.contenu.client_telephone && ["📞 Appeler le client", () => (location.href = `tel:${d.contenu.client_telephone.replace(/[^\d+]/g, "")}`)],
+  ].filter(Boolean);
+  const fond = document.createElement("div");
+  fond.className = "dialogue-fond";
+  fond.innerHTML = `<div class="dialogue raccourcis-chantier"><h3></h3>${actions.map((a, i) => `<button type="button" class="btn-secondaire" data-i="${i}">${a[0]}</button>`).join("")}<button type="button" class="annuler lien">Fermer</button></div>`;
+  fond.querySelector("h3").textContent = c.titre || "Chantier";
+  const fermer = () => fond.remove();
+  fond.onclick = (ev) => ev.target === fond && fermer();
+  fond.querySelector(".annuler").onclick = fermer;
+  for (const b of fond.querySelectorAll("[data-i]")) {
+    b.onclick = () => {
+      fermer();
+      actions[Number(b.dataset.i)][1]();
+    };
+  }
+  document.body.appendChild(fond);
 }
 
 function demanderTexte(titre, placeholder, valeur = "") {

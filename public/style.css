@@ -774,3 +774,14 @@ body { zoom: var(--zoom, 1); }
 .clotures-journal { margin-top: 16px; }
 .clotures-journal summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .table-journal tr.cloture-annuelle td { font-weight: 700; background: var(--fond-doux, rgba(31, 78, 121, .08)); }
+/* Cartes de chantier à glisser : gauche = supprimer, droite = raccourcis */
+.glisse { position: relative; margin-bottom: 10px; border-radius: 16px; overflow: hidden; }
+.glisse .carte-fiche { position: relative; margin-bottom: 0; touch-action: pan-y; user-select: none; }
+.fond-glisse { position: absolute; inset: 0; display: none; align-items: center; padding: 0 20px; font-weight: 700; color: #fff; border-radius: 16px; }
+.fond-supprimer { justify-content: flex-end; background: #c0392b; }
+.fond-raccourcis { justify-content: flex-start; background: #1f6fb2; }
+.glisse.vers-gauche .fond-supprimer, .glisse.vers-droite .fond-raccourcis { display: flex; opacity: .55; }
+.glisse.pret .fond-glisse { opacity: 1; }
+.raccourcis-chantier { display: flex; flex-direction: column; gap: 8px; }
+.raccourcis-chantier h3 { margin: 0 0 4px; }
+.raccourcis-chantier .btn-secondaire { text-align: left; }
