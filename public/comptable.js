@@ -1,7 +1,8 @@
 // Espace expert-comptable : accès en LECTURE SEULE aux factures émises et payées des artisans
 // qui l'ont invité. Tout passe par des fonctions du serveur qui vérifient l'accès à chaque appel
 // (invitation acceptée, non retirée) : le comptable ne peut ni lire autre chose, ni modifier.
-import { genererPdf } from "/pdf-devis.js";
+import { genererPdf, pdfFacturX, preparerPolices } from "/pdf-devis.js";
+import { xmlFacturX } from "/facturx.js";
 import { conditionsDe } from "/personnalisation.js";
 import { autoliquidation, mentionsClient } from "/mentions-legales.js";
 
@@ -333,9 +334,17 @@ function elementsFacture(f, e) {
 }
 
 async function telechargerPdf(f) {
-  for (const src of ["/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js"]) await chargerScript(src);
+  for (const src of ["/vendor/jspdf.umd.min.js", "/vendor/jspdf.plugin.autotable.min.js", "/vendor/pdf-lib.min.js"]) await chargerScript(src);
+  await preparerPolices();
   const e = dossier.entreprise;
-  const blob = genererPdf({ d: f, entreprise: e, elements: elementsFacture(f, e), euros, nombre, dateFr });
+  const elements = elementsFacture(f, e);
+  let blob = genererPdf({ d: f, entreprise: e, elements, euros, nombre, dateFr });
+  try {
+    const xml = xmlFacturX({ d: f, e, mentions: elements.mentions, echeance: ajouterJours(f.date_document, e.delai_paiement || 30) });
+    blob = await pdfFacturX(blob, xml, { titre: `${f.contenu.avoir ? "Avoir" : "Facture"} ${f.numero}`, auteur: e.nom || "Cagot", avoir: !!f.contenu.avoir });
+  } catch (err) {
+    console.error("Factur-X", err);
+  }
   telecharger(blob, `${nomFichier(`Facture_${f.numero}_${f.contenu.client_nom || ""}`)}.pdf`);
 }
 

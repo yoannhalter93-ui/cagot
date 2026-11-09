@@ -1,9 +1,10 @@
 import { calculerTotaux } from "/calcul.js";
 import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
-import { genererPdf } from "/pdf-devis.js";
+import { genererPdf, pdfFacturX, preparerPolices } from "/pdf-devis.js";
+import { xmlFacturX } from "/facturx.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
-import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
+import { NATURES, autoliquidation, estParticulier, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 import { BLOCS_ACCUEIL, INTERFACE_DEFAUT, RACCOURCIS, THEMES, appliquerInterface, interfaceValide } from "/interface.js";
 import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
@@ -153,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · factures scellées";
+const VERSION_APPLI = "9 nov. 2026 · factures électroniques";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2832,7 +2833,7 @@ function rendreDocument() {
     info.innerHTML =
       d.statut === "brouillon"
         ? "Facture en <strong>brouillon</strong> : vérifie-la puis clique « Émettre la facture ». Elle recevra alors son numéro définitif et ne pourra plus être modifiée."
-        : `Facture <strong>${LIBELLES_STATUT[d.statut]}</strong> : elle est verrouillée (obligation légale). Pour corriger, il faudra faire un avoir.`;
+        : `Facture <strong>${LIBELLES_STATUT[d.statut]}</strong> : elle est verrouillée (obligation légale). Pour corriger, fais un avoir.<br>📄 Le PDF est une <strong>facture électronique Factur-X</strong> (EN 16931), lisible par les logiciels comptables et les plateformes agréées.`;
   } else {
     // Le statut se lit dans le badge en haut et se change avec le gros bouton (ou ici, pour revenir en arrière)
     info.hidden = false;
@@ -2863,7 +2864,9 @@ function rendreDocument() {
   if (estimes && !verrouille) hyp.unshift(`${estimes} prix estimé(s) par l'IA (surlignés en jaune) : vérifie-les et ajoute-les à ta grille.`);
   if (estParticulier(v) && !e.mediateur?.trim()) hyp.push("Médiateur de la consommation non renseigné (Réglages → Entreprise) : obligatoire quand le client est un particulier.");
   if (facture && !v.avoir && !v.date_travaux?.trim()) hyp.push("Indique la date (ou la période) des travaux réalisés, en bas de la facture.");
-  if (!estParticulier(v) && !v.client_siren?.trim()) hyp.push("Client professionnel : ajoute son SIREN dans le cadre « Client ».");
+  if (!estParticulier(v) && !v.client_siren?.trim()) hyp.push("Client professionnel : ajoute son SIREN dans le cadre « Client » (obligatoire pour la facture électronique).");
+  if (facture && !e.siret?.trim()) hyp.push("Renseigne ton SIRET (Réglages → Entreprise) : indispensable pour la facture électronique.");
+  if (facture && !e.franchise_tva && !e.tva_intra?.trim()) hyp.push("Renseigne ton n° de TVA intracommunautaire (Réglages → Entreprise) : obligatoire sur les factures avec TVA.");
   $("#hypotheses").hidden = hyp.length === 0 || verrouille;
   $("#hypotheses").innerHTML = `<strong>À vérifier avant d'envoyer :</strong><ul>${hyp.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`;
 
@@ -2908,6 +2911,7 @@ function rendreDocument() {
       </div>
       ${!pro && !facture ? `<label class="case-legal"><input type="checkbox" id="hors-etablissement" ${horsEtablissement(v) ? "checked" : ""}> Devis signé chez le client ou à distance → droit de rétractation de 14 jours (formulaire joint au PDF)</label>` : ""}
       ${pro ? `<label class="case-legal"><input type="checkbox" id="autoliquidation" ${v.autoliquidation ? "checked" : ""}> Sous-traitance pour une entreprise du bâtiment → autoliquidation (pas de TVA facturée)</label>` : ""}
+      ${facture ? `<label class="case-legal">Nature de l'opération <select id="nature-operation">${Object.entries(NATURES).map(([k, n]) => `<option value="${k}" ${(v.nature ?? "services") === k ? "selected" : ""}>${n.charAt(0).toUpperCase() + n.slice(1)}</option>`).join("")}</select></label>` : ""}
     </div>`;
 
   $("#document").innerHTML = `
@@ -2986,6 +2990,8 @@ function rendreDocument() {
         }
       });
   }
+  const nature = $("#nature-operation");
+  if (nature) nature.onchange = () => majDocument((dv) => (dv.nature = nature.value));
   const caseHors = $("#hors-etablissement");
   if (caseHors) caseHors.onchange = () => majDocument((dv) => (dv.hors_etablissement = caseHors.checked));
   const caseAuto = $("#autoliquidation");
@@ -3107,10 +3113,22 @@ const chargerScript = (src) =>
 async function pdfDocument(d) {
   if (!plateforme.scriptsPdf) return null;
   for (const src of plateforme.scriptsPdf) await chargerScript(src);
+  await preparerPolices();
   const elements = elementsDocument(d);
   const sig = await signatureDuDevis(d);
   if (sig) elements.signature = { image: sig.signature, nom: sig.signataire_nom, date: dateFr(sig.signe_at) };
-  return genererPdf({ d, entreprise: profil.infos, elements, euros, nombre, dateFr });
+  const pdf = genererPdf({ d, entreprise: profil.infos, elements, euros, nombre, dateFr });
+  // Facture ou avoir émis : facture électronique Factur-X (PDF/A-3 + XML EN 16931 attaché).
+  if (d.type === "facture" && d.numero && d.statut !== "brouillon") {
+    try {
+      await chargerScript("/vendor/pdf-lib.min.js");
+      const xml = xmlFacturX({ d, e: profil.infos, mentions: elements.mentions, echeance: ajouterJours(d.date_document, profil.infos.delai_paiement || 30) });
+      return await pdfFacturX(pdf, xml, { titre: `${nomDoc(d)} ${d.numero}`, auteur: profil.infos.nom || "Cagot", avoir: !!d.contenu.avoir });
+    } catch (err) {
+      console.error("Factur-X", err); // repli : PDF simple
+    }
+  }
+  return pdf;
 }
 
 // --- Devis interactif : lien secret pour que le client choisisse ses options et signe ---

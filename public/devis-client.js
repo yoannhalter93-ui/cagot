@@ -2,7 +2,7 @@
 // coche ses options, signe au doigt. Le lien secret est dans l'ancre (#…), jamais envoyé
 // dans les journaux des serveurs.
 import { calculerTotaux } from "/calcul.js";
-import { genererPdf } from "/pdf-devis.js";
+import { genererPdf, preparerPolices } from "/pdf-devis.js";
 import { htmlPersonnalisation, modeleDe } from "/personnalisation.js";
 import { autoliquidation, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 
@@ -199,6 +199,7 @@ async function telechargerPdf() {
       await new Promise((ok, ko) => document.head.appendChild(Object.assign(document.createElement("script"), { src, onload: ok, onerror: ko })));
     }
   }
+  await preparerPolices();
   const c = totaux();
   const e = donnees.entreprise;
   const franchise = !!e.franchise_tva;

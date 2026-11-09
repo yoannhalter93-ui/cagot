@@ -4,6 +4,26 @@
 import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement } from "/mentions-legales.js";
 import { labelsDe, modeleDe, piedDePage, textesDocument } from "/personnalisation.js";
 
+// Polices intégrées au PDF (Liberation Sans, licence SIL OFL) : indispensables pour la facture
+// électronique PDF/A-3, et elles affichent correctement €, accents et espaces fines.
+let polices = null;
+const enBase64 = (buf) => {
+  const o = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < o.length; i += 0x8000) s += String.fromCharCode(...o.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+export async function preparerPolices() {
+  if (polices) return polices;
+  try {
+    const [r, g] = await Promise.all(["/polices/LiberationSans-Regular.ttf", "/polices/LiberationSans-Bold.ttf"].map((u) => fetch(u).then((x) => (x.ok ? x.arrayBuffer() : Promise.reject()))));
+    polices = { normal: enBase64(r), bold: enBase64(g) };
+  } catch {
+    polices = null; // hors ligne : polices standard du PDF
+  }
+  return polices;
+}
+
 const BLEU_DEFAUT = [31, 78, 121];
 const GRIS = [107, 118, 132];
 const TEXTE = [28, 36, 48];
@@ -22,6 +42,15 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   const { jsPDF } = window.jspdf;
   const [BLEU, BLEU_CLAIR] = couleurs(e.couleur);
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  let POLICE = "helvetica";
+  if (polices) {
+    pdf.addFileToVFS("LiberationSans-Regular.ttf", polices.normal);
+    pdf.addFileToVFS("LiberationSans-Bold.ttf", polices.bold);
+    pdf.addFont("LiberationSans-Regular.ttf", "Liberation", "normal");
+    pdf.addFont("LiberationSans-Bold.ttf", "Liberation", "bold");
+    POLICE = "Liberation";
+    pdf.setFont(POLICE, "normal");
+  }
   const v = d.contenu;
   const L = 210;
   const M = 15;
@@ -47,9 +76,9 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
       // logo illisible : on continue sans
     }
   }
-  pdf.setFont("helvetica", "bold").setFontSize(15).setTextColor(...BLEU);
+  pdf.setFont(POLICE, "bold").setFontSize(15).setTextColor(...BLEU);
   pdf.text(propre(e.nom || "Mon entreprise"), M, yNom);
-  pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(...TEXTE);
+  pdf.setFont(POLICE, "normal").setFontSize(9).setTextColor(...TEXTE);
   const lignesEntreprise = [
     ...String(e.adresse || "").split("\n"),
     e.telephone ? `Tél. ${e.telephone}` : "",
@@ -75,24 +104,24 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   ];
   const hauteurC = 9 + Math.max(lignesClient.length, 2) * 4.4;
   pdf.setDrawColor(215, 221, 228).roundedRect(xC, y - 5, largeurC, hauteurC, 2, 2);
-  pdf.setFont("helvetica", "bold").setFontSize(9).text("Client", xC + 3, y);
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont(POLICE, "bold").setFontSize(9).text("Client", xC + 3, y);
+  pdf.setFont(POLICE, "normal");
   lignesClient.forEach((l, i) => pdf.text(l, xC + 3, y + 5 + i * 4.4));
 
   // --- Titre, date, objet, description
   y = Math.max(yE, y - 5 + hauteurC) + 9;
   if (modele === "moderne") {
     pdf.setFillColor(...BLEU).roundedRect(M, y - 6.5, L - 2 * M, 10, 1.5, 1.5, "F");
-    pdf.setFont("helvetica", "bold").setFontSize(14).setTextColor(255, 255, 255);
+    pdf.setFont(POLICE, "bold").setFontSize(14).setTextColor(255, 255, 255);
     pdf.text(propre(elements.titre), M + 4, y + 0.6);
     y += 9;
   } else {
-    pdf.setFont("helvetica", "bold").setFontSize(16).setTextColor(...(modele === "epure" ? TEXTE : BLEU));
+    pdf.setFont(POLICE, "bold").setFontSize(16).setTextColor(...(modele === "epure" ? TEXTE : BLEU));
     pdf.text(propre(elements.titre), M, y);
     if (modele === "epure") pdf.setDrawColor(...BLEU).setLineWidth(0.6).line(M, y + 2, M + 30, y + 2).setLineWidth(0.2);
     y += modele === "epure" ? 7 : 6;
   }
-  pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(...GRIS);
+  pdf.setFont(POLICE, "normal").setFontSize(9).setTextColor(...GRIS);
   const meta = pdf.splitTextToSize(propre(`Date : ${dateFr(d.date_document)}  ·  Objet : ${v.titre}`), L - 2 * M);
   pdf.text(meta, M, y);
   y += meta.length * 4.2 + 2;
@@ -131,7 +160,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     body: corps,
     theme: modele === "epure" ? "plain" : "grid",
     rowPageBreak: "avoid",
-    styles: { font: "helvetica", fontSize: 8.5, textColor: TEXTE, lineColor: [215, 221, 228], lineWidth: modele === "epure" ? { bottom: 0.2 } : 0.2, cellPadding: 1.8, valign: "top" },
+    styles: { font: POLICE, fontSize: 8.5, textColor: TEXTE, lineColor: [215, 221, 228], lineWidth: modele === "epure" ? { bottom: 0.2 } : 0.2, cellPadding: 1.8, valign: "top" },
     headStyles: modele === "epure" ? { textColor: BLEU, fontStyle: "bold", lineColor: BLEU, lineWidth: { bottom: 0.5 } } : { fillColor: BLEU, textColor: 255, fontStyle: "bold" },
     columnStyles: { 0: { cellWidth: "auto" }, 1: { cellWidth: 16 }, 2: { cellWidth: 16 }, 3: { cellWidth: 24 }, 4: { cellWidth: 27 } },
   });
@@ -147,7 +176,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     margin: { left: L - M - 75, right: M, bottom: basPage },
     body: totaux.map(([a, b]) => [propre(a), { content: propre(b), styles: { halign: "right" } }]),
     theme: "plain",
-    styles: { font: "helvetica", fontSize: 9.5, textColor: TEXTE, cellPadding: 1.4 },
+    styles: { font: POLICE, fontSize: 9.5, textColor: TEXTE, cellPadding: 1.4 },
     didParseCell: (c) => {
       if (c.row.index !== totaux.length - 1) return;
       Object.assign(c.cell.styles, { fontStyle: "bold", fontSize: 11.5 }, modele === "moderne" ? { fillColor: BLEU, textColor: 255 } : modele === "epure" ? { textColor: BLEU, lineColor: BLEU, lineWidth: { top: 0.5 } } : { fillColor: BLEU_CLAIR });
@@ -158,7 +187,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   const hauteurPage = pdf.internal.pageSize.getHeight();
   // --- Texte de fin (remerciements…)
   if (fin) {
-    pdf.setFont("helvetica", "normal").setFontSize(9).setTextColor(...TEXTE);
+    pdf.setFont(POLICE, "normal").setFontSize(9).setTextColor(...TEXTE);
     const t = pdf.splitTextToSize(propre(fin), L - 2 * M);
     if (y + t.length * 4.2 > hauteurPage - basPage) {
       pdf.addPage();
@@ -169,7 +198,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   }
 
   // --- Mentions légales
-  pdf.setFont("helvetica", "normal").setFontSize(7.8).setTextColor(...GRIS);
+  pdf.setFont(POLICE, "normal").setFontSize(7.8).setTextColor(...GRIS);
   for (const m of elements.mentions) {
     const lignes = pdf.splitTextToSize(propre(m), L - 2 * M);
     if (y + lignes.length * 3.6 > hauteurPage - basPage) {
@@ -234,9 +263,9 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     y = 22;
     pdf.setDrawColor(...GRIS).setLineDashPattern([2, 1.5], 0).line(M, 14, L - M, 14).setLineDashPattern([], 0);
     pdf.setFontSize(7).setTextColor(...GRIS).text(propre("À découper ou à recopier"), M, 12);
-    pdf.setFont("helvetica", "bold").setFontSize(14).setTextColor(...TEXTE).text(propre(f.titre), M, y);
+    pdf.setFont(POLICE, "bold").setFontSize(14).setTextColor(...TEXTE).text(propre(f.titre), M, y);
     y += 9;
-    pdf.setFont("helvetica", "normal").setFontSize(10);
+    pdf.setFont(POLICE, "normal").setFontSize(10);
     for (const l of f.lignes) {
       const t = pdf.splitTextToSize(propre(l), L - 2 * M);
       pdf.text(t, M, y);
@@ -254,4 +283,68 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     pdf.text(`${propre(d.numero || "brouillon")} – page ${i}/${nb}`, L - M, hauteurPage - 8, { align: "right" });
   }
   return pdf.output("blob");
+}
+
+// --- Factur-X : PDF/A-3 avec le XML de la facture attaché (pdf-lib chargé dans window.PDFLib)
+const xmp = ({ titre, auteur, date, avoir }) => `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"><pdfaid:part>3</pdfaid:part><pdfaid:conformance>B</pdfaid:conformance></rdf:Description>
+<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:format>application/pdf</dc:format>
+<dc:title><rdf:Alt><rdf:li xml:lang="x-default">${titre}</rdf:li></rdf:Alt></dc:title>
+<dc:creator><rdf:Seq><rdf:li>${auteur}</rdf:li></rdf:Seq></dc:creator>
+<dc:description><rdf:Alt><rdf:li xml:lang="x-default">${avoir ? "Avoir" : "Facture"} au format Factur-X</rdf:li></rdf:Alt></dc:description>
+</rdf:Description>
+<rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/"><pdf:Producer>Cagot</pdf:Producer></rdf:Description>
+<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/"><xmp:CreatorTool>Cagot</xmp:CreatorTool><xmp:CreateDate>${date}</xmp:CreateDate><xmp:ModifyDate>${date}</xmp:ModifyDate></rdf:Description>
+<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"><fx:DocumentType>INVOICE</fx:DocumentType><fx:DocumentFileName>factur-x.xml</fx:DocumentFileName><fx:Version>1.0</fx:Version><fx:ConformanceLevel>EN 16931</fx:ConformanceLevel></rdf:Description>
+<rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+<pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
+<pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>
+<pdfaSchema:prefix>fx</pdfaSchema:prefix>
+<pdfaSchema:property><rdf:Seq>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>DocumentFileName</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The name of the embedded XML document</pdfaProperty:description></rdf:li>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>DocumentType</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The type of the hybrid document in capital letters, e.g. INVOICE or ORDER</pdfaProperty:description></rdf:li>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>Version</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The actual version of the standard applying to the embedded XML document</pdfaProperty:description></rdf:li>
+<rdf:li rdf:parseType="Resource"><pdfaProperty:name>ConformanceLevel</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>The conformance level of the embedded XML document</pdfaProperty:description></rdf:li>
+</rdf:Seq></pdfaSchema:property>
+</rdf:li></rdf:Bag></pdfaExtension:schemas>
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
+
+const xmlTexte = (t) => String(t ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+
+export async function pdfFacturX(blob, xml, { titre, auteur, avoir }) {
+  const { PDFDocument, PDFName, PDFHexString, PDFString, AFRelationship } = window.PDFLib;
+  const doc = await PDFDocument.load(await blob.arrayBuffer(), { updateMetadata: false });
+  const maintenant = new Date();
+  const dateIso = maintenant.toISOString().replace(/\.\d{3}Z$/, "Z");
+  doc.setTitle(titre);
+  doc.setAuthor(auteur);
+  doc.setCreator("Cagot");
+  doc.setProducer("Cagot");
+  doc.setCreationDate(maintenant);
+  doc.setModificationDate(maintenant);
+  await doc.attach(new TextEncoder().encode(xml), "factur-x.xml", {
+    mimeType: "text/xml",
+    description: "Factur-X",
+    creationDate: maintenant,
+    modificationDate: maintenant,
+    afRelationship: AFRelationship.Data,
+  });
+  const ctx = doc.context;
+  const meta = ctx.stream(new TextEncoder().encode(xmp({ titre: xmlTexte(titre), auteur: xmlTexte(auteur), date: dateIso, avoir })), { Type: "Metadata", Subtype: "XML" });
+  doc.catalog.set(PDFName.of("Metadata"), ctx.register(meta));
+  const icc = new Uint8Array(await fetch("/polices/srgb.icc").then((r) => r.arrayBuffer()));
+  const profil = ctx.register(ctx.stream(icc, { N: 3 }));
+  const intention = ctx.obj({ Type: "OutputIntent", S: "GTS_PDFA1", OutputConditionIdentifier: PDFString.of("sRGB"), Info: PDFString.of("sRGB IEC61966-2.1"), DestOutputProfile: profil });
+  doc.catalog.set(PDFName.of("OutputIntents"), ctx.obj([ctx.register(intention)]));
+  const id = PDFHexString.of([...crypto.getRandomValues(new Uint8Array(16))].map((o) => o.toString(16).padStart(2, "0")).join(""));
+  ctx.trailerInfo.ID = ctx.obj([id, id]);
+  const octets = await doc.save({ useObjectStreams: false });
+  return new Blob([octets], { type: "application/pdf" });
 }

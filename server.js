@@ -49,6 +49,7 @@ app.get("/vendor/supabase.js", (_req, res) =>
   res.sendFile("node_modules/@supabase/supabase-js/dist/umd/supabase.js", { root: "." }),
 );
 app.get("/vendor/heic-to.js", (_req, res) => res.sendFile("node_modules/heic-to/dist/csp/heic-to.js", { root: "." }));
+app.get("/vendor/pdf-lib.min.js", (_req, res) => res.sendFile("node_modules/pdf-lib/dist/pdf-lib.min.js", { root: "." }));
 app.get("/vendor/jspdf.umd.min.js", (_req, res) => res.sendFile("node_modules/jspdf/dist/jspdf.umd.min.js", { root: "." }));
 app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) =>
   res.sendFile("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js", { root: "." }),

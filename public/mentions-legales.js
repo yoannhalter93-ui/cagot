@@ -14,6 +14,8 @@ export const autoliquidation = (c) => !estParticulier(c) && !!c?.autoliquidation
 
 const txt = (t) => (typeof t === "string" ? t.trim() : "");
 
+export const NATURES = { services: "prestation de services", biens: "livraison de biens", mixte: "opération mixte (biens et services)" };
+
 export const MENTION_AUTOLIQUIDATION = "Autoliquidation : TVA due par le preneur, en application de l'article 283-2 nonies du CGI (sous-traitance de travaux de construction).";
 
 export const TEXTE_RETRACTATION =
@@ -42,6 +44,8 @@ export function mentionsClient(d, e, dateFr) {
   } else {
     if (c.avoir) m.push(`Avoir annulant la facture n° ${c.facture_origine || "?"}${c.facture_origine_date ? ` du ${dateFr(c.facture_origine_date)}` : ""}.`);
     else if (txt(c.date_travaux)) m.push(`Date d'exécution des travaux : ${txt(c.date_travaux)}.`);
+    if (!c.avoir) m.push(`Nature de l'opération : ${NATURES[c.nature] ?? NATURES.services}.`);
+    if (!c.avoir && e?.tva_debits && !e?.franchise_tva && !autoliquidation(c)) m.push("Option pour le paiement de la TVA d'après les débits.");
   }
   if (autoliquidation(c)) m.push(MENTION_AUTOLIQUIDATION);
   if (estParticulier(c) && texteMediateur(e)) m.push(texteMediateur(e));
