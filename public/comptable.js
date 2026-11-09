@@ -4,7 +4,7 @@
 import { genererPdf, pdfFacturX, preparerPolices } from "/pdf-devis.js";
 import { xmlFacturX } from "/facturx.js";
 import { conditionsDe } from "/personnalisation.js";
-import { autoliquidation, mentionsClient } from "/mentions-legales.js";
+import { autoliquidation, mentionsClient, mentionsTvaReduite, ventilationTva } from "/mentions-legales.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -249,9 +249,11 @@ function rendreDossier() {
 
   const parTaux = new Map();
   for (const x of liste) {
-    const m = montants(x);
-    const t = parTaux.get(m.taux) ?? { ht: 0, tva: 0 };
-    parTaux.set(m.taux, { ht: t.ht + m.ht, tva: t.tva + m.tva });
+    const vent = dossier.entreprise.franchise_tva || autoliquidation(x.contenu) ? [{ taux: 0, base_ht: Number(x.contenu.total_ht || 0), montant_tva: 0 }] : ventilationTva(x.contenu);
+    for (const v of vent) {
+      const t = parTaux.get(Number(v.taux)) ?? { ht: 0, tva: 0 };
+      parTaux.set(Number(v.taux), { ht: t.ht + Number(v.base_ht), tva: t.tva + Number(v.montant_tva) });
+    }
   }
   $("#tva-par-taux").innerHTML =
     parTaux.size && !dossier.entreprise.franchise_tva
@@ -320,7 +322,7 @@ function elementsFacture(f, e) {
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
   else if (autoliquidation(v)) {
     // mention d'autoliquidation déjà ajoutée
-  } else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
+  } else mentions.push(...mentionsTvaReduite(v, "facture"));
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
   if (conditionsDe(e, "facture")) mentions.push(conditionsDe(e, "facture"));
   return {
@@ -363,7 +365,7 @@ $("#export-csv").onclick = () => {
       const m = montants(f);
       return [
         dateFr(f.date_document), f.numero, f.contenu.client_nom, f.contenu.client_adresse, f.contenu.titre,
-        nb(m.ht), `${nombre(m.taux)} %`, nb(m.tva), nb(m.ttc), f.statut === "payee" ? "Payée" : "À encaisser",
+        nb(m.ht), dossier.entreprise.franchise_tva || autoliquidation(f.contenu) ? "0 %" : ventilationTva(f.contenu).map((v) => `${nombre(v.taux)} %`).join(" + "), nb(m.tva), nb(m.ttc), f.statut === "payee" ? "Payée" : "À encaisser",
         dateFr(ajouterJours(f.date_document, e.delai_paiement || 30)), f.contenu.devis_numero,
       ];
     }),

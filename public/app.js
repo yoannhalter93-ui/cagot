@@ -1,10 +1,10 @@
-import { calculerTotaux } from "/calcul.js";
+import { calculerTotaux, tauxLigne } from "/calcul.js";
 import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
 import { genererPdf, pdfFacturX, preparerPolices } from "/pdf-devis.js";
 import { xmlFacturX } from "/facturx.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
-import { NATURES, autoliquidation, estParticulier, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
+import { NATURES, autoliquidation, estParticulier, mentionsTvaReduite, ventilationTva, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 import { BLOCS_ACCUEIL, INTERFACE_DEFAUT, RACCOURCIS, THEMES, appliquerInterface, interfaceValide } from "/interface.js";
 import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · ordinateur";
+const VERSION_APPLI = "9 nov. 2026 · TVA par ligne";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2221,6 +2221,38 @@ $("#supprimer-fiche").onclick = async () => {
 };
 
 // Choix de l'unité d'une ligne du devis (forfait, m², ml…).
+// Taux de TVA d'une ligne (bâtiment : 20 %, 10 % rénovation, 5,5 % rénovation énergétique, 0 %).
+const TAUX_TVA = [
+  [20, "20 % – neuf, logement de moins de 2 ans, locaux professionnels"],
+  [10, "10 % – rénovation, entretien d'un logement de plus de 2 ans"],
+  [5.5, "5,5 % – rénovation énergétique (isolation, chauffage…) d'un logement de plus de 2 ans"],
+  [0, "0 % – exonéré"],
+];
+function choisirTauxTva(ligne, devis) {
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    const actuel = tauxLigne(ligne, devis);
+    fond.innerHTML = `<div class="dialogue choix-unites" role="dialog" aria-modal="true">
+      <h3>TVA de la ligne</h3>
+      <p class="aide"></p>
+      <div class="liste-taux">${TAUX_TVA.map(([t, nom]) => `<button type="button" class="puce ${t === actuel ? "choisie" : ""}" data-t="${t}">${esc(nom)}</button>`).join("")}</div>
+      <p class="aide">Le taux du devis est ${nombre(devis.taux_tva)} % : les lignes sans taux particulier le suivent.</p>
+      <div class="dialogue-actions"><button type="button" class="annuler">Annuler</button><button type="button" class="valider">Comme le devis (${nombre(devis.taux_tva)} %)</button></div>
+    </div>`;
+    fond.querySelector(".aide").textContent = `« ${ligne.designation} »`;
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    for (const b of fond.querySelectorAll("[data-t]")) b.onclick = () => fermer(Number(b.dataset.t));
+    fond.querySelector(".annuler").onclick = () => fermer(undefined);
+    fond.querySelector(".valider").onclick = () => fermer(null);
+    fond.onclick = (e) => e.target === fond && fermer(undefined);
+    document.body.appendChild(fond);
+  });
+}
+
 function choisirUnite(ligne) {
   return new Promise((resolve) => {
     const fond = document.createElement("div");
@@ -2793,7 +2825,7 @@ function elementsDocument(d, e = profil.infos) {
   if (franchise) mentions.push("TVA non applicable, art. 293 B du CGI.");
   else if (autoliquidation(v)) {
     // mention d'autoliquidation déjà ajoutée
-  } else if (tauxTva < 20) mentions.push(`Taux de TVA réduit de ${nombre(tauxTva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans (art. 279-0 bis / 278-0 bis A du CGI), sur déclaration du client.`);
+  } else mentions.push(...mentionsTvaReduite(v, d.type));
   if (e.assurance) mentions.push(`Assurance décennale : ${e.assurance}.`);
   const conditions = conditionsDe(e, d.type);
   if (conditions) mentions.push(conditions);
@@ -2897,6 +2929,13 @@ function rendreDocument() {
               ${l.calcul ? `<div class="calcul">${esc(l.calcul)}</div>` : ""}
               ${option ? `<span class="badge-option">${l.option_retenue ? "Option retenue ✓" : "Option au choix du client"}</span>` : ""}
               ${!verrouille && !facture ? `<button type="button" class="lien no-print bascule-option" data-option="${si}-${li}">${option ? "Ne plus proposer en option" : "Proposer en option"}</button>` : ""}
+              ${
+                franchise || autoliquidation(v)
+                  ? ""
+                  : verrouille
+                    ? tauxLigne(l, v) !== Number(v.taux_tva) ? `<span class="badge-tva">TVA ${nombre(tauxLigne(l, v))} %</span>` : ""
+                    : `<button type="button" class="choix-tva no-print ${tauxLigne(l, v) !== Number(v.taux_tva) ? "differente" : ""}" data-tva="${si}-${li}">TVA ${nombre(tauxLigne(l, v))} % ▾</button>`
+              }
               ${estime ? `<div class="no-print"><span class="badge-estime">prix estimé</span> <button class="lien" data-grille="${si}-${li}">+ ajouter à ma grille</button></div>` : ""}</td>
             <td class="num" ${editable} data-champ="quantite" data-s="${si}" data-l="${li}">${nombre(l.quantite)}</td>
             <td>${verrouille ? esc(l.unite) : `<button type="button" class="choix-unite" data-unite="${si}-${li}" title="Changer l'unité">${esc(l.unite)} ▾</button>`}</td>
@@ -2957,7 +2996,15 @@ function rendreDocument() {
     </table>
     <table class="doc-totaux">
       <tr><td>Total HT</td><td class="num">${euros(v.total_ht)}</td></tr>
-      ${franchise ? "" : autoliquidation(v) ? `<tr><td>TVA autoliquidée</td><td class="num">${euros(0)}</td></tr>` : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`}
+      ${
+        franchise
+          ? ""
+          : autoliquidation(v)
+            ? `<tr><td>TVA autoliquidée</td><td class="num">${euros(0)}</td></tr>`
+            : ventilationTva(v).length > 1
+              ? ventilationTva(v).map((t) => `<tr><td>TVA ${nombre(t.taux)} % <small>sur ${euros(t.base_ht)}</small></td><td class="num">${euros(t.montant_tva)}</td></tr>`).join("")
+              : `<tr><td>TVA <span ${editable} data-champ="taux_tva">${nombre(tauxTva)}</span> %</td><td class="num">${euros(tva)}</td></tr>`
+      }
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
     ${perso.fin}
@@ -3060,6 +3107,19 @@ function rendreDocument() {
           delete l.option;
           delete l.option_retenue;
         } else l.option = true;
+      });
+    };
+  }
+  for (const b of $("#document").querySelectorAll("[data-tva]")) {
+    b.onclick = async () => {
+      const [si, li] = b.dataset.tva.split("-").map(Number);
+      const ligne = docCourant.contenu.sections[si].lignes[li];
+      const taux = await choisirTauxTva(ligne, docCourant.contenu);
+      if (taux === undefined) return;
+      await majDocument((dv) => {
+        const l = dv.sections[si].lignes[li];
+        if (taux === null || taux === Number(dv.taux_tva)) delete l.taux_tva;
+        else l.taux_tva = taux;
       });
     };
   }
@@ -3323,9 +3383,11 @@ function rendreJournal() {
     .join("");
   const parTaux = new Map();
   for (const f of liste) {
-    const m = montantsFacture(f);
-    const t = parTaux.get(m.taux) ?? { ht: 0, tva: 0 };
-    parTaux.set(m.taux, { ht: t.ht + m.ht, tva: t.tva + m.tva });
+    const autoliq = autoliquidation(f.contenu);
+    for (const v of autoliq ? [{ taux: 0, base_ht: Number(f.contenu.total_ht || 0), montant_tva: 0 }] : ventilationTva(f.contenu)) {
+      const t = parTaux.get(Number(v.taux)) ?? { ht: 0, tva: 0 };
+      parTaux.set(Number(v.taux), { ht: t.ht + Number(v.base_ht), tva: t.tva + Number(v.montant_tva) });
+    }
   }
   $("#tva-journal").innerHTML = parTaux.size && !profil.infos.franchise_tva
     ? `<table class="table-tva"><thead><tr><th>Taux de TVA</th><th class="num">Base HT</th><th class="num">TVA</th></tr></thead><tbody>${[...parTaux]
@@ -3353,7 +3415,8 @@ function rendreJournal() {
       ["Date", "Numéro", "Client", "Objet", "Total HT", "Taux TVA", "TVA", "Total TTC", "Statut", "Échéance"],
       ...liste.map((f) => {
         const m = montantsFacture(f);
-        return [dateFr(f.date_document), f.numero, f.contenu.client_nom, f.contenu.titre, nb(m.ht), `${nombre(m.taux)} %`, nb(m.tva), nb(m.ttc), f.statut === "payee" ? "Payée" : "À encaisser", dateFr(ajouterJours(f.date_document, delai))];
+        const taux = profil.infos.franchise_tva || autoliquidation(f.contenu) ? "0 %" : ventilationTva(f.contenu).map((v) => `${nombre(v.taux)} %`).join(" + ");
+        return [dateFr(f.date_document), f.numero, f.contenu.client_nom, f.contenu.titre, nb(m.ht), taux, nb(m.tva), nb(m.ttc), f.statut === "payee" ? "Payée" : "À encaisser", dateFr(ajouterJours(f.date_document, delai))];
       }),
     ];
     const csv = `﻿${lignes.map((l) => l.map(cellule).join(";")).join("\r\n")}\r\n`;

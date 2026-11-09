@@ -1,7 +1,8 @@
 // Factur-X (profil EN 16931) : la facture électronique « mixte » française et européenne.
 // Un PDF lisible par l'humain + le fichier XML CII (factur-x.xml) attaché, lisible par les logiciels
 // et les plateformes agréées. Ce module fabrique le XML ; l'assemblage PDF/A-3 est dans pdf-devis.js.
-import { autoliquidation, estParticulier } from "/mentions-legales.js";
+import { autoliquidation, estParticulier, ventilationTva } from "/mentions-legales.js";
+import { tauxLigne } from "/calcul.js";
 
 const x = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]);
 const montant = (n) => (Math.round(Number(n || 0) * 100) / 100).toFixed(2);
@@ -65,13 +66,15 @@ export function xmlFacturX({ d, e, mentions = [], echeance }) {
     .map((l, i) => {
       const q = signe * Number(l.quantite || 0);
       const totalLigne = Math.round(q * Number(l.prix_unitaire_ht || 0) * 100) / 100;
+      const tauxL = tva.code === "S" ? tauxLigne(l, c) : 0;
+      const catL = tva.code === "S" ? (tauxL > 0 ? "S" : "E") : tva.code;
       return `<ram:IncludedSupplyChainTradeLineItem>
 <ram:AssociatedDocumentLineDocument><ram:LineID>${i + 1}</ram:LineID></ram:AssociatedDocumentLineDocument>
 <ram:SpecifiedTradeProduct><ram:Name>${x(l.designation)}</ram:Name>${l.detail ? `<ram:Description>${x(l.detail)}</ram:Description>` : ""}</ram:SpecifiedTradeProduct>
 <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>${montant(l.prix_unitaire_ht)}</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
 <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="${codeUnite(l.unite)}">${qte(q)}</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
 <ram:SpecifiedLineTradeSettlement>
-<ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>${tva.code}</ram:CategoryCode><ram:RateApplicablePercent>${montant(tva.taux)}</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+<ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>${catL}</ram:CategoryCode><ram:RateApplicablePercent>${montant(tauxL)}</ram:RateApplicablePercent></ram:ApplicableTradeTax>
 <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>${montant(totalLigne)}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
 </ram:SpecifiedLineTradeSettlement>
 </ram:IncludedSupplyChainTradeLineItem>`;
@@ -80,13 +83,28 @@ export function xmlFacturX({ d, e, mentions = [], echeance }) {
 
   // Mentions obligatoires codées (règles françaises BR-FR-05) + autres mentions en texte libre.
   const note = (t, code) => `<ram:IncludedNote><ram:Content>${x(t)}</ram:Content>${code ? `<ram:SubjectCode>${code}</ram:SubjectCode>` : ""}</ram:IncludedNote>`;
-  const codees = avoir
-    ? []
-    : [
+  const codees = [
         note("En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal (art. L441-10 du Code de commerce).", "PMD"),
         note("Indemnité forfaitaire pour frais de recouvrement en cas de retard de paiement : 40 € (art. D441-5 du Code de commerce).", "PMT"),
         note("Pas d'escompte pour paiement anticipé.", "AAB"),
-      ];
+  ];
+  // TVA par taux (S), ou une seule ligne exonérée (E : franchise) / autoliquidée (AE).
+  const taxe = ({ montantT, base, cat, taux, motif, codeMotif }) => `<ram:ApplicableTradeTax>
+<ram:CalculatedAmount>${montant(montantT)}</ram:CalculatedAmount>
+<ram:TypeCode>VAT</ram:TypeCode>
+${motif ? `<ram:ExemptionReason>${x(motif)}</ram:ExemptionReason>` : ""}
+<ram:BasisAmount>${montant(base)}</ram:BasisAmount>
+<ram:CategoryCode>${cat}</ram:CategoryCode>
+${codeMotif ? `<ram:ExemptionReasonCode>${codeMotif}</ram:ExemptionReasonCode>` : ""}
+${cat === "S" && !e.tva_debits && c.nature !== "biens" ? "<ram:DueDateTypeCode>72</ram:DueDateTypeCode>" : ""}
+<ram:RateApplicablePercent>${montant(taux)}</ram:RateApplicablePercent>
+</ram:ApplicableTradeTax>`;
+  const taxesEntete =
+    tva.code === "S"
+      ? ventilationTva(c)
+          .map((v) => taxe({ montantT: signe * v.montant_tva, base: signe * v.base_ht, cat: Number(v.taux) > 0 ? "S" : "E", taux: v.taux, motif: Number(v.taux) > 0 ? "" : "Exonération de TVA" }))
+          .join("\n")
+      : taxe({ montantT: 0, base: ht, cat: tva.code, taux: 0, motif: tva.motif, codeMotif: tva.codeMotif });
   const notes = [...codees, ...mentions.filter((m) => !/pénalités|escompte|recouvrement/i.test(m)).map((m) => note(m))].join("");
   const iban = String(e.iban ?? "").replace(/\s+/g, "").toUpperCase();
 
@@ -125,16 +143,7 @@ ${c.adresse_chantier ? `<ram:ShipToTradeParty><ram:Name>${x(c.client_nom || "Cha
 <ram:ApplicableHeaderTradeSettlement>
 <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
 ${iban && !avoir ? `<ram:SpecifiedTradeSettlementPaymentMeans><ram:TypeCode>58</ram:TypeCode><ram:PayeePartyCreditorFinancialAccount><ram:IBANID>${x(iban)}</ram:IBANID></ram:PayeePartyCreditorFinancialAccount></ram:SpecifiedTradeSettlementPaymentMeans>` : ""}
-<ram:ApplicableTradeTax>
-<ram:CalculatedAmount>${montant(montantTva)}</ram:CalculatedAmount>
-<ram:TypeCode>VAT</ram:TypeCode>
-${tva.motif ? `<ram:ExemptionReason>${x(tva.motif)}</ram:ExemptionReason>` : ""}
-<ram:BasisAmount>${montant(ht)}</ram:BasisAmount>
-<ram:CategoryCode>${tva.code}</ram:CategoryCode>
-${tva.codeMotif ? `<ram:ExemptionReasonCode>${tva.codeMotif}</ram:ExemptionReasonCode>` : ""}
-${tva.code === "S" && !e.tva_debits && c.nature !== "biens" ? "<ram:DueDateTypeCode>72</ram:DueDateTypeCode>" : ""}
-<ram:RateApplicablePercent>${montant(tva.taux)}</ram:RateApplicablePercent>
-</ram:ApplicableTradeTax>
+${taxesEntete}
 ${echeance && !avoir ? `<ram:SpecifiedTradePaymentTerms><ram:DueDateDateTime><udt:DateTimeString format="102">${date102(echeance)}</udt:DateTimeString></ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>` : ""}
 <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
 <ram:LineTotalAmount>${montant(ht)}</ram:LineTotalAmount>

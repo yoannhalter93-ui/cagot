@@ -1,7 +1,8 @@
 // Fabrication du PDF d'un devis / d'une facture (format A4), avec jsPDF + jspdf-autotable
 // chargés à la demande (window.jspdf). Les montants et mentions viennent de l'appli.
 
-import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement } from "/mentions-legales.js";
+import { autoliquidation, estParticulier, formulaireRetractation, horsEtablissement, ventilationTva } from "/mentions-legales.js";
+import { tauxLigne } from "/calcul.js";
 import { labelsDe, modeleDe, piedDePage, textesDocument } from "/personnalisation.js";
 
 // Polices intégrées au PDF (Liberation Sans, licence SIL OFL) : indispensables pour la facture
@@ -144,8 +145,9 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
     corps.push([{ content: propre(s.titre), colSpan: 5, styles: modele === "epure" ? { fontStyle: "bold", textColor: BLEU } : { fillColor: BLEU_CLAIR, fontStyle: "bold" } }]);
     for (const l of s.lignes ?? []) {
       const option = l.option ? (l.option_retenue ? "[Option retenue] " : "[Option non retenue] ") : "";
+      const tvaParticuliere = !elements.franchise && !autoliquidation(v) && tauxLigne(l, v) !== Number(v.taux_tva) ? ` (TVA ${nombre(tauxLigne(l, v))} %)` : "";
       corps.push([
-        propre(`${option}${l.detail ? `${l.designation}\n${l.detail}` : l.designation}`),
+        propre(`${option}${l.designation}${tvaParticuliere}${l.detail ? `\n${l.detail}` : ""}`),
         { content: propre(nombre(l.quantite)), styles: { halign: "right" } },
         propre(l.unite),
         { content: propre(euros(l.prix_unitaire_ht)), styles: { halign: "right" } },
@@ -169,7 +171,11 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   // --- Totaux
   const totaux = [["Total HT", euros(v.total_ht)]];
   if (autoliquidation(v)) totaux.push(["TVA autoliquidée", euros(0)]);
-  else if (!elements.franchise) totaux.push([`TVA ${nombre(elements.tauxTva)} %`, euros(elements.tva)]);
+  else if (!elements.franchise) {
+    const vent = ventilationTva(v);
+    if (vent.length > 1) for (const t of vent) totaux.push([`TVA ${nombre(t.taux)} % (base ${euros(t.base_ht)})`, euros(t.montant_tva)]);
+    else totaux.push([`TVA ${nombre(elements.tauxTva)} %`, euros(elements.tva)]);
+  }
   totaux.push([elements.franchise ? "Net à payer" : "Total TTC", euros(elements.ttc)]);
   pdf.autoTable({
     startY: y,

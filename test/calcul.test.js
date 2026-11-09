@@ -38,3 +38,24 @@ test("une option non retenue ne compte pas dans le total", async () => {
   assert.equal(d.sections[0].sous_total_ht, 130);
   assert.equal(d.sections[0].lignes[1].total_ht, 50);
 });
+
+test("TVA par ligne : isolation à 5,5 % et peinture à 10 % dans le même devis", () => {
+  const d = calculerTotaux({
+    taux_tva: 10,
+    sections: [{ titre: "A", lignes: [
+      { quantite: 10, prix_unitaire_ht: 20 },
+      { quantite: 20, prix_unitaire_ht: 50, taux_tva: 5.5 },
+      { quantite: 1, prix_unitaire_ht: 99, taux_tva: 20, option: true },
+    ] }],
+  });
+  assert.equal(d.total_ht, 1200);
+  assert.deepEqual(d.ventilation_tva, [{ taux: 10, base_ht: 200, montant_tva: 20 }, { taux: 5.5, base_ht: 1000, montant_tva: 55 }]);
+  assert.equal(d.montant_tva, 75);
+  assert.equal(d.total_ttc, 1275);
+});
+
+test("autoliquidation : aucune TVA même si une ligne a son taux", () => {
+  const d = calculerTotaux({ taux_tva: 0, autoliquidation: true, sections: [{ titre: "A", lignes: [{ quantite: 1, prix_unitaire_ht: 100, taux_tva: 20 }] }] });
+  assert.equal(d.montant_tva, 0);
+  assert.equal(d.total_ttc, 100);
+});

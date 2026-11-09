@@ -14,6 +14,23 @@ export const autoliquidation = (c) => !estParticulier(c) && !!c?.autoliquidation
 
 const txt = (t) => (typeof t === "string" ? t.trim() : "");
 
+// Ventilation de la TVA par taux (documents récents) ou taux unique (anciens documents).
+export function ventilationTva(c) {
+  if (Array.isArray(c?.ventilation_tva) && c.ventilation_tva.length) return c.ventilation_tva;
+  return [{ taux: Number(c?.taux_tva ?? 0), base_ht: Number(c?.total_ht ?? 0), montant_tva: Number(c?.montant_tva ?? 0) }];
+}
+
+// Taux réduits du bâtiment : le client certifie les conditions sur le devis signé
+// (cette mention remplace l'ancienne attestation papier).
+export function mentionsTvaReduite(c, type) {
+  const taux = new Set(ventilationTva(c).filter((v) => v.base_ht).map((v) => Number(v.taux)));
+  const certif = type === "devis" ? "Le client certifie, par la signature du présent devis, que ces conditions sont remplies." : "Le client a certifié que ces conditions sont remplies.";
+  const m = [];
+  if (taux.has(10)) m.push(`TVA à 10 % : travaux d'amélioration, de transformation, d'aménagement ou d'entretien portant sur des locaux à usage d'habitation achevés depuis plus de deux ans (art. 279-0 bis du CGI). ${certif}`);
+  if (taux.has(5.5)) m.push(`TVA à 5,5 % : travaux d'amélioration de la qualité énergétique portant sur des locaux à usage d'habitation achevés depuis plus de deux ans (art. 278-0 bis A du CGI). ${certif}`);
+  return m;
+}
+
 export const NATURES = { services: "prestation de services", biens: "livraison de biens", mixte: "opération mixte (biens et services)" };
 
 export const MENTION_AUTOLIQUIDATION = "Autoliquidation : TVA due par le preneur, en application de l'article 283-2 nonies du CGI (sous-traitance de travaux de construction).";

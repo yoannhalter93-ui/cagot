@@ -4,7 +4,7 @@
 import { calculerTotaux } from "/calcul.js";
 import { genererPdf, preparerPolices } from "/pdf-devis.js";
 import { htmlPersonnalisation, modeleDe } from "/personnalisation.js";
-import { autoliquidation, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
+import { autoliquidation, mentionsTvaReduite, ventilationTva, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -40,7 +40,7 @@ function mentions(e, c, ttc) {
   if (e.franchise_tva) m.push("TVA non applicable, art. 293 B du CGI.");
   else if (autoliquidation(c)) {
     // mention d'autoliquidation déjà ajoutée
-  } else if (Number(c.taux_tva) < 20) m.push(`Taux de TVA réduit de ${nombre(c.taux_tva)} % appliqué pour des travaux dans un logement achevé depuis plus de 2 ans, sur déclaration du client.`);
+  } else m.push(...mentionsTvaReduite(c, "devis"));
   if (e.assurance) m.push(`Assurance décennale : ${e.assurance}.`);
   if (e.conditions) m.push(e.conditions);
   return m;
@@ -91,7 +91,7 @@ function rendre() {
     <table class="doc-table"><thead><tr><th>Désignation</th><th class="num">Qté</th><th class="num">P.U. HT</th><th class="num">Total HT</th></tr></thead><tbody>${lignes}</tbody></table>
     <table class="doc-totaux">
       <tr><td>Total HT</td><td class="num">${euros(c.total_ht)}</td></tr>
-      ${franchise ? "" : `<tr><td>TVA ${nombre(c.taux_tva)} %</td><td class="num">${euros(c.montant_tva)}</td></tr>`}
+      ${franchise ? "" : autoliquidation(c) ? `<tr><td>TVA autoliquidée</td><td class="num">${euros(0)}</td></tr>` : ventilationTva(c).map((t) => `<tr><td>TVA ${nombre(t.taux)} %</td><td class="num">${euros(t.montant_tva)}</td></tr>`).join("")}
       <tr class="ttc"><td>${franchise ? "Net à payer" : "Total TTC"}</td><td class="num">${euros(ttc)}</td></tr>
     </table>
     ${perso.fin}
