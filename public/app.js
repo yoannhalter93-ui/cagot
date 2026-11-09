@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · dates des chantiers";
+const VERSION_APPLI = "9 nov. 2026 · historique d'envoi";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2810,6 +2810,11 @@ function rendreDocument() {
     }
   }
 
+  if ($("#historique-envois").dataset.doc !== d.id) {
+    $("#historique-envois").dataset.doc = d.id;
+    $("#historique-envois").hidden = true;
+    afficherHistoriqueEnvois(d);
+  }
   const estimes = v.sections.flatMap((s) => s.lignes).filter((l) => l.prix_source === "estime").length;
   const hyp = [...(v.hypotheses ?? [])];
   if (estimes && !verrouille) hyp.unshift(`${estimes} prix estimé(s) par l'IA (surlignés en jaune) : vérifie-les et ajoute-les à ta grille.`);
@@ -3114,6 +3119,33 @@ $("#imprimer").onclick = async () => {
   }
 };
 
+// --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---
+async function noterEnvoi(d, destinataires, moyen) {
+  const { error } = await sb.from("envois_documents").insert({ document_id: d.id, destinataires: destinataires.slice(0, 20), moyen });
+  if (error) console.error(error);
+  if (docCourant?.id === d.id) afficherHistoriqueEnvois(d);
+}
+
+async function afficherHistoriqueEnvois(d) {
+  const zone = $("#historique-envois");
+  const { data, error } = await sb.from("envois_documents").select("destinataires, moyen, created_at").eq("document_id", d.id).order("created_at", { ascending: false }).limit(20);
+  if (docCourant?.id !== d.id) return;
+  if (error || !data?.length) {
+    zone.hidden = true;
+    return;
+  }
+  zone.hidden = false;
+  zone.innerHTML = `<strong>📨 Historique d'envoi</strong><ul>${data
+    .map((x) => {
+      const quand = `${dateFr(x.created_at)} à ${heureFr(x.created_at)}`;
+      const qui = x.destinataires.length ? esc(x.destinataires.join(", ")) : "";
+      return x.moyen === "email"
+        ? `<li>✉️ Envoyé par e-mail le ${quand}${qui ? ` à <b>${qui}</b>` : ""}</li>`
+        : `<li>📤 Partagé depuis le téléphone (Gmail, WhatsApp…) le ${quand}${qui ? ` · adresse copiée : <b>${qui}</b>` : ""}</li>`;
+    })
+    .join("")}</ul>`;
+}
+
 $("#partager").onclick = async () => {
   const d = docCourant;
   const e = profil.infos;
@@ -3148,6 +3180,7 @@ $("#partager").onclick = async () => {
     bouton.innerHTML = "<span>⏳</span>Envoi…";
     try {
       if (await plateforme.envoyerEmail({ destinataires, sujet, texte, pdf, titre: titreFichier(d) }, await jetonAcces())) {
+        noterEnvoi(d, destinataires, "email");
         notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}.`);
         if (d.type === "devis" && docCourant.statut === "brouillon") changerStatut("envoye");
         return;
@@ -3163,6 +3196,7 @@ $("#partager").onclick = async () => {
   // un nouvel appui pour ouvrir le partage : on le demande.
   if (directTente && !(await demander("Choisis l'appli pour envoyer le devis (Gmail, WhatsApp…). Le PDF est joint et les adresses sont copiées.", { ok: "📤 Choisir l'appli" }))) return;
   const envoye = await plateforme.partager({ sujet, texte, pdf, titre: titreFichier(d), destinataires, notifier });
+  if (envoye) noterEnvoi(d, destinataires, "partage");
   if (envoye && d.type === "devis" && d.statut === "brouillon") changerStatut("envoye");
 };
 

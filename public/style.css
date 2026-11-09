@@ -725,3 +725,11 @@ body { zoom: var(--zoom, 1); }
 .groupe-chantiers { display: flex; justify-content: space-between; align-items: baseline; font-size: .95rem; color: var(--bleu); margin: 16px 2px 8px; }
 .groupe-chantiers span { font-size: .8rem; color: var(--gris); font-weight: 600; }
 .carte-fiche .client-fiche { display: block; color: var(--texte); font-size: .88rem; margin: 2px 0 4px; }
+
+/* --- Historique d'envoi --- */
+.historique-envois { background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: .9rem; }
+.historique-envois[hidden] { display: none; }
+.historique-envois ul { margin: 6px 0 0; padding-left: 0; list-style: none; }
+.historique-envois li { padding: 4px 0; border-top: 1px dashed var(--bord); color: var(--gris); }
+.historique-envois li:first-child { border-top: 0; }
+.historique-envois b { color: var(--texte); word-break: break-all; }
