@@ -153,6 +153,18 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
   <!-- ===== Chantiers : liste et fiche (le cœur de l'appli) ===== -->
   <main id="vue-chantiers" class="vue" hidden>
     <div class="entete-documents"><h2>Chantiers</h2><button type="button" id="nouveau-chantier" class="btn-or">＋ Nouveau</button></div>
+    <div id="outils-chantiers" class="outils-chantiers">
+      <input type="search" id="recherche-chantiers" placeholder="🔍 Chercher…" title="Client, chantier, n° de devis" autocomplete="off">
+      <label class="tri-chantiers">Trier <select id="tri-chantiers">
+        <option value="etape">Par étape</option>
+        <option value="recent">Activité récente</option>
+        <option value="ancien">Plus anciens d'abord</option>
+        <option value="date-devis">Date du devis</option>
+        <option value="montant">Montant (du plus gros)</option>
+        <option value="client">Client (A → Z)</option>
+      </select></label>
+      <div id="filtres-chantiers" class="filtres-docs"></div>
+    </div>
     <div id="liste-fiches"></div>
   </main>
 

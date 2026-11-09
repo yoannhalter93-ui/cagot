@@ -714,3 +714,14 @@ body { zoom: var(--zoom, 1); }
   .grille-accueil { grid-template-columns: repeat(4, 1fr); }
   .case-accueil.large { grid-column: span 2; }
 }
+
+/* --- Chantiers : recherche, tri, filtres, groupes par étape --- */
+.outils-chantiers[hidden] { display: none; }
+.outils-chantiers { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 4px; }
+.outils-chantiers input[type=search] { min-width: 0; font-size: 1rem; padding: 10px 12px; border: 1px solid var(--bord); border-radius: 12px; background: var(--surface); color: var(--texte); }
+.tri-chantiers { margin: 0; display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--gris); }
+.tri-chantiers select { padding: 9px 6px; border-radius: 10px; border: 1px solid var(--bord); background: var(--surface); color: var(--texte); max-width: 150px; }
+.outils-chantiers .filtres-docs { grid-column: 1 / -1; }
+.groupe-chantiers { display: flex; justify-content: space-between; align-items: baseline; font-size: .95rem; color: var(--bleu); margin: 16px 2px 8px; }
+.groupe-chantiers span { font-size: .8rem; color: var(--gris); font-weight: 600; }
+.carte-fiche .client-fiche { display: block; color: var(--texte); font-size: .88rem; margin: 2px 0 4px; }

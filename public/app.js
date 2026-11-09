@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · accueil à ma façon";
+const VERSION_APPLI = "9 nov. 2026 · chantiers triés";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -1845,35 +1845,122 @@ async function etatsChantiers(chantiers) {
     if (devis && devis.statut === "refuse") [etape, libelle] = [3, "Devis refusé"];
     if (devis && devis.statut === "accepte") [etape, libelle] = [4, "Accepté · à facturer"];
     if (facture) [etape, libelle] = [4, facture.statut === "payee" ? "Payé ✓" : facture.statut === "emise" ? "Facture à encaisser" : "Facture à émettre"];
-    return { devis, facture, etape, libelle, fini: facture?.statut === "payee" };
+    const cle = !devis
+      ? "notes"
+      : facture
+        ? { payee: "paye", emise: "a-encaisser" }[facture.statut] ?? "a-facturer"
+        : { brouillon: "a-envoyer", envoye: "envoye", refuse: "refuse", accepte: "a-facturer" }[devis.statut] ?? "a-envoyer";
+    return { devis, facture, etape, libelle, cle, fini: facture?.statut === "payee" };
   };
 }
+
+// Liste des chantiers : rangée par étape (ce qu'il y a à faire d'abord), avec filtres, tri et recherche.
+const ETAPES_CHANTIER = [
+  { id: "a-envoyer", nom: "Devis à envoyer", icone: "📤" },
+  { id: "envoye", nom: "Devis envoyés", icone: "⏳" },
+  { id: "a-facturer", nom: "Acceptés · à facturer", icone: "✅" },
+  { id: "a-encaisser", nom: "Factures à encaisser", icone: "💶" },
+  { id: "notes", nom: "Notes en cours (pas de devis)", icone: "🗒️" },
+  { id: "paye", nom: "Payés", icone: "🏦" },
+  { id: "refuse", nom: "Devis refusés", icone: "❌" },
+];
+const TRIS_CHANTIER = {
+  etape: "Par étape",
+  recent: "Activité récente",
+  ancien: "Plus anciens d'abord",
+  "date-devis": "Date du devis",
+  montant: "Montant (du plus gros)",
+  client: "Client (A → Z)",
+};
+let vueChantiers = { filtre: "tout", tri: "etape", recherche: "", ...local.lire("vue-chantiers", {}) };
+if (!(vueChantiers.tri in TRIS_CHANTIER)) vueChantiers.tri = "etape";
 
 async function afficherFiches() {
   const zone = $("#liste-fiches");
   if (!zone.innerHTML.trim()) zone.innerHTML = `<p class="aide">Chargement…</p>`;
   await fileChantiers;
-  const { data, error } = await sb.from("chantiers").select("id, titre, document_id, note_id, updated_at").order("updated_at", { ascending: false }).limit(300);
+  const { data, error } = await sb.from("chantiers").select("id, titre, document_id, note_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(300);
   if (error) {
     zone.innerHTML = `<p class="aide">Impossible de charger les chantiers (connexion ?).</p>`;
     return;
   }
   if (!data.length) {
+    $("#outils-chantiers").hidden = true;
     zone.innerHTML = `<div class="vide-clients"><p><strong>Aucun chantier pour l'instant.</strong></p><p class="aide">Appuie sur « ＋ Nouveau » : tu notes le chantier, l'IA fait le devis, tu l'envoies, puis tu factures.</p></div>`;
     return;
   }
+  $("#outils-chantiers").hidden = false;
   const etat = await etatsChantiers(data);
-  zone.innerHTML = data
-    .map((c) => {
-      const e = etat(c);
-      return `<button type="button" class="carte-fiche ${e.fini ? "fini" : ""}" data-fiche="${esc(c.id)}">
-        <span class="ligne-fiche"><strong>${esc(c.titre || "Chantier sans titre")}</strong><b>${e.devis ? euros(montantDoc(e.devis)) : ""}</b></span>
-        <span class="progression-fiche">${[1, 2, 3, 4].map((n) => `<i class="${e.fini || n < e.etape ? "fait" : n === e.etape ? "en-cours" : ""}"></i>`).join("")}</span>
-        <small>${esc(e.libelle)} · ${ilYa(c.updated_at)}</small>
-      </button>`;
+  const tous = data.map((c) => ({ c, e: etat(c) }));
+  rendreChantiers(tous);
+}
+
+function rendreChantiers(tous) {
+  const zone = $("#liste-fiches");
+  local.ecrire("vue-chantiers", { filtre: vueChantiers.filtre, tri: vueChantiers.tri });
+  const client = (x) => x.e.devis?.contenu.client_nom || x.e.facture?.contenu.client_nom || "";
+  const cherche = normaliser(vueChantiers.recherche);
+  const trouves = tous.filter((x) => !cherche || normaliser(`${x.c.titre} ${client(x)} ${x.e.devis?.numero ?? ""} ${x.e.facture?.numero ?? ""}`).includes(cherche));
+  const compte = (id) => trouves.filter((x) => x.e.cle === id).length;
+  const puces = [{ id: "tout", nom: "Tous", icone: "" }, ...ETAPES_CHANTIER]
+    .map((f) => {
+      const n = f.id === "tout" ? trouves.length : compte(f.id);
+      if (f.id !== "tout" && !n && vueChantiers.filtre !== f.id) return "";
+      return `<button type="button" class="puce ${vueChantiers.filtre === f.id ? "choisie" : ""}" data-filtre-chantier="${f.id}">${f.icone} ${esc(f.id === "tout" ? f.nom : f.nom.replace(/ \(.*\)/, ""))} <b>${n}</b></button>`;
     })
     .join("");
+  $("#filtres-chantiers").innerHTML = puces;
+  $("#tri-chantiers").value = vueChantiers.tri;
+
+  const liste = trouves.filter((x) => vueChantiers.filtre === "tout" || x.e.cle === vueChantiers.filtre);
+  const dateDevis = (x) => new Date(x.e.devis?.date_document ?? x.c.created_at ?? x.c.updated_at).getTime();
+  const tri = {
+    recent: (a, b) => new Date(b.c.updated_at) - new Date(a.c.updated_at),
+    etape: (a, b) => new Date(b.c.updated_at) - new Date(a.c.updated_at),
+    ancien: (a, b) => new Date(a.c.updated_at) - new Date(b.c.updated_at),
+    "date-devis": (a, b) => dateDevis(b) - dateDevis(a),
+    montant: (a, b) => (b.e.devis ? montantDoc(b.e.devis) : 0) - (a.e.devis ? montantDoc(a.e.devis) : 0),
+    client: (a, b) => (client(a) || a.c.titre || "").localeCompare(client(b) || b.c.titre || "", "fr"),
+  }[vueChantiers.tri];
+  liste.sort(tri);
+
+  const carte = ({ c, e }) => {
+    const nomClient = e.devis?.contenu.client_nom;
+    const docs = [e.devis && `Devis ${e.devis.numero} du ${dateFr(e.devis.date_document)}`, e.facture?.numero && `Facture ${e.facture.numero}`].filter(Boolean).join(" · ");
+    return `<button type="button" class="carte-fiche ${e.fini ? "fini" : ""}" data-fiche="${esc(c.id)}">
+        <span class="ligne-fiche"><strong>${esc(c.titre || "Chantier sans titre")}</strong><b>${e.devis ? euros(montantDoc(e.devis)) : ""}</b></span>
+        ${nomClient && !(c.titre || "").includes(nomClient) ? `<span class="client-fiche">👤 ${esc(nomClient)}</span>` : ""}
+        <span class="progression-fiche">${[1, 2, 3, 4].map((n) => `<i class="${e.fini || n < e.etape ? "fait" : n === e.etape ? "en-cours" : ""}"></i>`).join("")}</span>
+        <small>${esc(e.libelle)} · ${ilYa(c.updated_at)}${docs ? `<br>${esc(docs)}` : ""}</small>
+      </button>`;
+  };
+
+  if (!liste.length) zone.innerHTML = `<p class="aide">Aucun chantier ne correspond.</p>`;
+  else if (vueChantiers.tri === "etape" && vueChantiers.filtre === "tout") {
+    zone.innerHTML = ETAPES_CHANTIER.map((g) => {
+      const l = liste.filter((x) => x.e.cle === g.id);
+      if (!l.length) return "";
+      const total = l.reduce((t, x) => t + (x.e.devis ? montantDoc(x.e.devis) : 0), 0);
+      return `<h3 class="groupe-chantiers">${g.icone} ${esc(g.nom)} <span>${l.length}${total ? ` · ${euros(total)}` : ""}</span></h3>${l.map(carte).join("")}`;
+    }).join("");
+  } else zone.innerHTML = liste.map(carte).join("");
+
   for (const b of zone.querySelectorAll("[data-fiche]")) b.onclick = () => ouvrirFiche(b.dataset.fiche);
+  for (const b of $("#filtres-chantiers").querySelectorAll("[data-filtre-chantier]")) {
+    b.onclick = () => {
+      vueChantiers.filtre = b.dataset.filtreChantier;
+      rendreChantiers(tous);
+    };
+  }
+  $("#tri-chantiers").onchange = (ev) => {
+    vueChantiers.tri = ev.target.value;
+    rendreChantiers(tous);
+  };
+  $("#recherche-chantiers").oninput = (ev) => {
+    vueChantiers.recherche = ev.target.value;
+    rendreChantiers(tous);
+    $("#recherche-chantiers").focus();
+  };
 }
 
 function demanderTexte(titre, placeholder, valeur = "") {
