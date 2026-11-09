@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · chantiers triés";
+const VERSION_APPLI = "9 nov. 2026 · dates des chantiers";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -1891,7 +1891,12 @@ async function afficherFiches() {
   }
   $("#outils-chantiers").hidden = false;
   const etat = await etatsChantiers(data);
-  const tous = data.map((c) => ({ c, e: etat(c) }));
+  // Un devis = un seul chantier affiché (on garde le plus ancien, s'il y a eu un doublon).
+  const vus = new Set();
+  const tous = [...data]
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .filter((c) => !c.document_id || (!vus.has(c.document_id) && vus.add(c.document_id)))
+    .map((c) => ({ c, e: etat(c) }));
   rendreChantiers(tous);
 }
 
@@ -1914,24 +1919,38 @@ function rendreChantiers(tous) {
 
   const liste = trouves.filter((x) => vueChantiers.filtre === "tout" || x.e.cle === vueChantiers.filtre);
   const dateDevis = (x) => new Date(x.e.devis?.date_document ?? x.c.created_at ?? x.c.updated_at).getTime();
+  const activite = (x) => Math.max(...[x.c.updated_at, x.e.devis?.updated_at, x.e.facture?.updated_at].filter(Boolean).map((t) => new Date(t).getTime()));
   const tri = {
-    recent: (a, b) => new Date(b.c.updated_at) - new Date(a.c.updated_at),
-    etape: (a, b) => new Date(b.c.updated_at) - new Date(a.c.updated_at),
-    ancien: (a, b) => new Date(a.c.updated_at) - new Date(b.c.updated_at),
+    recent: (a, b) => activite(b) - activite(a),
+    etape: (a, b) => activite(b) - activite(a),
+    ancien: (a, b) => activite(a) - activite(b),
     "date-devis": (a, b) => dateDevis(b) - dateDevis(a),
     montant: (a, b) => (b.e.devis ? montantDoc(b.e.devis) : 0) - (a.e.devis ? montantDoc(a.e.devis) : 0),
     client: (a, b) => (client(a) || a.c.titre || "").localeCompare(client(b) || b.c.titre || "", "fr"),
   }[vueChantiers.tri];
   liste.sort(tri);
 
+  // Date de ce qui s'est passé à cette étape (envoi, acceptation, facture…), pas la dernière retouche du chantier.
+  const quand = ({ c, e }) => {
+    const d = e.devis;
+    const f = e.facture;
+    if (e.cle === "paye") return ["Payé", dateSuivi(f, "payee") || f.updated_at];
+    if (e.cle === "a-encaisser") return ["Facture émise", f.date_document];
+    if (e.cle === "a-facturer") return ["Accepté", dateSuivi(d, "accepte") || d.updated_at];
+    if (e.cle === "envoye") return ["Envoyé", dateSuivi(d, "envoye") || d.updated_at];
+    if (e.cle === "refuse") return ["Refusé", dateSuivi(d, "refuse") || d.updated_at];
+    if (e.cle === "a-envoyer") return ["Devis fait", d.created_at];
+    return ["Modifié", c.updated_at];
+  };
   const carte = ({ c, e }) => {
+    const [quoi, date] = quand({ c, e });
     const nomClient = e.devis?.contenu.client_nom;
     const docs = [e.devis && `Devis ${e.devis.numero} du ${dateFr(e.devis.date_document)}`, e.facture?.numero && `Facture ${e.facture.numero}`].filter(Boolean).join(" · ");
     return `<button type="button" class="carte-fiche ${e.fini ? "fini" : ""}" data-fiche="${esc(c.id)}">
         <span class="ligne-fiche"><strong>${esc(c.titre || "Chantier sans titre")}</strong><b>${e.devis ? euros(montantDoc(e.devis)) : ""}</b></span>
         ${nomClient && !(c.titre || "").includes(nomClient) ? `<span class="client-fiche">👤 ${esc(nomClient)}</span>` : ""}
         <span class="progression-fiche">${[1, 2, 3, 4].map((n) => `<i class="${e.fini || n < e.etape ? "fait" : n === e.etape ? "en-cours" : ""}"></i>`).join("")}</span>
-        <small>${esc(e.libelle)} · ${ilYa(c.updated_at)}${docs ? `<br>${esc(docs)}` : ""}</small>
+        <small>${esc(e.libelle)} · ${esc(quoi.toLowerCase())} ${ilYa(date)}${docs ? `<br>${esc(docs)}` : ""}</small>
       </button>`;
   };
 
