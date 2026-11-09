@@ -785,3 +785,4 @@ body { zoom: var(--zoom, 1); }
 .raccourcis-chantier { display: flex; flex-direction: column; gap: 8px; }
 .raccourcis-chantier h3 { margin: 0 0 4px; }
 .raccourcis-chantier .btn-secondaire { text-align: left; }
+.pastille.statut-brouillon { background: #e8edf3; color: #3d4b5c; }

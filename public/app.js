@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Glisser pour supprimer";
+const VERSION_APPLI = "10 nov. 2026 · Accueil corrigé";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -381,10 +381,28 @@ async function afficherAccueil() {
   rendreAccueil();
   const [docs, chantiers] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
-    sb.from("chantiers").select("id, titre, document_id, updated_at").order("updated_at", { ascending: false }).limit(4),
+    sb.from("chantiers").select("id, titre, document_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(100),
   ]);
-  donneesAccueil = { docs: docs.data ?? [], chantiers: chantiers.data ?? [], erreurChantiers: !!chantiers.error };
+  // Comme la page Chantiers : un devis = un seul chantier (le plus ancien s'il y a eu un doublon).
+  const vus = new Set();
+  const uniques = [...(chantiers.data ?? [])]
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .filter((c) => !c.document_id || (!vus.has(c.document_id) && vus.add(c.document_id)))
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .slice(0, 4);
+  donneesAccueil = { docs: docs.data ?? [], chantiers: uniques, erreurChantiers: !!chantiers.error };
   rendreAccueil();
+}
+
+// Étape réelle du chantier sur l'accueil (devis à envoyer, envoyé, accepté, facture…).
+function pastilleChantier(ch, docs) {
+  const d = docs.find((x) => x.id === ch.document_id);
+  if (!d) return `<span class="pastille statut-envoye">notes</span>`;
+  const f = docs.find((x) => x.type === "facture" && x.devis_id === d.id);
+  const [classe, texte] = f
+    ? f.statut === "payee" ? ["statut-payee", "payé"] : f.statut === "emise" ? ["statut-emise", "à encaisser"] : ["statut-brouillon", "à facturer"]
+    : { envoye: ["statut-envoye", "devis envoyé"], accepte: ["statut-accepte", "accepté"], refuse: ["statut-refuse", "refusé"] }[d.statut] ?? ["statut-brouillon", "devis à envoyer"];
+  return `<span class="pastille ${classe}">${texte}</span>`;
 }
 
 function htmlCase(id) {
@@ -452,7 +470,7 @@ function htmlCase(id) {
                 .map(
                   (ch) => `<button type="button" class="carte-chantier" data-ouvrir-chantier="${esc(ch.id)}">
             <span class="icone-chantier">🏗️</span><span><strong>${esc(ch.titre || "Chantier sans titre")}</strong><small>${ilYa(ch.updated_at)}</small></span>
-            <span class="pastille ${ch.document_id ? "statut-accepte" : "statut-envoye"}">${ch.document_id ? "devis fait" : "en cours"}</span></button>`,
+            ${pastilleChantier(ch, docs)}</button>`,
                 )
                 .join("")
             : `<p class="aide">${erreurChantiers ? "Liste indisponible (connexion ?)." : "Pas encore de chantier. Appuie sur « Nouveau chantier » pour commencer."}</p>`
