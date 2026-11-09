@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · historique d'envoi";
+const VERSION_APPLI = "9 nov. 2026 · liens app.cagot.fr";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -658,7 +658,10 @@ $("#form-boite").onsubmit = async (ev) => {
 };
 
 // --- Expert-comptable : accès direct en lecture seule aux factures émises et payées ---
-const lienComptable = (jeton) => `${location.origin}/comptable.html#invitation=${jeton}`;
+// Les liens envoyés aux clients et au comptable utilisent toujours l'adresse officielle de Cagot,
+// même si l'appli a été ouverte par l'ancienne adresse (cagot.pages.dev).
+const ORIGINE_PUBLIQUE = /(^|\.)cagot\.pages\.dev$/.test(location.hostname) ? "https://app.cagot.fr" : location.origin;
+const lienComptable = (jeton) => `${ORIGINE_PUBLIQUE}/comptable.html#invitation=${jeton}`;
 
 async function envoyerInvitationComptable(a) {
   const lien = lienComptable(a.jeton);
@@ -3086,7 +3089,7 @@ async function lienSignature(d) {
     const { error: err } = await sb.from("partages_devis").insert({ document_id: d.id, jeton: p.jeton });
     if (err) throw err;
   }
-  return `${location.origin}/devis.html#${p.jeton}`;
+  return `${ORIGINE_PUBLIQUE}/devis.html#${p.jeton}`;
 }
 
 async function signatureDuDevis(d) {
