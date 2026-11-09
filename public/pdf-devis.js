@@ -354,3 +354,50 @@ export async function pdfFacturX(blob, xml, { titre, auteur, avoir }) {
   const octets = await doc.save({ useObjectStreams: false });
   return new Blob([octets], { type: "application/pdf" });
 }
+
+// Attestation individuelle de l'éditeur (art. 286 I-3° bis du CGI, modèle BOI-TVA-DECLA-30-10-30) :
+// Cagot atteste que le logiciel respecte les conditions d'inaltérabilité, de sécurisation,
+// de conservation et d'archivage des données. Délivrée nominativement à chaque artisan.
+export function pdfAttestation({ editeur: ed, entreprise: e, version, dateFr }) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  let POLICE = "helvetica";
+  if (polices) {
+    pdf.addFileToVFS("LiberationSans-Regular.ttf", polices.normal);
+    pdf.addFileToVFS("LiberationSans-Bold.ttf", polices.bold);
+    pdf.addFont("LiberationSans-Regular.ttf", "Liberation", "normal");
+    pdf.addFont("LiberationSans-Bold.ttf", "Liberation", "bold");
+    POLICE = "Liberation";
+  }
+  const M = 20;
+  const largeur = 210 - 2 * M;
+  let y = 25;
+  const texte = (t, { gras = false, taille = 10.5, couleur = TEXTE, ecart = 2.5 } = {}) => {
+    pdf.setFont(POLICE, gras ? "bold" : "normal");
+    pdf.setFontSize(taille);
+    pdf.setTextColor(...couleur);
+    const lignes = pdf.splitTextToSize(propre(t), largeur);
+    pdf.text(lignes, M, y);
+    y += lignes.length * taille * 0.42 + ecart;
+  };
+  const ou = (v, defaut) => (String(v ?? "").trim() ? String(v).trim() : defaut);
+  texte("ATTESTATION INDIVIDUELLE", { gras: true, taille: 16, couleur: BLEU_DEFAUT, ecart: 1 });
+  texte("relative au respect des conditions d'inaltérabilité, de sécurisation, de conservation et d'archivage des données (article 286, I-3° bis du code général des impôts)", { taille: 10, couleur: GRIS, ecart: 8 });
+  texte(`Je soussigné(e), ${ed.representant}, ${ed.qualite} de ${ed.nom}${ed.siren ? ` (SIREN ${ed.siren})` : ""}, ${ed.adresse}, éditeur du logiciel de facturation « ${ed.logiciel} », atteste que ce logiciel, dans sa version ${version}, mis sur le marché le ${ed.mise_sur_le_marche}, satisfait aux conditions d'inaltérabilité, de sécurisation, de conservation et d'archivage des données en vue du contrôle de l'administration fiscale, prévues au 3° bis du I de l'article 286 du code général des impôts.`, { ecart: 5 });
+  texte("Ces conditions sont assurées de la manière suivante :", { gras: true, ecart: 3 });
+  for (const p of [
+    "Inaltérabilité : une facture émise ne peut plus être modifiée ni supprimée ; toute correction passe par un avoir numéroté qui fait référence à la facture d'origine. Les factures sont numérotées de façon continue, sans rupture.",
+    "Sécurisation : chaque émission de facture ou d'avoir et chaque encaissement est enregistré dans un journal chaîné ; chaque enregistrement porte une empreinte SHA-256 qui inclut l'empreinte précédente et le contenu exact du document. Toute modification casse la chaîne et est détectée par la vérification intégrée. Le journal ne peut être ni modifié ni supprimé, y compris par l'éditeur.",
+    "Clôtures : à la fin de chaque mois et de chaque année, les totaux (factures, avoirs, TVA, encaissements) et le cumul perpétuel depuis la première facture sont calculés et scellés dans le journal chaîné.",
+    "Conservation et archivage : les données sont conservées sur des serveurs situés dans l'Union européenne ; l'utilisateur peut à tout moment télécharger une archive complète (factures, paiements, journal), accompagnée de son empreinte SHA-256, à conserver pendant la durée légale (6 ans au titre du LPF, 10 ans au titre du code de commerce).",
+  ]) texte(`•  ${p}`, { ecart: 3 });
+  y += 3;
+  texte(`Je m'engage à ce que les versions ultérieures du logiciel ${ed.logiciel} satisfassent à ces mêmes conditions.`, { ecart: 6 });
+  texte("Attestation délivrée à :", { gras: true, ecart: 2 });
+  for (const l of [ou(e.nom, "(nom de l'entreprise)"), ...String(e.adresse || "").split("\n").filter((x) => x.trim()), e.siret ? `SIRET : ${e.siret}` : "", e.tva_intra ? `N° TVA : ${e.tva_intra}` : ""].filter(Boolean)) texte(l, { ecart: 0.5 });
+  y += 8;
+  texte(`Fait à ${ed.ville}, le ${dateFr(new Date().toISOString())}.`, { ecart: 3 });
+  texte(`${ed.representant}, ${ed.qualite} de ${ed.nom}`, { gras: true, ecart: 10 });
+  texte("Cette attestation est à conserver et à présenter en cas de contrôle de l'administration fiscale. L'utilisateur s'engage à utiliser le logiciel conformément à sa destination et à ne pas chercher à contourner ses mécanismes de sécurisation.", { taille: 8.5, couleur: GRIS });
+  return pdf.output("blob");
+}

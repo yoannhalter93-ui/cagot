@@ -771,3 +771,6 @@ body { zoom: var(--zoom, 1); }
 @media (hover: hover) and (pointer: fine) {
   .onglets-reglages, .filtres-docs { scrollbar-width: thin; }
 }
+.clotures-journal { margin-top: 16px; }
+.clotures-journal summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.table-journal tr.cloture-annuelle td { font-weight: 700; background: var(--fond-doux, rgba(31, 78, 121, .08)); }

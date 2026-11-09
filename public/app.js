@@ -1,7 +1,7 @@
 import { calculerTotaux, tauxLigne } from "/calcul.js";
 import { CORPS_ETAT, nomCorpsEtat } from "/corps-etat.js";
 import { demarrerPlateforme } from "/plateforme.js";
-import { genererPdf, pdfFacturX, preparerPolices } from "/pdf-devis.js";
+import { genererPdf, pdfAttestation, pdfFacturX, preparerPolices } from "/pdf-devis.js";
 import { xmlFacturX } from "/facturx.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
 import { NATURES, autoliquidation, estParticulier, mentionsTvaReduite, ventilationTva, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · TVA par ligne";
+const VERSION_APPLI = "9 nov. 2026 · Clôtures";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -3300,8 +3300,51 @@ async function afficherJournal() {
 }
 
 let paiementsJournal = null;
+
+// Éditeur du logiciel (attestation individuelle anti-fraude TVA). À compléter avec le SIREN
+// de la micro-entreprise qui commercialise Cagot dès son immatriculation.
+const EDITEUR = {
+  nom: "Cagot",
+  logiciel: "Cagot",
+  representant: "Yoann Halter",
+  qualite: "éditeur et représentant légal",
+  siren: "",
+  adresse: "France",
+  ville: "Paris",
+  mise_sur_le_marche: "24/09/2026",
+};
+
+async function telechargerAttestation() {
+  if (!plateforme.scriptsPdf) return erreur("Attestation disponible dans l'application en ligne.");
+  for (const src of plateforme.scriptsPdf) await chargerScript(src);
+  await preparerPolices();
+  const blob = pdfAttestation({ editeur: EDITEUR, entreprise: profil.infos, version: VERSION_APPLI, dateFr });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "Attestation_conformite_Cagot.pdf" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// Clôtures mensuelles et annuelles scellées (créées automatiquement pour les périodes terminées).
+async function afficherClotures() {
+  const zone = $("#clotures-journal");
+  await sb.rpc("cloturer_periodes");
+  const { data, error } = await sb.from("journal_factures").select("id, donnees").eq("evenement", "cloture").order("id", { ascending: false }).limit(240);
+  if (error || !data?.length) {
+    zone.innerHTML = "";
+    return;
+  }
+  const mois = (p) => (p.length === 4 ? `Année ${p}` : new Date(`${p}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }));
+  zone.innerHTML = `<details><summary>🗄️ Clôtures scellées (${data.length})</summary>
+    <p class="aide">Chaque fin de mois et d'année, les totaux sont figés dans le journal sécurisé : ils ne peuvent plus être modifiés.</p>
+    <div class="defilement-table"><table class="table-journal"><thead><tr><th>Période</th><th class="num">Factures</th><th class="num">HT</th><th class="num">TVA</th><th class="num">TTC</th><th class="num">Encaissé</th><th class="num">Cumul TTC</th></tr></thead><tbody>${data
+      .map(({ donnees: c }) => `<tr class="${c.type === "annuelle" ? "cloture-annuelle" : ""}"><td>${esc(mois(c.periode))}</td><td class="num">${c.nb_factures}${c.nb_avoirs ? ` + ${c.nb_avoirs} avoir${c.nb_avoirs > 1 ? "s" : ""}` : ""}</td><td class="num">${euros(c.total_ht)}</td><td class="num">${euros(c.total_tva)}</td><td class="num">${euros(c.total_ttc)}</td><td class="num">${euros(c.encaisse)}</td><td class="num">${euros(c.cumul_perpetuel_ttc)}</td></tr>`)
+      .join("")}</tbody></table></div></details>`;
+}
+
 async function verifierIntegrite() {
   const zone = $("#integrite-journal");
+  await afficherClotures().catch(console.error);
   const { data, error } = await sb.rpc("verifier_journal");
   if (error) {
     zone.innerHTML = "";
@@ -3309,11 +3352,14 @@ async function verifierIntegrite() {
   }
   zone.className = `integrite-journal ${data.ok ? "ok" : "alerte"}`;
   zone.innerHTML = data.ok
-    ? `🔒 <b>Factures intègres</b> : ${data.nb} enregistrement${data.nb > 1 ? "s" : ""} scellé${data.nb > 1 ? "s" : ""} (émissions, avoirs, paiements), aucune modification détectée.
-       <button type="button" class="lien" id="exporter-archive">Télécharger l'archive scellée</button>`
+    ? `🔒 <b>Factures intègres</b> : ${data.nb} enregistrement${data.nb > 1 ? "s" : ""} scellé${data.nb > 1 ? "s" : ""} (émissions, avoirs, paiements, clôtures), aucune modification détectée.
+       <button type="button" class="lien" id="exporter-archive">Télécharger l'archive scellée</button>
+       <button type="button" class="lien" id="attestation-conformite">Attestation de conformité (loi anti-fraude TVA)</button>`
     : `⚠️ <b>Anomalie détectée</b> sur ${esc(data.numero || "un enregistrement")} : ${data.probleme === "facture_modifiee" ? "la facture ne correspond plus à celle émise" : "la chaîne du journal est rompue"}. Contacte le support Cagot.`;
   const b = $("#exporter-archive");
   if (b) b.onclick = exporterArchive;
+  const att = $("#attestation-conformite");
+  if (att) att.onclick = () => telechargerAttestation().catch((e) => erreur(`Attestation impossible : ${e.message}`));
 }
 
 async function exporterArchive() {
