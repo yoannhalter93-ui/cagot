@@ -6,7 +6,7 @@
 // Actions de réglage : { action: "boite-statut" | "boite-enregistrer" | "boite-supprimer" }.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.1";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { envoyerMail } from "./smtp.ts";
 
 const CLE_BREVO = Deno.env.get("BREVO_API_KEY");
 const EXPEDITEUR_BREVO = Deno.env.get("EMAIL_EXPEDITEUR");
@@ -56,23 +56,17 @@ async function dechiffrer(s: string) {
 type Boite = { email: string; nom_affiche: string; hote: string; port: number; utilisateur: string; mdp_chiffre: string };
 
 async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; replyTo?: string; subject: string; text: string; pdf?: string; nomFichier?: string }) {
-  const client = new SMTPClient({ connection: { hostname: b.hote, port: b.port, tls: true, auth: { username: b.utilisateur, password: mdp } } });
-  try {
-    await client.send({
-      from: b.nom_affiche ? `${ligne(b.nom_affiche).replace(/[<>"]/g, "")} <${b.email}>` : b.email,
-      to: m.to,
-      ...(m.replyTo ? { replyTo: m.replyTo } : {}),
-      subject: m.subject,
-      content: m.text,
-      ...(m.pdf ? { attachments: [{ filename: m.nomFichier ?? "document.pdf", content: m.pdf, encoding: "base64" as const, contentType: "application/pdf" }] } : {}),
-    });
-  } finally {
-    try {
-      await client.close();
-    } catch {
-      /* connexion déjà fermée */
-    }
-  }
+  await envoyerMail(
+    { hote: b.hote, port: b.port, utilisateur: b.utilisateur, motDePasse: mdp },
+    {
+      de: { email: b.email, nom: ligne(b.nom_affiche || "") },
+      a: m.to,
+      ...(m.replyTo ? { repondreA: m.replyTo } : {}),
+      sujet: ligne(m.subject),
+      texte: m.text,
+      ...(m.pdf ? { pdf: { base64: m.pdf, nom: m.nomFichier ?? "document.pdf" } } : {}),
+    },
+  );
 }
 
 const messageSmtp = (err: unknown) => {
