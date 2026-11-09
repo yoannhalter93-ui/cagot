@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · factures électroniques";
+const VERSION_APPLI = "9 nov. 2026 · ordinateur";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -823,6 +823,18 @@ $("#interface-origine").onclick = () => {
   rendreReglagesInterface();
   notifier("Interface d'origine remise.");
 };
+
+// Molette de la souris : fait défiler les rangées horizontales (onglets, filtres) sur ordinateur.
+document.addEventListener(
+  "wheel",
+  (ev) => {
+    const rangee = ev.target.closest?.(".onglets-reglages, .filtres-docs");
+    if (!rangee || Math.abs(ev.deltaY) <= Math.abs(ev.deltaX) || rangee.scrollWidth <= rangee.clientWidth) return;
+    ev.preventDefault();
+    rangee.scrollLeft += ev.deltaY;
+  },
+  { passive: false },
+);
 
 // Réglages en onglets
 for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {

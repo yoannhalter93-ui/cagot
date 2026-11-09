@@ -763,3 +763,11 @@ body { zoom: var(--zoom, 1); }
 .integrite-journal.alerte { background: #fbe9e9; color: #8e2020; }
 .integrite-journal .lien { display: block; margin-top: 4px; }
 :root[data-theme="dark"] .integrite-journal.ok { background: #183526; color: #bfe8cf; }
+
+/* --- Ordinateur : onglets et filtres accessibles sans écran tactile --- */
+@media (min-width: 700px) {
+  .onglets-reglages { flex-wrap: wrap; overflow-x: visible; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .onglets-reglages, .filtres-docs { scrollbar-width: thin; }
+}
