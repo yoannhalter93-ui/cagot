@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · journal des ventes";
+const VERSION_APPLI = "9 nov. 2026 · retour en arrière";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2617,7 +2617,7 @@ function carteDocument(d, factureDe) {
     } else if (d.statut === "accepte") {
       const f = factureDe.get(d.id);
       etat = `Accepté ${ilYa(dateSuivi(d, "accepte") || d.updated_at)}${f ? ` · facture ${esc(f.numero || "brouillon")}` : ""}`;
-      actions = f ? action("ouvrir", "Voir le devis") : action("facturer", "🧾 Faire la facture", "principal");
+      actions = f ? action("ouvrir", "Voir le devis") : action("facturer", "🧾 Faire la facture", "principal") + action("envoye", "↩️ Pas encore accepté");
     } else if (d.statut === "refuse") {
       etat = `Refusé ${ilYa(dateSuivi(d, "refuse") || d.updated_at)}`;
       actions = action("envoye", "↩️ Remettre en attente");
@@ -2648,7 +2648,15 @@ function carteDocument(d, factureDe) {
 // Change le statut d'un document ; pour un devis, garde la date du changement (suivi).
 async function mettreStatut(d, statut) {
   const maj = { statut };
-  if (d.type === "devis") maj.contenu = { ...d.contenu, suivi: { ...(d.contenu.suivi ?? {}), [statut]: new Date().toISOString() } };
+  if (d.type === "devis") {
+    const suivi = { ...(d.contenu.suivi ?? {}) };
+    const ordre = ["brouillon", "envoye", "accepte", "refuse"];
+    const retour = ordre.indexOf(statut) < ordre.indexOf(d.statut) || (d.statut === "refuse" && statut !== "refuse");
+    if (retour) delete suivi[d.statut]; // étape annulée (ex. accepté par erreur)
+    if (!(retour && suivi[statut])) suivi[statut] = new Date().toISOString(); // on garde la vraie date d'envoi
+    delete suivi.brouillon;
+    maj.contenu = { ...d.contenu, suivi };
+  }
   const { data, error } = await sb.from("documents").update(maj).eq("id", d.id).select("*").single();
   if (error) {
     erreur("Statut non modifié.", error);
@@ -2827,8 +2835,8 @@ function rendreDocument() {
         ? "Facture en <strong>brouillon</strong> : vérifie-la puis clique « Émettre la facture ». Elle recevra alors son numéro définitif et ne pourra plus être modifiée."
         : `Facture <strong>${LIBELLES_STATUT[d.statut]}</strong> : elle est verrouillée (obligation légale). Pour corriger, il faudra faire un avoir.`;
   } else {
-    // Le statut se lit dans le badge en haut et se change avec le gros bouton (ou ici, en détail)
-    info.hidden = !v.signature_client;
+    // Le statut se lit dans le badge en haut et se change avec le gros bouton (ou ici, pour revenir en arrière)
+    info.hidden = false;
     if (v.signature_client) {
       signatureDuDevis(d).then((sig) => {
         if (docCourant !== d || !sig) return;
@@ -2836,10 +2844,13 @@ function rendreDocument() {
       });
       info.innerHTML = `✍️ Signé en ligne par ${esc(v.signature_client.nom)}`;
     } else {
-      info.innerHTML = `Statut du devis : <select id="statut-devis">${["brouillon", "envoye", "accepte", "refuse"]
+      info.innerHTML = `Statut du devis (pour corriger une erreur) : <select id="statut-devis">${["brouillon", "envoye", "accepte", "refuse"]
         .map((s) => `<option value="${s}" ${s === d.statut ? "selected" : ""}>${LIBELLES_STATUT[s]}</option>`)
         .join("")}</select>`;
-      $("#statut-devis").onchange = (ev) => changerStatut(ev.target.value);
+      $("#statut-devis").onchange = async (ev) => {
+        await changerStatut(ev.target.value);
+        notifier(`Devis passé en « ${LIBELLES_STATUT[ev.target.value]} ».`);
+      };
     }
   }
 
