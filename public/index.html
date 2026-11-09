@@ -25,6 +25,7 @@
       <button type="button" data-vue="devis">📝 Tous les devis</button>
       <button type="button" data-vue="factures">🧾 Toutes les factures</button>
       <button type="button" data-vue="notes">🗒️ Toutes les notes</button>
+      <button type="button" data-vue="journal">📒 Journal des ventes</button>
       <button type="button" data-vue="parametres">⚙️ Réglages</button>
     </div>
   </div>
@@ -79,6 +80,24 @@
       <div id="liste-ajout-cases"></div>
     </div>
     <button type="button" id="perso-accueil" class="lien perso-accueil">✏️ Personnaliser mon accueil</button>
+  </main>
+
+  <!-- ===== Journal des ventes ===== -->
+  <main id="vue-journal" class="vue" hidden>
+    <div class="entete-documents no-print"><h2>Journal des ventes</h2></div>
+    <h2 class="titre-impression">Journal des ventes – <span id="periode-journal-texte"></span></h2>
+    <div id="periodes-journal" class="filtres-docs no-print"></div>
+    <div id="dates-journal" class="periode-perso no-print" hidden>
+      <label>Du <input type="date" id="journal-debut"></label>
+      <label>Au <input type="date" id="journal-fin"></label>
+    </div>
+    <div id="resume-journal" class="tuiles"></div>
+    <div id="tva-journal"></div>
+    <div class="actions-journal no-print">
+      <button type="button" id="journal-csv" class="btn-principal">📊 Exporter (Excel)</button>
+      <button type="button" id="journal-imprimer" class="btn-secondaire">🖨️ Imprimer / PDF</button>
+    </div>
+    <div id="table-journal"></div>
   </main>
 
   <!-- ===== Notes de chantier : liste ===== -->

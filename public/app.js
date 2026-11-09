@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · liens app.cagot.fr";
+const VERSION_APPLI = "9 nov. 2026 · journal des ventes";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -337,7 +337,7 @@ function afficherVue(nom) {
     ? raccourci
     : ["chantier", "fiche", "chantiers"].includes(nom) || (ficheCourante && ["note", "document"].includes(nom))
       ? "chantiers"
-      : ["documents", "document", "notes", "note", "parametres"].includes(nom)
+      : ["documents", "document", "notes", "note", "parametres", "journal"].includes(nom)
         ? "plus"
         : nom;
   $("#menu-plus").hidden = true;
@@ -350,6 +350,7 @@ function afficherVue(nom) {
   if (nom === "notes") afficherNotes();
   if (nom === "documents") afficherListe();
   if (nom === "clients") afficherClients();
+  if (nom === "journal") afficherJournal();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
 }
@@ -403,6 +404,35 @@ function htmlCase(id) {
     case "taux-acceptation": {
       const decides = par.accepte.length + par.refuse.length;
       return mini("🎯 Taux d'acceptation", decides ? `${Math.round((100 * par.accepte.length) / decides)} %` : "—", `${par.accepte.length} accepté${par.accepte.length > 1 ? "s" : ""} · ${par.refuse.length} refusé${par.refuse.length > 1 ? "s" : ""}`);
+    }
+    case "impayes": {
+      const liste = par["a-encaisser"];
+      const retard = liste.filter((d) => joursDepuis(d.date_document) > delai).length;
+      return `<button type="button" class="tuile ${retard ? "alerte" : ""}" data-vue="journal"><small>⚠️ Impayés</small><strong>${euros(liste.reduce((t, d) => t + montantDoc(d), 0))}</strong><span>${liste.length} facture${liste.length > 1 ? "s" : ""}${retard ? ` · ${retard} en retard` : ""}</span></button>`;
+    }
+    case "courbe-ca": {
+      const maintenant = new Date();
+      const mois = Array.from({ length: 6 }, (_, i) => new Date(maintenant.getFullYear(), maintenant.getMonth() - 5 + i, 1));
+      const valeurs = mois.map((debut) => {
+        const fin = new Date(debut.getFullYear(), debut.getMonth() + 1, 1);
+        return docs
+          .filter((d) => d.type === "facture" && d.statut !== "brouillon" && new Date(d.date_document) >= debut && new Date(d.date_document) < fin)
+          .reduce((t, d) => t + Number(d.contenu.total_ht || 0), 0);
+      });
+      const max = Math.max(...valeurs, 1);
+      const L = 300;
+      const H = 120;
+      const pas = L / 6;
+      const barres = valeurs
+        .map((v, i) => {
+          const h = Math.max(2, Math.round((v / max) * (H - 18)));
+          return `<rect x="${i * pas + 8}" y="${H - h}" width="${pas - 16}" height="${h}" rx="4" class="${i === 5 ? "colonne-courante" : "colonne"}"><title>${euros(v)} HT</title></rect>`;
+        })
+        .join("");
+      const noms = mois.map((m, i) => `<text x="${i * pas + pas / 2}" y="${H + 14}" text-anchor="middle">${m.toLocaleDateString("fr-FR", { month: "short" })}</text>`).join("");
+      return `<div class="titre-section ligne-titre"><h3>📊 Chiffre d'affaires</h3><button type="button" class="lien" data-vue="journal">Journal ›</button></div>
+        <div class="carte-courbe"><p class="aide">Ce mois-ci : <strong>${euros(valeurs[5])} HT</strong></p>
+        <svg viewBox="0 0 ${L} ${H + 20}" class="courbe-ca" role="img" aria-label="Chiffre d'affaires HT des 6 derniers mois">${barres}${noms}</svg></div>`;
     }
     case "nouveau":
       return `<button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouveau chantier</button>
@@ -3121,6 +3151,126 @@ $("#imprimer").onclick = async () => {
     erreur("Export impossible.", err);
   }
 };
+
+// ---------------------------------------------------------------------------
+// Journal des ventes : factures émises sur une période, TVA par taux, encaissé, impayés, export
+// ---------------------------------------------------------------------------
+let periodeJournal = local.lire("periode-journal", "mois");
+let facturesJournal = [];
+const PERIODES_JOURNAL = [["mois", "Ce mois"], ["mois-1", "Mois dernier"], ["trim", "Ce trimestre"], ["trim-1", "Trimestre dernier"], ["annee", "Cette année"], ["annee-1", "Année dernière"], ["perso", "Dates…"]];
+
+function bornesJournal(p) {
+  const n = new Date();
+  const [a, m] = [n.getFullYear(), n.getMonth()];
+  const t = Math.floor(m / 3) * 3;
+  const de = (y, mo) => new Date(y, mo, 1);
+  if (p === "mois-1") return [de(a, m - 1), de(a, m)];
+  if (p === "trim") return [de(a, t), de(a, t + 3)];
+  if (p === "trim-1") return [de(a, t - 3), de(a, t)];
+  if (p === "annee") return [de(a, 0), de(a + 1, 0)];
+  if (p === "annee-1") return [de(a - 1, 0), de(a, 0)];
+  if (p === "perso") {
+    const d = $("#journal-debut").value ? new Date(`${$("#journal-debut").value}T00:00:00`) : de(a, 0);
+    const f = $("#journal-fin").value ? new Date(`${$("#journal-fin").value}T00:00:00`) : n;
+    f.setDate(f.getDate() + 1);
+    return [d, f];
+  }
+  return [de(a, m), de(a, m + 1)];
+}
+
+const montantsFacture = (f) => {
+  const c = f.contenu;
+  const franchise = !!profil.infos.franchise_tva;
+  const ht = Number(c.total_ht || 0);
+  const tva = franchise ? 0 : Number(c.montant_tva || 0);
+  return { ht, tva, ttc: franchise ? ht : Number(c.total_ttc || 0), taux: franchise || autoliquidation(c) ? 0 : Number(c.taux_tva ?? 0) };
+};
+
+async function afficherJournal() {
+  const { data, error } = await sb.from("documents").select("id, numero, statut, date_document, updated_at, contenu").eq("type", "facture").in("statut", ["emise", "payee"]).limit(5000);
+  if (error) {
+    $("#table-journal").innerHTML = `<p class="aide">Impossible de charger les factures (connexion ?).</p>`;
+    return;
+  }
+  facturesJournal = data;
+  rendreJournal();
+}
+
+function rendreJournal() {
+  local.ecrire("periode-journal", periodeJournal);
+  $("#periodes-journal").innerHTML = PERIODES_JOURNAL.map(([id, nom]) => `<button type="button" class="puce ${periodeJournal === id ? "choisie" : ""}" data-periode-journal="${id}">${nom}</button>`).join("");
+  for (const b of $("#periodes-journal").querySelectorAll("[data-periode-journal]")) {
+    b.onclick = () => {
+      periodeJournal = b.dataset.periodeJournal;
+      rendreJournal();
+    };
+  }
+  $("#dates-journal").hidden = periodeJournal !== "perso";
+  const [debut, fin] = bornesJournal(periodeJournal);
+  const finAffichee = new Date(fin);
+  finAffichee.setDate(finAffichee.getDate() - 1);
+  $("#periode-journal-texte").textContent = `du ${dateFr(debut.toISOString())} au ${dateFr(finAffichee.toISOString())}`;
+  const liste = facturesJournal
+    .filter((f) => new Date(f.date_document) >= debut && new Date(f.date_document) < fin)
+    .sort((a, b) => String(a.numero).localeCompare(String(b.numero)));
+  const somme = (l, k) => l.reduce((t, f) => t + montantsFacture(f)[k], 0);
+  const payees = liste.filter((f) => f.statut === "payee");
+  const delai = Number(profil.infos.delai_paiement || 30);
+  const impayes = facturesJournal.filter((f) => f.statut === "emise");
+  const enRetard = impayes.filter((f) => joursDepuis(f.date_document) > delai);
+  $("#resume-journal").innerHTML = [
+    ["🧾 Facturé HT", euros(somme(liste, "ht")), `${liste.length} facture${liste.length > 1 ? "s" : ""} sur la période`],
+    ["🏛️ TVA collectée", euros(somme(liste, "tva")), profil.infos.franchise_tva ? "Franchise (art. 293 B)" : "sur les factures de la période"],
+    ["🏦 Encaissé TTC", euros(somme(payees, "ttc")), `${payees.length} payée${payees.length > 1 ? "s" : ""} sur la période`],
+    [`⚠️ Impayés (toutes périodes)`, euros(somme(impayes, "ttc")), `${impayes.length} facture${impayes.length > 1 ? "s" : ""}${enRetard.length ? ` · ${enRetard.length} en retard` : ""}`],
+  ]
+    .map(([t, v, d], i) => `<div class="tuile tuile-info ${i === 3 && enRetard.length ? "alerte" : ""}"><small>${t}</small><strong>${v}</strong><span>${esc(d)}</span></div>`)
+    .join("");
+  const parTaux = new Map();
+  for (const f of liste) {
+    const m = montantsFacture(f);
+    const t = parTaux.get(m.taux) ?? { ht: 0, tva: 0 };
+    parTaux.set(m.taux, { ht: t.ht + m.ht, tva: t.tva + m.tva });
+  }
+  $("#tva-journal").innerHTML = parTaux.size && !profil.infos.franchise_tva
+    ? `<table class="table-tva"><thead><tr><th>Taux de TVA</th><th class="num">Base HT</th><th class="num">TVA</th></tr></thead><tbody>${[...parTaux]
+        .sort((a, b) => b[0] - a[0])
+        .map(([taux, t]) => `<tr><td>${taux ? `${nombre(taux)} %` : "0 % (autoliquidation / exonéré)"}</td><td class="num">${euros(t.ht)}</td><td class="num">${euros(t.tva)}</td></tr>`)
+        .join("")}</tbody></table>`
+    : "";
+  $("#journal-csv").disabled = !liste.length;
+  $("#table-journal").innerHTML = liste.length
+    ? `<div class="defilement-table"><table class="table-journal"><thead><tr><th>Date</th><th>N°</th><th>Client</th><th class="num">HT</th><th class="num">TVA</th><th class="num">TTC</th><th>Statut</th></tr></thead><tbody>${liste
+        .map((f) => {
+          const m = montantsFacture(f);
+          return `<tr data-ouvrir-doc="${esc(f.id)}"><td>${dateFr(f.date_document)}</td><td>${esc(f.numero)}${f.contenu.avoir ? " (avoir)" : ""}</td><td>${esc(f.contenu.client_nom || "")}</td><td class="num">${euros(m.ht)}</td><td class="num">${euros(m.tva)}</td><td class="num">${euros(m.ttc)}</td><td>${f.statut === "payee" ? "Payée" : joursDepuis(f.date_document) > delai ? "⚠️ En retard" : "À encaisser"}</td></tr>`;
+        })
+        .join("")}</tbody><tfoot><tr><td colspan="3">Total</td><td class="num">${euros(somme(liste, "ht"))}</td><td class="num">${euros(somme(liste, "tva"))}</td><td class="num">${euros(somme(liste, "ttc"))}</td><td></td></tr></tfoot></table></div>`
+    : `<p class="aide">Aucune facture émise sur cette période.</p>`;
+  for (const tr of $("#table-journal").querySelectorAll("[data-ouvrir-doc]")) tr.onclick = () => ouvrirDocument(tr.dataset.ouvrirDoc);
+  $("#journal-csv").onclick = () => {
+    const nb = (n) => (Math.round(n * 100) / 100).toFixed(2).replace(".", ",");
+    const cellule = (t) => {
+      const x = String(t ?? "").replace(/\r?\n/g, " ");
+      return /[";]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x;
+    };
+    const lignes = [
+      ["Date", "Numéro", "Client", "Objet", "Total HT", "Taux TVA", "TVA", "Total TTC", "Statut", "Échéance"],
+      ...liste.map((f) => {
+        const m = montantsFacture(f);
+        return [dateFr(f.date_document), f.numero, f.contenu.client_nom, f.contenu.titre, nb(m.ht), `${nombre(m.taux)} %`, nb(m.tva), nb(m.ttc), f.statut === "payee" ? "Payée" : "À encaisser", dateFr(ajouterJours(f.date_document, delai))];
+      }),
+    ];
+    const csv = `﻿${lignes.map((l) => l.map(cellule).join(";")).join("\r\n")}\r\n`;
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })), download: `Journal_des_ventes_${$("#periode-journal-texte").textContent.replace(/\//g, "-").replace(/\s+/g, "_")}.csv` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+}
+$("#journal-debut").onchange = () => rendreJournal();
+$("#journal-fin").onchange = () => rendreJournal();
+$("#journal-imprimer").onclick = () => window.print();
 
 // --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---
 async function noterEnvoi(d, destinataires, moyen) {

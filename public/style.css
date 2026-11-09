@@ -733,3 +733,26 @@ body { zoom: var(--zoom, 1); }
 .historique-envois li { padding: 4px 0; border-top: 1px dashed var(--bord); color: var(--gris); }
 .historique-envois li:first-child { border-top: 0; }
 .historique-envois b { color: var(--texte); word-break: break-all; }
+
+/* --- Journal des ventes et courbe du chiffre d'affaires --- */
+.actions-journal { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.actions-journal button { flex: 1; min-width: 150px; padding: 12px; }
+.defilement-table { overflow-x: auto; background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; }
+.table-journal { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.table-journal th, .table-journal td { padding: 8px 10px; border-bottom: 1px solid var(--bord); text-align: left; white-space: nowrap; }
+.table-journal .num { text-align: right; }
+.table-journal tbody tr { cursor: pointer; }
+.table-journal tbody tr:hover { background: var(--bleu-clair); }
+.table-journal tfoot td { font-weight: 700; }
+.titre-impression { display: none; }
+.carte-courbe { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 10px 12px; }
+.carte-courbe .aide { margin: 0 0 6px; }
+.courbe-ca { width: 100%; height: auto; display: block; }
+.courbe-ca .colonne { fill: var(--bleu-clair); stroke: var(--bleu); stroke-width: 1; }
+.courbe-ca .colonne-courante { fill: var(--vert); }
+.courbe-ca text { fill: var(--gris); font-size: 10px; }
+@media print {
+  #vue-journal .titre-impression { display: block; font-size: 16px; color: #000; }
+  #vue-journal .tuile { break-inside: avoid; }
+  .barre, .bandeau, #navigation, .btn-reglages { display: none !important; }
+}

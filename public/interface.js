@@ -30,6 +30,8 @@ export const BLOCS_ACCUEIL = {
   payee: { nom: "Encaissé", icone: "🏦", taille: "petit" },
   "ca-mois": { nom: "Facturé ce mois", icone: "📈", taille: "petit" },
   "taux-acceptation": { nom: "Taux d'acceptation", icone: "🎯", taille: "petit" },
+  impayes: { nom: "Impayés", icone: "⚠️", taille: "petit" },
+  "courbe-ca": { nom: "Chiffre d'affaires (6 derniers mois)", icone: "📊", taille: "large" },
   nouveau: { nom: "Bouton « Nouveau chantier »", icone: "＋", taille: "large" },
   raccourcis: { nom: "Actions rapides", icone: "⚡", taille: "large" },
   chantiers: { nom: "Mes chantiers en cours", icone: "🏗️", taille: "large" },
@@ -56,6 +58,8 @@ export const INTERFACE_DEFAUT = {
     { id: "retards", visible: false, taille: "large" },
     { id: "ca-mois", visible: false, taille: "petit" },
     { id: "taux-acceptation", visible: false, taille: "petit" },
+    { id: "impayes", visible: false, taille: "petit" },
+    { id: "courbe-ca", visible: false, taille: "large" },
   ],
 };
 
