@@ -97,6 +97,7 @@
       <button type="button" id="journal-csv" class="btn-principal">📊 Exporter (Excel)</button>
       <button type="button" id="journal-imprimer" class="btn-secondaire">🖨️ Imprimer / PDF</button>
     </div>
+    <div id="integrite-journal" class="integrite-journal"></div>
     <div id="table-journal"></div>
   </main>
 
@@ -327,6 +328,12 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <label>Texte en bas de chaque page <textarea name="pied_page" rows="2" maxlength="400" placeholder="Ex : SARL au capital de 5 000 € – RCS Lyon 123 456 789 – APE 4334Z"></textarea></label>
 
       <h3 class="titre-reglage">Numérotation</h3>
+      <label>Format des numéros de factures
+        <select name="format_facture">
+          <option value="">Début-année-numéro (ex. FAC-2026-001)</option>
+          <option value="aa-mm">Année-mois-numéro, comme Henrri (ex. 26-11-190)</option>
+        </select>
+      </label>
       <div class="ligne-prefixes">
         <label>Début des n° de devis <input name="prefixe_devis" maxlength="10" placeholder="DEV" autocapitalize="characters"></label>
         <label>Début des n° de factures <input name="prefixe_facture" maxlength="10" placeholder="FAC" autocapitalize="characters"></label>

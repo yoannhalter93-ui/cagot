@@ -756,3 +756,10 @@ body { zoom: var(--zoom, 1); }
   #vue-journal .tuile { break-inside: avoid; }
   .barre, .bandeau, #navigation, .btn-reglages { display: none !important; }
 }
+
+/* --- Intégrité des factures --- */
+.integrite-journal { border-radius: 12px; padding: 10px 12px; margin: 6px 0 12px; font-size: .9rem; }
+.integrite-journal.ok { background: #e3f4ea; color: #1e5c35; }
+.integrite-journal.alerte { background: #fbe9e9; color: #8e2020; }
+.integrite-journal .lien { display: block; margin-top: 4px; }
+:root[data-theme="dark"] .integrite-journal.ok { background: #183526; color: #bfe8cf; }

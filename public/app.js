@@ -153,7 +153,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "9 nov. 2026 · retour en arrière";
+const VERSION_APPLI = "9 nov. 2026 · factures scellées";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2590,8 +2590,7 @@ async function afficherListe() {
         await ouvrirDocument(d.id);
         return $("#partager").click();
       }
-      if (action === "payee" && !(await demander(`Marquer ${d.numero} comme payée (${euros(montantDoc(d))}) ?`, { ok: "Payée 💶" }))) return;
-      const ok = await mettreStatut(d, action);
+      const ok = action === "payee" ? await enregistrerPaiement(d) : await mettreStatut(d, action);
       if (ok) {
         notifier({ accepte: "Devis accepté 🎉", refuse: "Devis marqué refusé", payee: "Facture payée 💶", envoye: "Marqué comme envoyé" }[action] ?? "Statut mis à jour");
         afficherListe();
@@ -3204,7 +3203,57 @@ async function afficherJournal() {
     return;
   }
   facturesJournal = data;
+  const pai = await sb.from("paiements").select("document_id, montant, date_paiement, mode").limit(10000);
+  paiementsJournal = pai.error ? null : pai.data;
   rendreJournal();
+  verifierIntegrite();
+}
+
+let paiementsJournal = null;
+async function verifierIntegrite() {
+  const zone = $("#integrite-journal");
+  const { data, error } = await sb.rpc("verifier_journal");
+  if (error) {
+    zone.innerHTML = "";
+    return;
+  }
+  zone.className = `integrite-journal ${data.ok ? "ok" : "alerte"}`;
+  zone.innerHTML = data.ok
+    ? `🔒 <b>Factures intègres</b> : ${data.nb} enregistrement${data.nb > 1 ? "s" : ""} scellé${data.nb > 1 ? "s" : ""} (émissions, avoirs, paiements), aucune modification détectée.
+       <button type="button" class="lien" id="exporter-archive">Télécharger l'archive scellée</button>`
+    : `⚠️ <b>Anomalie détectée</b> sur ${esc(data.numero || "un enregistrement")} : ${data.probleme === "facture_modifiee" ? "la facture ne correspond plus à celle émise" : "la chaîne du journal est rompue"}. Contacte le support Cagot.`;
+  const b = $("#exporter-archive");
+  if (b) b.onclick = exporterArchive;
+}
+
+async function exporterArchive() {
+  const [docs, journal, pai, verif] = await Promise.all([
+    sb.from("documents").select("id, type, numero, statut, date_document, devis_id, contenu, created_at, updated_at").eq("type", "facture").neq("statut", "brouillon").limit(10000),
+    sb.from("journal_factures").select("*").order("id").limit(100000),
+    sb.from("paiements").select("*").limit(100000),
+    sb.rpc("verifier_journal"),
+  ]);
+  if (docs.error || journal.error) return erreur("Archive impossible (connexion ?).");
+  const archive = {
+    logiciel: "Cagot",
+    version: VERSION_APPLI,
+    entreprise: { nom: profil.infos.nom, siret: profil.infos.siret, tva_intra: profil.infos.tva_intra },
+    genere_le: new Date().toISOString(),
+    verification: verif.data,
+    factures: docs.data,
+    paiements: pai.data ?? [],
+    journal: journal.data,
+  };
+  const texte = JSON.stringify(archive, null, 1);
+  const empreinte = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texte)))].map((o) => o.toString(16).padStart(2, "0")).join("");
+  const nom = `Archive_factures_${(profil.infos.nom || "Cagot").replace(/[^\p{L}\p{N}]+/gu, "_")}_${new Date().toISOString().slice(0, 10)}`;
+  for (const [contenu, ext, type] of [[texte, "json", "application/json"], [`SHA-256 (${nom}.json) = ${empreinte}\n`, "sha256.txt", "text/plain"]]) {
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([contenu], { type })), download: `${nom}.${ext}` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  notifier("Archive téléchargée : garde-la précieusement (10 ans).");
 }
 
 function rendreJournal() {
@@ -3226,13 +3275,18 @@ function rendreJournal() {
     .sort((a, b) => String(a.numero).localeCompare(String(b.numero)));
   const somme = (l, k) => l.reduce((t, f) => t + montantsFacture(f)[k], 0);
   const payees = liste.filter((f) => f.statut === "payee");
+  const encaisse = paiementsJournal
+    ? paiementsJournal.filter((p) => new Date(`${p.date_paiement}T12:00:00`) >= debut && new Date(`${p.date_paiement}T12:00:00`) < fin)
+    : null;
   const delai = Number(profil.infos.delai_paiement || 30);
   const impayes = facturesJournal.filter((f) => f.statut === "emise");
   const enRetard = impayes.filter((f) => joursDepuis(f.date_document) > delai);
   $("#resume-journal").innerHTML = [
     ["🧾 Facturé HT", euros(somme(liste, "ht")), `${liste.length} facture${liste.length > 1 ? "s" : ""} sur la période`],
     ["🏛️ TVA collectée", euros(somme(liste, "tva")), profil.infos.franchise_tva ? "Franchise (art. 293 B)" : "sur les factures de la période"],
-    ["🏦 Encaissé TTC", euros(somme(payees, "ttc")), `${payees.length} payée${payees.length > 1 ? "s" : ""} sur la période`],
+    encaisse
+      ? ["🏦 Encaissé TTC", euros(encaisse.reduce((t, p) => t + Number(p.montant), 0)), `${encaisse.length} paiement${encaisse.length > 1 ? "s" : ""} reçu${encaisse.length > 1 ? "s" : ""} sur la période`]
+      : ["🏦 Encaissé TTC", euros(somme(payees, "ttc")), `${payees.length} payée${payees.length > 1 ? "s" : ""} sur la période`],
     [`⚠️ Impayés (toutes périodes)`, euros(somme(impayes, "ttc")), `${impayes.length} facture${impayes.length > 1 ? "s" : ""}${enRetard.length ? ` · ${enRetard.length} en retard` : ""}`],
   ]
     .map(([t, v, d], i) => `<div class="tuile tuile-info ${i === 3 && enRetard.length ? "alerte" : ""}"><small>${t}</small><strong>${v}</strong><span>${esc(d)}</span></div>`)
@@ -3292,14 +3346,19 @@ async function noterEnvoi(d, destinataires, moyen) {
 
 async function afficherHistoriqueEnvois(d) {
   const zone = $("#historique-envois");
-  const { data, error } = await sb.from("envois_documents").select("destinataires, moyen, created_at").eq("document_id", d.id).order("created_at", { ascending: false }).limit(20);
+  const [envois, paiements] = await Promise.all([
+    sb.from("envois_documents").select("destinataires, moyen, created_at").eq("document_id", d.id).order("created_at", { ascending: false }).limit(20),
+    d.type === "facture" ? sb.from("paiements").select("montant, date_paiement, mode").eq("document_id", d.id).order("date_paiement") : { data: [] },
+  ]);
   if (docCourant?.id !== d.id) return;
-  if (error || !data?.length) {
+  const data = envois.error ? [] : envois.data ?? [];
+  const regles = paiements.error ? [] : paiements.data ?? [];
+  if (!data.length && !regles.length) {
     zone.hidden = true;
     return;
   }
   zone.hidden = false;
-  zone.innerHTML = `<strong>📨 Historique d'envoi</strong><ul>${data
+  zone.innerHTML = `${regles.length ? `<strong>💶 Paiements</strong><ul>${regles.map((p) => `<li>${euros(p.montant)} reçu le ${dateFr(p.date_paiement)} · ${esc(MODES_PAIEMENT[p.mode] ?? p.mode)}</li>`).join("")}</ul>` : ""}${data.length ? `<strong>📨 Historique d'envoi</strong>` : ""}<ul>${data
     .map((x) => {
       const quand = `${dateFr(x.created_at)} à ${heureFr(x.created_at)}`;
       const qui = x.destinataires.length ? esc(x.destinataires.join(", ")) : "";
@@ -3402,6 +3461,44 @@ $("#emettre").onclick = async () => {
   rendreDocument();
 };
 
+// Paiement d'une facture : date, mode et montant, enregistrés pour toujours (journal infalsifiable).
+const MODES_PAIEMENT = { virement: "Virement", cheque: "Chèque", especes: "Espèces", carte: "Carte bancaire", autre: "Autre" };
+function demanderPaiement(d) {
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    const aujourd = new Date();
+    const iso = `${aujourd.getFullYear()}-${String(aujourd.getMonth() + 1).padStart(2, "0")}-${String(aujourd.getDate()).padStart(2, "0")}`;
+    fond.innerHTML = `<form class="dialogue fiche-client"><h3>💶 Paiement de la facture ${esc(d.numero)}</h3>
+      <label>Montant reçu (€ TTC) <input name="montant" inputmode="decimal" required value="${nombre(montantDoc(d))}"></label>
+      <label>Date du paiement <input name="date" type="date" required value="${iso}" max="${iso}"></label>
+      <label>Mode de paiement <select name="mode">${Object.entries(MODES_PAIEMENT).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></label>
+      <p class="aide">Une fois enregistré, un paiement ne peut plus être modifié (obligation légale). En cas d'erreur, on fait un avoir.</p>
+      <div class="dialogue-actions"><button type="button" class="annuler">Annuler</button><button class="valider btn-principal">Enregistrer le paiement</button></div></form>`;
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.querySelector("form").onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target.elements;
+      const montant = lireNombre(f.montant.value);
+      if (!montant) return notifier("Montant invalide.", "erreur");
+      fermer({ montant, date_paiement: f.date.value, mode: f.mode.value });
+    };
+    document.body.appendChild(fond);
+  });
+}
+
+async function enregistrerPaiement(d) {
+  const p = await demanderPaiement(d);
+  if (!p) return null;
+  const { error } = await sb.from("paiements").insert({ document_id: d.id, ...p });
+  if (error && !/paiements/.test(error.message ?? "")) return erreur("Paiement non enregistré.", error);
+  return mettreStatut(d, "payee");
+}
+
 // Avoir : nouvelle facture (brouillon) aux montants négatifs, qui annule la facture émise.
 $("#faire-avoir").onclick = async () => {
   const f = docCourant;
@@ -3423,7 +3520,11 @@ $("#faire-avoir").onclick = async () => {
 };
 
 $("#payee").onclick = async () => {
-  if (await demander("Marquer cette facture comme payée ?", { ok: "Marquer payée" })) changerStatut("payee");
+  const data = await enregistrerPaiement(docCourant);
+  if (!data) return;
+  docCourant = data;
+  rendreDocument();
+  notifier("Paiement enregistré 💶");
 };
 
 $("#modifier-ia").onclick = async () => {
