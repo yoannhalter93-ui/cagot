@@ -697,12 +697,13 @@ body { zoom: var(--zoom, 1); }
 .barre-perso { position: sticky; top: calc(64px + env(safe-area-inset-top, 0px)); z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--jaune); color: var(--jaune-texte); border-radius: 12px; padding: 8px 10px 8px 14px; margin-bottom: 10px; font-weight: 600; font-size: .9rem; }
 .barre-perso[hidden], .ajout-cases[hidden], .perso-accueil[hidden] { display: none; }
 .barre-perso .btn-principal { padding: 8px 14px; border-radius: 10px; }
-.en-perso .case-accueil { border: 2px dashed var(--bleu); border-radius: 16px; padding: 30px 6px 6px; background: var(--bleu-clair); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; animation: tremble .5s ease-in-out infinite alternate; }
+.en-perso .case-accueil { border: 2px dashed var(--bleu); border-radius: 16px; padding: 38px 6px 6px; background: var(--bleu-clair); user-select: none; -webkit-user-select: none; animation: tremble .5s ease-in-out infinite alternate; }
+.case-accueil { -webkit-touch-callout: none; }
 .en-perso .case-accueil:nth-child(2n) { animation-delay: .25s; }
 .en-perso .contenu-case { pointer-events: none; }
 .outils-case { position: absolute; top: 3px; left: 6px; right: 4px; display: flex; align-items: center; gap: 4px; }
-.outils-case .poignee { flex: 1; color: var(--bleu); font-size: 1.1rem; line-height: 1; }
-.outils-case button { border: 1px solid var(--bord); background: var(--surface); color: var(--texte); border-radius: 8px; padding: 2px 7px; font-size: .75rem; cursor: pointer; }
+.outils-case .poignee { margin-right: auto; padding: 6px 12px; border-radius: 10px; background: var(--bleu); color: #fff; font-size: .82rem; font-weight: 700; line-height: 1; touch-action: none; cursor: grab; }
+.outils-case button { border: 1px solid var(--bord); background: var(--surface); color: var(--texte); border-radius: 8px; padding: 5px 10px; font-size: .85rem; cursor: pointer; }
 .case-accueil.en-glisse { opacity: .35; animation: none; }
 .case-accueil.fantome { position: fixed; z-index: 60; pointer-events: none; opacity: .95; animation: none; box-shadow: 0 14px 30px rgba(0,0,0,.25); transform: rotate(1.5deg) scale(1.03); border: 2px dashed var(--bleu); border-radius: 16px; padding: 30px 6px 6px; background: var(--bleu-clair); list-style: none; }
 @keyframes tremble { from { transform: rotate(-.4deg); } to { transform: rotate(.4deg); } }
@@ -977,3 +978,15 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .detail-jour .petit-titre { margin: 6px 2px 2px; }
 .detail-jour .rdv-agenda { margin: 3px 0; padding: 6px 10px; }
 .detail-jour .aide { margin: 2px; }
+
+/* Fenêtre de réglages d'une case (appui long) */
+.reglages-case h3 { margin: 0 0 4px; }
+.choix-case { display: flex; gap: 6px; flex-wrap: wrap; }
+.choix-case.colonne { flex-direction: column; }
+.choix-case button { flex: 1; padding: 10px 12px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); color: var(--texte); font: inherit; font-size: .9rem; text-align: left; cursor: pointer; }
+.choix-case button.choisi { border-color: var(--bleu); background: color-mix(in srgb, var(--bleu) 10%, var(--surface)); font-weight: 700; }
+.choix-case button:disabled { opacity: .4; cursor: default; }
+.reglages-case .dialogue-actions { margin-top: 14px; justify-content: space-between; }
+.lien.danger { color: var(--rouge); }
+.reglages-case .bouton-retirer { background: none; border: 0; color: var(--rouge); font: inherit; font-weight: 600; padding: 8px 4px; cursor: pointer; box-shadow: none; }
+.compagnon.cache-perso { display: none !important; }

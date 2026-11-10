@@ -44,6 +44,23 @@ export const BLOCS_ACCUEIL = {
   retards: { nom: "Factures en retard", icone: "⚠️", taille: "large" },
 };
 
+// Façons d'afficher certaines cases (appui long sur la case → « Affichage »). La première est celle par défaut.
+export const AFFICHAGES_CASE = {
+  planning: [
+    { id: "liste", nom: "Aujourd'hui et la suite" },
+    { id: "bande", nom: "Bande de la semaine (compacte)" },
+    { id: "semaine", nom: "Semaine jour par jour" },
+  ],
+  "a-faire": [
+    { id: "4", nom: "4 tâches" },
+    { id: "8", nom: "8 tâches" },
+  ],
+  chantiers: [
+    { id: "3", nom: "3 chantiers" },
+    { id: "6", nom: "6 chantiers" },
+  ],
+};
+
 export const TAILLES = { normale: 1, grande: 1.12, "tres-grande": 1.25 };
 
 export const INTERFACE_DEFAUT = {
@@ -101,6 +118,7 @@ export function interfaceValide(i) {
       id: b.id,
       visible: vientDuDefaut && blocs.length ? false : b.visible !== false,
       taille: ["petit", "large"].includes(b.taille) ? b.taille : BLOCS_ACCUEIL[b.id].taille,
+      ...(AFFICHAGES_CASE[b.id]?.some((x) => x.id === b.affichage) ? { affichage: b.affichage } : {}),
     });
   }
   return v;

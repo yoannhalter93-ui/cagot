@@ -5,7 +5,7 @@ import { genererPdf, pdfAttestation, pdfFacturX, preparerPolices } from "/pdf-de
 import { xmlFacturX } from "/facturx.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
 import { NATURES, autoliquidation, estParticulier, mentionsTvaReduite, ventilationTva, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
-import { BLOCS_ACCUEIL, INTERFACE_DEFAUT, RACCOURCIS, THEMES, appliquerInterface, interfaceValide } from "/interface.js";
+import { AFFICHAGES_CASE, BLOCS_ACCUEIL, INTERFACE_DEFAUT, RACCOURCIS, THEMES, appliquerInterface, interfaceValide } from "/interface.js";
 import { CHAMPS_IMPORT, construireClients, construireFactures, detecterColonnes, devinerSorte, lireFichierImport, trouverEntete } from "/import.js";
 import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Semaine compacte";
+const VERSION_APPLI = "11 nov. 2026 · Cases réglables";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -477,7 +477,7 @@ async function afficherAccueil() {
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     .filter((c) => !c.document_id || (!vus.has(c.document_id) && vus.add(c.document_id)))
     .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-    .slice(0, 4);
+    .slice(0, 6);
   donneesAccueil = { docs: docs.data ?? [], chantiers: uniques, erreurChantiers: !!chantiers.error, rdv: (rdvAccueil.data ?? []).map((x) => ({ ...x, debut: new Date(x.debut), fin: new Date(x.fin) })) };
   rendreAccueil();
 }
@@ -493,7 +493,7 @@ function pastilleChantier(ch, docs) {
   return `<span class="pastille ${classe}">${texte}</span>`;
 }
 
-function htmlCase(id, taille = "large") {
+function htmlCase(id, taille = "large", affichage = AFFICHAGES_CASE[id]?.[0]?.id) {
   const { docs, chantiers, erreurChantiers } = donneesAccueil;
   const { tuiles, par } = indicateurs(docs);
   if (tuiles[id]) return htmlTuile(id, tuiles[id]);
@@ -503,9 +503,9 @@ function htmlCase(id, taille = "large") {
       <span><strong>${esc(d.contenu.client_nom || d.contenu.titre || "Sans titre")}</strong><small>${esc(d.numero || "")} · ${info}</small></span><span class="montant">${euros(montantDoc(d))}</span></button>`;
   switch (id) {
     case "planning":
-      return taille === "large" ? htmlSemaine() : htmlPlanning();
+      return affichage === "bande" ? htmlSemaine() : affichage === "semaine" ? htmlSemaineLignes() : htmlPlanning();
     case "a-faire":
-      return htmlAFaire(docs);
+      return htmlAFaire(docs, Number(affichage) || 4);
     case "mon-activite": {
       if (!docs.length) return "";
       const { tuiles: t } = indicateurs(docs);
@@ -573,7 +573,7 @@ function htmlCase(id, taille = "large") {
         ${
           chantiers.length
             ? chantiers
-                .slice(0, 3)
+                .slice(0, Number(affichage) || 3)
                 .map(
                   (ch) => `<button type="button" class="carte-chantier" data-ouvrir-chantier="${esc(ch.id)}">
             <span class="icone-chantier">🏗️</span><span><strong>${esc(ch.titre || "Chantier sans titre")}</strong><small>${ilYa(ch.updated_at)}</small></span>
@@ -645,8 +645,34 @@ function htmlSemaine() {
     }</div>`;
 }
 
+// Planning « semaine jour par jour » : une ligne par jour avec ses chantiers et RDV.
+function htmlSemaineLignes() {
+  const auj = jourSeul(new Date());
+  const rdv = donneesAccueil.rdv ?? [];
+  const jours = Array.from({ length: 7 }, (_, i) => ajouterJoursDate(auj, i));
+  const duJour = (j) => {
+    const lendemain = ajouterJoursDate(j, 1);
+    return rdv.filter((x) => (x.journee ? x.debut < lendemain && x.fin > j : (x.debut >= j && x.debut < lendemain) || (j.getTime() === auj.getTime() && x.debut < j && x.fin > new Date())));
+  };
+  if (!jours.some((j) => duJour(j).length)) return "";
+  const puce = (x) => {
+    const t = typesRdv()[x.type] ?? typesRdv().rdv;
+    return `<button type="button" class="puce-rdv type-${esc(x.type)}" data-rdv="${esc(x.id)}">${x.journee ? "" : `<b>${esc(heure(x.debut))}</b> `}${t.icone} ${esc(x.titre)}</button>`;
+  };
+  return `<div class="titre-section ligne-titre"><h3>🗓️ Ma semaine</h3><button type="button" class="lien" data-vue="agenda">Agenda ›</button></div>
+    <div class="semaine-accueil">${jours
+      .map((j, i) => {
+        const liste = duJour(j);
+        const nom = i === 0 ? "Auj." : i === 1 ? "Demain" : j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
+        return `<div class="jour-semaine ${i === 0 ? "aujourdhui" : ""} ${liste.length ? "" : "libre"}">
+          <span class="nom-jour-semaine">${esc(nom[0].toUpperCase() + nom.slice(1))}<small>${j.getDate()}</small></span>
+          <span class="puces-jour">${liste.length ? liste.map(puce).join("") : `<em>libre</em>`}</span></div>`;
+      })
+      .join("")}</div>`;
+}
+
 // À faire : ce qui demande l'attention de l'artisan, le plus urgent d'abord (argent en jeu, puis clients qui attendent).
-function htmlAFaire(docs) {
+function htmlAFaire(docs, nombre = 4) {
   if (!docs.length) return "";
   const { par, factureDe } = indicateurs(docs);
   const delai = Number(profil.infos.delai_paiement || 30);
@@ -665,9 +691,9 @@ function htmlAFaire(docs) {
       .map((d) => ({ d, icone: "📤", texte: `Envoyer le devis de ${qui(d)}`, detail: "prêt, pas encore envoyé" })),
   ];
   if (!taches.length) return `<p class="rien-a-faire">✅ Rien d'urgent. Bonne journée sur le chantier !</p>`;
-  return `<div class="titre-section ligne-titre"><h3>👉 À faire <span class="compteur">${taches.length}</span></h3>${taches.length > 4 ? `<button type="button" class="lien" data-vue="chantiers">Tout voir ›</button>` : ""}</div>
+  return `<div class="titre-section ligne-titre"><h3>👉 À faire <span class="compteur">${taches.length}</span></h3>${taches.length > nombre ? `<button type="button" class="lien" data-vue="chantiers">Tout voir ›</button>` : ""}</div>
     ${taches
-      .slice(0, 4)
+      .slice(0, nombre)
       .map(
         (t) => `<button type="button" class="carte-chantier tache" data-ouvrir-doc="${esc(t.d.id)}"><span class="icone-chantier">${t.icone}</span>
         <span><strong>${esc(t.texte)}</strong><small>${esc(t.detail)}</small></span><span class="montant">${euros(montantDoc(t.d))}</span></button>`,
@@ -679,12 +705,13 @@ function rendreAccueil() {
   const grille = $("#blocs-accueil");
   const cases = reglagesInterface.accueil.filter((b) => b.visible);
   grille.classList.toggle("en-perso", persoAccueil);
+  $("#compagnon").classList.toggle("cache-perso", persoAccueil); // l'escargot ne gêne pas pendant le rangement
   grille.innerHTML = cases
     .map((b) => {
-      const contenu = htmlCase(b.id, b.taille);
+      const contenu = htmlCase(b.id, b.taille, b.affichage ?? AFFICHAGES_CASE[b.id]?.[0]?.id);
       if (!contenu && !persoAccueil) return ""; // accueil intelligent : rien à montrer, pas de place perdue
       return `<div class="case-accueil ${b.taille}" data-case="${b.id}">
-        ${persoAccueil ? `<div class="outils-case"><span class="poignee" aria-hidden="true">⠿</span><button type="button" data-taille-case="${b.id}" aria-label="Changer la taille">${b.taille === "large" ? "↙︎ Petite" : "↗︎ Grande"}</button><button type="button" data-masquer-case="${b.id}" aria-label="Retirer">✕</button></div>` : ""}
+        ${persoAccueil ? `<div class="outils-case"><span class="poignee" title="Glisser pour déplacer">⠿ Déplacer</span><button type="button" data-reglages-case="${b.id}" aria-label="Réglages de la case">⚙︎</button><button type="button" data-masquer-case="${b.id}" aria-label="Retirer">✕</button></div>` : ""}
         <div class="contenu-case">${contenu || `<p class="aide">${BLOCS_ACCUEIL[b.id].icone} ${esc(BLOCS_ACCUEIL[b.id].nom)} : s'affiche seulement quand il y a quelque chose.</p>`}</div></div>`;
     })
     .join("");
@@ -751,6 +778,8 @@ $("#vue-accueil").addEventListener("click", (ev) => {
   const t = ev.target.closest("[data-taille-case]");
   const m = ev.target.closest("[data-masquer-case]");
   const a = ev.target.closest("[data-ajouter-case]");
+  const g = ev.target.closest("[data-reglages-case]");
+  if (g) return reglagesCase(g.dataset.reglagesCase);
   if (t) modifierCases((l) => {
     const b = l.find((x) => x.id === t.dataset.tailleCase);
     b.taille = b.taille === "large" ? "petit" : "large";
@@ -770,7 +799,8 @@ $("#vue-accueil").addEventListener("click", (ev) => {
   const grille = $("#blocs-accueil");
   let glisse = null;
   grille.addEventListener("pointerdown", (ev) => {
-    if (!persoAccueil || ev.target.closest("button")) return;
+    // Seule la poignée « ⠿ Déplacer » (en haut à gauche) déplace la case : toucher ailleurs fait défiler l'écran normalement.
+    if (!persoAccueil || !ev.target.closest(".poignee")) return;
     const c = ev.target.closest(".case-accueil");
     if (!c) return;
     ev.preventDefault();
@@ -813,6 +843,112 @@ $("#vue-accueil").addEventListener("click", (ev) => {
   grille.addEventListener("pointerup", finir);
   grille.addEventListener("pointercancel", finir);
 })();
+
+// Appui long sur une case de l'accueil : petite fenêtre de réglages de cette case.
+(() => {
+  const grille = $("#blocs-accueil");
+  let appui = null;
+  let bloquerClic = false;
+  grille.addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest(".poignee, .outils-case")) return;
+    const c = ev.target.closest(".case-accueil");
+    if (!c) return;
+    const a = { x: ev.clientX, y: ev.clientY };
+    a.minuteur = setTimeout(() => {
+      appui = null;
+      bloquerClic = true;
+      setTimeout(() => (bloquerClic = false), 700);
+      navigator.vibrate?.(15);
+      reglagesCase(c.dataset.case);
+    }, 550);
+    appui = a;
+  });
+  const annuler = () => {
+    if (appui) clearTimeout(appui.minuteur);
+    appui = null;
+  };
+  grille.addEventListener("pointermove", (ev) => {
+    if (appui && Math.hypot(ev.clientX - appui.x, ev.clientY - appui.y) > 10) annuler();
+  });
+  grille.addEventListener("pointerup", annuler);
+  grille.addEventListener("pointercancel", annuler);
+  grille.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  // Le doigt levé après l'appui long ne doit pas aussi ouvrir ce qu'il y a sous lui.
+  grille.addEventListener(
+    "click",
+    (ev) => {
+      if (!bloquerClic) return;
+      bloquerClic = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    },
+    true,
+  );
+})();
+
+function reglagesCase(id) {
+  const info = BLOCS_ACCUEIL[id];
+  const bloc = reglagesInterface.accueil.find((x) => x.id === id);
+  if (!info || !bloc) return;
+  const affichages = AFFICHAGES_CASE[id] ?? [];
+  const actuel = bloc.affichage ?? affichages[0]?.id;
+  const visibles = reglagesInterface.accueil.filter((x) => x.visible);
+  const rang = visibles.findIndex((x) => x.id === id);
+  const fond = document.createElement("div");
+  fond.className = "dialogue-fond";
+  fond.innerHTML = `<div class="dialogue reglages-case" role="dialog" aria-label="Réglages de la case">
+      <h3>${info.icone} ${esc(info.nom)}</h3>
+      <p class="petit-titre">Taille</p>
+      <div class="choix-case">
+        <button type="button" data-rc="taille:petit" class="${bloc.taille === "petit" ? "choisi" : ""}">Petite (demi-largeur)</button>
+        <button type="button" data-rc="taille:large" class="${bloc.taille === "large" ? "choisi" : ""}">Grande (toute la largeur)</button>
+      </div>
+      ${
+        affichages.length
+          ? `<p class="petit-titre">Affichage</p><div class="choix-case colonne">${affichages
+              .map((x) => `<button type="button" data-rc="affichage:${esc(x.id)}" class="${x.id === actuel ? "choisi" : ""}">${x.id === actuel ? "✓ " : ""}${esc(x.nom)}</button>`)
+              .join("")}</div>`
+          : ""
+      }
+      <p class="petit-titre">Place</p>
+      <div class="choix-case">
+        <button type="button" data-rc="monter" ${rang <= 0 ? "disabled" : ""}>↑ Monter</button>
+        <button type="button" data-rc="descendre" ${rang < 0 || rang >= visibles.length - 1 ? "disabled" : ""}>↓ Descendre</button>
+      </div>
+      <div class="dialogue-actions">
+        <button type="button" data-rc="retirer" class="bouton-retirer">🗑 Retirer de l'accueil</button>
+        <button type="button" data-rc="fermer" class="btn-principal">OK</button>
+      </div>
+    </div>`;
+  const fermer = () => fond.remove();
+  fond.addEventListener("click", (ev) => {
+    if (ev.target === fond) return fermer();
+    const b = ev.target.closest("[data-rc]");
+    if (!b) return;
+    const [action, valeur] = b.dataset.rc.split(":");
+    if (action === "fermer") return fermer();
+    modifierCases((l) => {
+      const x = l.find((y) => y.id === id);
+      if (action === "taille") x.taille = valeur;
+      if (action === "affichage") x.affichage = valeur;
+      if (action === "retirer") x.visible = false;
+      if (action === "monter" || action === "descendre") {
+        const vis = l.filter((y) => y.visible);
+        const i = vis.indexOf(x);
+        const autre = vis[action === "monter" ? i - 1 : i + 1];
+        if (autre) {
+          const ia = l.indexOf(x);
+          const ib = l.indexOf(autre);
+          [l[ia], l[ib]] = [l[ib], l[ia]];
+        }
+      }
+    });
+    fermer();
+    if (action === "retirer") notifier(`Case retirée. Tu peux la remettre avec « ✏️ Personnaliser mon accueil ».`);
+    else if (["monter", "descendre", "taille"].includes(action)) reglagesCase(id); // on peut enchaîner les réglages
+  });
+  document.body.appendChild(fond);
+}
 
 // Facture sans devis : un brouillon vierge à compléter.
 async function nouvelleFactureVierge() {
