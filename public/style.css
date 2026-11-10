@@ -791,3 +791,7 @@ body { zoom: var(--zoom, 1); }
 #champ-cgu[hidden] { display: none !important; }
 .client-note { margin: 4px 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--fond-doux, #eef3f8); color: var(--texte); font-size: .92rem; }
 .client-note[hidden] { display: none !important; }
+/* Zone de saisie de la discussion : le texte sur toute la largeur, les boutons en dessous */
+.saisie { flex-wrap: wrap; align-items: center; }
+.saisie textarea { order: -1; flex: 1 1 100%; min-height: 64px; max-height: 40vh; resize: none; line-height: 1.4; overflow-y: auto; }
+.saisie #envoyer { margin-left: auto; min-height: 44px; padding: 10px 22px; }

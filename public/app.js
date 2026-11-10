@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Client lié au chantier";
+const VERSION_APPLI = "10 nov. 2026 · Grande zone de saisie";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -876,6 +876,16 @@ const Reconnaissance = window.SpeechRecognition || window.webkitSpeechRecognitio
 let reco = null;
 let texteAvantDictee = "";
 
+// La zone de saisie grandit avec le texte (jusqu'à 40 % de l'écran).
+function ajusterSaisie() {
+  const t = $("#texte");
+  t.style.height = "auto";
+  t.style.height = `${Math.min(t.scrollHeight + 2, Math.round(innerHeight * 0.4))}px`;
+}
+$("#texte").addEventListener("input", ajusterSaisie);
+$("#texte").addEventListener("focus", ajusterSaisie);
+for (const ev of ["change", "keyup"]) $("#texte").addEventListener(ev, ajusterSaisie);
+
 function demarrerDictee({ envoiAuto = false, cible = $("#texte"), bouton = $("#micro"), apresTexte } = {}) {
   if (!Reconnaissance) {
     notifier("La dictée n'est pas disponible ici : utilise le micro de ton clavier.");
@@ -896,6 +906,7 @@ function demarrerDictee({ envoiAuto = false, cible = $("#texte"), bouton = $("#m
       else provisoire += e.results[i][0].transcript;
     }
     cible.value = texteAvantDictee + final + provisoire;
+    if (cible.id === "texte") ajusterSaisie();
     apresTexte?.();
   };
   reco.onerror = (e) => {
@@ -1281,6 +1292,7 @@ function carteMetre(m) {
         .join("\n");
     zone.querySelector("[data-utiliser]").onclick = () => {
       $("#texte").value = `${texte()}\n\nTravaux à chiffrer : `;
+      ajusterSaisie();
       $("#texte").focus();
       $("#texte").setSelectionRange($("#texte").value.length, $("#texte").value.length);
       notifier("Écris maintenant les travaux pièce par pièce, puis Envoyer.");
@@ -1351,6 +1363,7 @@ function carteQuestions(m) {
     const libre = $("#texte").value.trim();
     zone.remove();
     $("#texte").value = libre ? `${texte}\n\n${libre}` : texte;
+    ajusterSaisie();
     envoyer();
   };
   $("#fil").appendChild(zone);
@@ -1377,6 +1390,7 @@ async function envoyer() {
   conversation.historique.push(message);
   bulle("moi", esc(texte) + photosEnAttente.map((i) => `<img src="${i}" alt="note">`).join(""));
   $("#texte").value = "";
+  ajusterSaisie();
   photosEnAttente = [];
   afficherPhotosEnAttente();
   $("#envoyer").disabled = true;
@@ -1415,6 +1429,7 @@ async function envoyer() {
     if (conversation.historique.at(-1) === message) {
       conversation.historique.pop(); // on laisse l'artisan renvoyer le même message
       $("#texte").value = texte;
+      ajusterSaisie();
     }
     bulle("erreur", esc(err.message));
   } finally {
@@ -1675,6 +1690,7 @@ $("#envoyer-note").onclick = async () => {
   const rappel = lie && !normaliser(contenu).includes(normaliser(lie.nom)) ? `Client : ${lie.nom}` : "";
   const debut = [rappel && normaliser(note.titre) === normaliser(lie.nom) ? "" : note.titre, rappel].filter(Boolean).join("\n");
   $("#texte").value = [debut, contenu].filter(Boolean).join("\n\n");
+  ajusterSaisie();
   envoyer();
 };
 
