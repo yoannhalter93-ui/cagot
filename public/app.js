@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Assistant d'aide";
+const VERSION_APPLI = "11 nov. 2026 · Factures d'acompte";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2045,7 +2045,7 @@ async function etatsChantiers(chantiers) {
     ? await sb.from("documents").select("id, type, statut, numero, contenu, devis_id, updated_at, created_at, date_document").limit(1000)
     : { data: [] };
   const parId = new Map((docs ?? []).map((d) => [d.id, d]));
-  const factureDe = new Map((docs ?? []).filter((d) => d.type === "facture" && d.devis_id).map((f) => [f.devis_id, f]));
+  const factureDe = new Map((docs ?? []).filter(estFactureFinale).map((f) => [f.devis_id, f]));
   return (c) => {
     const devis = parId.get(c.document_id) ?? null;
     const facture = devis ? factureDe.get(devis.id) ?? null : null;
@@ -2359,9 +2359,11 @@ async function ouvrirFiche(id) {
     ch.document_id ? sb.from("documents").select("*").eq("id", ch.document_id).maybeSingle().then((r) => r.data) : null,
   ]);
   let facture = null;
+  let acomptes = [];
   if (devis) {
-    const { data: f } = await sb.from("documents").select("*").eq("devis_id", devis.id).eq("type", "facture").limit(1);
-    facture = f?.[0] ?? null;
+    const { data: f } = await sb.from("documents").select("*").eq("devis_id", devis.id).eq("type", "facture").limit(50);
+    facture = (f ?? []).find(estFactureFinale) ?? null;
+    acomptes = (f ?? []).filter((x) => x.contenu?.acompte);
   }
   // Lien de signature : ouvert ? signé ? (pour dire clairement où en est le client)
   let partage = null;
@@ -2369,7 +2371,7 @@ async function ouvrirFiche(id) {
     const { data: p } = await sb.from("partages_devis").select("consulte_at, signe_at, signataire_nom, created_at").eq("document_id", devis.id).order("created_at", { ascending: false }).limit(5);
     partage = { ouvert: (p ?? []).map((x) => x.consulte_at).filter(Boolean).sort()[0] ?? null, signe: (p ?? []).find((x) => x.signe_at) ?? null, existe: !!p?.length };
   }
-  ficheDonnees = { ch, note, devis, facture, partage };
+  ficheDonnees = { ch, note, devis, facture, partage, acomptes };
   afficherVue("fiche");
   ficheCourante = ch.id;
   rendreFiche();
@@ -2378,7 +2380,7 @@ async function ouvrirFiche(id) {
 }
 
 function rendreFiche() {
-  const { ch, note, devis, facture, partage } = ficheDonnees;
+  const { ch, note, devis, facture, partage, acomptes = [] } = ficheDonnees;
   $("#titre-fiche").textContent = ch.titre || "Chantier sans titre";
   $("#client-fiche").textContent = devis?.contenu.client_nom || "";
   $("#vue-fiche .menu-plus").open = false;
@@ -2417,10 +2419,14 @@ function rendreFiche() {
     },
     {
       n: 4, titre: "Facture", etat: etat(paye, accepte && !paye),
-      detail: facture ? `${esc(facture.numero || "brouillon")} · ${LIBELLES_STATUT[facture.statut]} · <strong>${euros(montantDoc(facture))}</strong>` : accepte ? "Devis accepté : tu peux facturer." : "Une fois le devis accepté.",
-      actions: facture
-        ? bouton("facture", facture.statut === "brouillon" ? "Vérifier et émettre" : "Voir la facture", facture.statut === "brouillon") + (facture.statut === "emise" ? bouton("payee", "💶 Payée", true) : "")
-        : accepte ? bouton("facturer", "🧾 Créer la facture", true) : "",
+      detail: `${acomptes.map((a) => `💰 Acompte ${esc(a.numero || "brouillon")} · ${LIBELLES_STATUT[a.statut]} · ${euros(montantDoc(a))}<br>`).join("")}${
+        facture ? `${esc(facture.numero || "brouillon")} · ${LIBELLES_STATUT[facture.statut]} · <strong>${euros(montantDoc(facture))}</strong>` : accepte ? "Devis accepté : tu peux facturer (acompte ou facture finale)." : "Une fois le devis accepté."
+      }`,
+      actions:
+        acomptes.map((a) => bouton(`voir-${a.id}`, `💰 Voir l'acompte ${a.numero || "(brouillon)"}`)).join("") +
+        (facture
+          ? bouton("facture", facture.statut === "brouillon" ? "Vérifier et émettre" : "Voir la facture", facture.statut === "brouillon") + (facture.statut === "emise" ? bouton("payee", "💶 Payée", true) : "")
+          : accepte ? bouton("facturer", acomptes.length ? "🧾 Facture finale (acomptes déduits)" : "🧾 Créer la facture", true) + bouton("acompte", "💰 Facture d'acompte") : ""),
     },
   ];
   $("#etapes-fiche").innerHTML = etapes
@@ -2474,6 +2480,8 @@ async function actionFiche(a) {
     await ouvrirDocument(devis.id);
     return $("#en-facture").click();
   }
+  if (a === "acompte") return creerFactureAcompte(devis);
+  if (a.startsWith("voir-")) return ouvrirDocument(a.slice(5));
   if (a === "payee") {
     if (!(await demander(`Marquer ${facture.numero} comme payée (${euros(montantDoc(facture))}) ?`, { ok: "Payée 💶" }))) return;
     if (await mettreStatut(facture, "payee")) notifier("Facture payée 💶");
@@ -2827,7 +2835,11 @@ async function choisirClient() {
 // ---------------------------------------------------------------------------
 // Liste des documents
 // ---------------------------------------------------------------------------
-const nomDoc = (d) => (d.type === "devis" ? "Devis" : d.contenu?.avoir ? "Avoir" : "Facture");
+const nomDoc = (d) => (d.type === "devis" ? "Devis" : d.contenu?.avoir ? "Avoir" : d.contenu?.acompte ? "Facture d'acompte" : "Facture");
+// Facture « finale » d'un devis (ni facture d'acompte, ni avoir).
+function estFactureFinale(d) {
+  return d.type === "facture" && !!d.devis_id && !d.contenu?.acompte && !d.contenu?.avoir;
+}
 const LIBELLES_STATUT = {
   brouillon: "brouillon",
   envoye: "envoyé",
@@ -2860,7 +2872,7 @@ const FILTRES_DOCS = [
 
 // Les 4 indicateurs d'activité (accueil, Devis, Factures).
 function indicateurs(docs) {
-  const factureDe = new Map(docs.filter((d) => d.type === "facture" && d.devis_id).map((f) => [f.devis_id, f]));
+  const factureDe = new Map(docs.filter(estFactureFinale).map((f) => [f.devis_id, f]));
   const somme = (liste) => liste.reduce((t, d) => t + montantDoc(d), 0);
   const par = Object.fromEntries(FILTRES_DOCS.map((f) => [f.id, docs.filter(f.test)]));
   const relances = par.envoye.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7).length;
@@ -3118,7 +3130,9 @@ function elementsDocument(d, e = profil.infos) {
     : facture
     ? [
         d.statut !== "brouillon" ? `Date d'échéance : ${dateFr(ajouterJours(d.date_document, e.delai_paiement || 30))}.` : "",
-        v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
+        v.acompte
+          ? `Facture d'acompte de ${nombre(v.acompte.pourcentage)} % sur le devis n° ${v.acompte.devis_numero}${v.acompte.devis_ttc ? ` (montant total ${euros(v.acompte.devis_ttc)}${franchise ? "" : " TTC"})` : ""}. Le solde sera facturé à la fin des travaux, déduction faite des acomptes versés.`
+          : v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
         "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
         e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
       ]
@@ -3136,7 +3150,7 @@ function elementsDocument(d, e = profil.infos) {
   const conditions = conditionsDe(e, d.type);
   if (conditions) mentions.push(conditions);
 
-  const nom = avoir ? "AVOIR" : "FACTURE";
+  const nom = avoir ? "AVOIR" : v.acompte ? "FACTURE D'ACOMPTE" : "FACTURE";
   const titre = facture ? (d.numero ? `${nom} n° ${d.numero}` : `${nom} (brouillon, non numéroté${avoir ? "" : "e"})`) : `DEVIS n° ${d.numero}`;
   return { franchise, tauxTva, tva, ttc, mentions: mentions.filter(Boolean), titre };
 }
@@ -3156,6 +3170,7 @@ function rendreDocument() {
   $("#emettre").hidden = !(facture && d.statut === "brouillon");
   $("#payee").hidden = !(facture && d.statut === "emise");
   $("#faire-avoir").hidden = !(facture && !v.avoir && d.statut !== "brouillon");
+  $("#facture-acompte").hidden = !(d.type === "devis" && d.statut === "accepte");
   $("#supprimer").hidden = verrouille;
   $(".menu-plus").open = false;
   $("#numero-document").textContent = `${nomDoc(d)} ${d.numero || "brouillon"}`;
@@ -3213,7 +3228,7 @@ function rendreDocument() {
   const hyp = [...(v.hypotheses ?? [])];
   if (estimes && !verrouille) hyp.unshift(`${estimes} prix estimé(s) par l'IA (surlignés en jaune) : vérifie-les et ajoute-les à ta grille.`);
   if (estParticulier(v) && !e.mediateur?.trim()) hyp.push("Médiateur de la consommation non renseigné (Réglages → Entreprise) : obligatoire quand le client est un particulier.");
-  if (facture && !v.avoir && !v.date_travaux?.trim()) hyp.push("Indique la date (ou la période) des travaux réalisés, en bas de la facture.");
+  if (facture && !v.avoir && !v.acompte && !v.date_travaux?.trim()) hyp.push("Indique la date (ou la période) des travaux réalisés, en bas de la facture.");
   if (!estParticulier(v) && !v.client_siren?.trim()) hyp.push("Client professionnel : ajoute son SIREN dans le cadre « Client » (obligatoire pour la facture électronique).");
   if (facture && !e.siret?.trim()) hyp.push("Renseigne ton SIRET (Réglages → Entreprise) : indispensable pour la facture électronique.");
   if (facture && !e.franchise_tva && !e.tva_intra?.trim()) hyp.push("Renseigne ton n° de TVA intracommunautaire (Réglages → Entreprise) : obligatoire sur les factures avec TVA.");
@@ -3321,7 +3336,7 @@ function rendreDocument() {
         ? ""
         : `<p>Date de début prévue des travaux : <span ${editable} data-champ="date_debut" class="champ-duree">${esc(v.date_debut) || "<em>à préciser (ex. 15 janvier 2027)</em>"}</span>.</p>`
     }${
-      !facture || v.avoir || (verrouille && !v.date_travaux)
+      !facture || v.avoir || v.acompte || (verrouille && !v.date_travaux)
         ? ""
         : `<p>Date d'exécution des travaux : <span ${editable} data-champ="date_travaux" class="champ-duree">${esc(v.date_travaux) || "<em>à préciser (ex. du 3 au 7 novembre 2026)</em>"}</span>.</p>`
     }${mentions
@@ -4692,7 +4707,34 @@ for (const b of document.querySelectorAll(".menu-plus-liste button")) b.addEvent
 $("#en-facture").onclick = async () => {
   if (!(await demander("Créer une facture (brouillon) à partir de ce devis ?", { ok: "Créer la facture" }))) return;
   const { suivi, signature_client, hors_etablissement, date_debut, ...base } = structuredClone(docCourant.contenu);
-  const contenu = { ...base, hypotheses: [], devis_numero: docCourant.numero };
+  let contenu = { ...base, hypotheses: [], devis_numero: docCourant.numero };
+  // Acomptes déjà facturés (émis) : déduits taux par taux de la facture finale.
+  const { data: liees } = await sb.from("documents").select("id, numero, statut, date_document, contenu").eq("devis_id", docCourant.id).eq("type", "facture").limit(50);
+  const acomptesEmis = (liees ?? []).filter((f) => f.contenu?.acompte && ["emise", "payee"].includes(f.statut));
+  if ((liees ?? []).some((f) => f.contenu?.acompte && f.statut === "brouillon")) notifier("Une facture d'acompte est encore en brouillon : elle n'est pas déduite. Émets-la d'abord si elle doit l'être.", "erreur");
+  if (acomptesEmis.length) {
+    contenu.sections = [
+      ...(contenu.sections ?? []),
+      {
+        titre: "Acomptes déjà facturés",
+        lignes: acomptesEmis.flatMap((f) =>
+          (f.contenu.sections ?? []).flatMap((sec) => sec.lignes ?? []).map((l) => ({
+            designation: `Déduction de l'acompte – facture n° ${f.numero} du ${dateFr(f.date_document)}`,
+            detail: "",
+            quantite: -1, // prix positif, quantité négative : la norme Factur-X refuse un prix unitaire négatif
+            unite: "forfait",
+            prix_unitaire_ht: Math.abs(Number(l.prix_unitaire_ht) * Number(l.quantite || 1)),
+            prix_source: "artisan",
+            calcul: "",
+            ...(l.taux_tva !== undefined && l.taux_tva !== null && l.taux_tva !== "" ? { taux_tva: l.taux_tva } : {}),
+            deduction_acompte: f.id,
+          })),
+        ),
+      },
+    ];
+    contenu.acomptes_deduits = acomptesEmis.map((f) => ({ id: f.id, numero: f.numero, date: f.date_document, ttc: f.contenu.total_ttc }));
+    contenu = calculerTotaux(contenu);
+  }
   const { data, error } = await sb
     .from("documents")
     .insert({ type: "facture", devis_id: docCourant.id, contenu })
@@ -4704,7 +4746,7 @@ $("#en-facture").onclick = async () => {
 };
 
 $("#emettre").onclick = async () => {
-  if (!docCourant.contenu.avoir && !docCourant.contenu.date_travaux?.trim()) {
+  if (!docCourant.contenu.avoir && !docCourant.contenu.acompte && !docCourant.contenu.date_travaux?.trim()) {
     const quand = await demanderTexte("Date (ou période) des travaux réalisés — obligatoire sur la facture", "Ex. : du 3 au 7 novembre 2026", dateFr(new Date().toISOString()));
     if (!quand) return;
     await majDocument((dv) => (dv.date_travaux = quand));
@@ -4755,6 +4797,60 @@ async function enregistrerPaiement(d) {
 }
 
 // Avoir : nouvelle facture (brouillon) aux montants négatifs, qui annule la facture émise.
+// Facture d'acompte sur un devis accepté : un pourcentage (ou un montant) du devis, taux de TVA par taux.
+async function creerFactureAcompte(devis) {
+  const c = devis.contenu;
+  const franchise = !!profil.infos.franchise_tva;
+  const ttcDevis = Number(franchise ? c.total_ht : c.total_ttc) || 0;
+  if (!ttcDevis) return erreur("Ce devis n'a pas de montant.");
+  const { data: deja } = await sb.from("documents").select("contenu, statut").eq("devis_id", devis.id).eq("type", "facture").limit(50);
+  const dejaFacture = (deja ?? []).filter((f) => f.contenu?.acompte).reduce((t, f) => t + Number(f.contenu.acompte.pourcentage || 0), 0);
+  const saisie = await demanderTexte(
+    `Facture d'acompte – devis ${devis.numero} (${euros(ttcDevis)}${franchise ? "" : " TTC"}). Pourcentage de l'acompte${dejaFacture ? ` (déjà facturé : ${nombre(dejaFacture)} %)` : ""} ?`,
+    "Ex. : 30",
+    String(profil.infos.acompte || 30),
+  );
+  if (saisie === null) return;
+  const pct = Number(String(saisie).replace(",", ".").replace(/[^\d.]/g, ""));
+  if (!(pct > 0 && pct + dejaFacture <= 100)) return erreur(`Pourcentage incorrect (entre 1 et ${nombre(100 - dejaFacture)} %).`);
+  // Moins de 7 jours après une signature hors établissement : aucun paiement ne peut être exigé.
+  const signe = c.signature_client?.date;
+  if (horsEtablissement(c) && signe && joursDepuis(signe) < 7) {
+    const le = dateFr(ajouterJours(signe, 7));
+    if (!(await demander(`Le client a signé il y a moins de 7 jours : la loi interdit de lui demander un paiement avant le ${le}. Tu peux préparer la facture maintenant, mais ne l'envoie qu'à partir de cette date.`, { ok: "Préparer quand même" }))) return;
+  }
+  const ventilation = ventilationTva(c).filter((v) => Number(v.base_ht));
+  const plusieurs = ventilation.length > 1;
+  const { suivi, signature_client, hors_etablissement, date_debut, hypotheses, sections, ...base } = structuredClone(c);
+  const contenu = calculerTotaux({
+    ...base,
+    hypotheses: [],
+    titre: `Acompte – ${c.titre || "travaux"}`,
+    devis_numero: devis.numero,
+    acompte: { pourcentage: pct, devis_id: devis.id, devis_numero: devis.numero, devis_ttc: ttcDevis },
+    sections: [
+      {
+        titre: "Acompte",
+        lignes: ventilation.map((v) => ({
+          designation: `Acompte de ${nombre(pct)} % sur le devis n° ${devis.numero}${c.titre ? ` – ${c.titre}` : ""}`,
+          detail: plusieurs ? `Travaux à ${nombre(v.taux)} % de TVA (base ${euros(v.base_ht)} HT)` : "",
+          quantite: 1,
+          unite: "forfait",
+          prix_unitaire_ht: Math.round(Number(v.base_ht) * pct) / 100,
+          prix_source: "artisan",
+          calcul: "",
+          taux_tva: Number(v.taux),
+        })),
+      },
+    ],
+  });
+  const { data, error } = await sb.from("documents").insert({ type: "facture", devis_id: devis.id, contenu }).select("id").single();
+  if (error) return erreur("Facture d'acompte non créée.", error);
+  notifier("Facture d'acompte créée en brouillon : vérifie-la puis émets-la.");
+  ouvrirDocument(data.id);
+}
+$("#facture-acompte").onclick = () => creerFactureAcompte(docCourant);
+
 $("#faire-avoir").onclick = async () => {
   const f = docCourant;
   if (!(await demander(`Faire un avoir qui annule la facture ${f.numero} (${euros(montantDoc(f))}) ? Tu pourras le vérifier avant de l'émettre.`, { ok: "Faire l'avoir" }))) return;

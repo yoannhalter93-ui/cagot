@@ -113,7 +113,7 @@ ${cat === "S" && !e.tva_debits && c.nature !== "biens" ? "<ram:DueDateTypeCode>7
 <rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter></rsm:ExchangedDocumentContext>
 <rsm:ExchangedDocument>
 <ram:ID>${x(d.numero)}</ram:ID>
-<ram:TypeCode>${avoir ? 381 : 380}</ram:TypeCode>
+<ram:TypeCode>${avoir ? 381 : c.acompte ? 386 : 380}</ram:TypeCode>
 <ram:IssueDateTime><udt:DateTimeString format="102">${date102(d.date_document)}</udt:DateTimeString></ram:IssueDateTime>
 ${notes}
 </rsm:ExchangedDocument>

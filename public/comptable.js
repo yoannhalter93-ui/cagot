@@ -271,7 +271,7 @@ function rendreDossier() {
           return `<div class="element-liste carte-doc">
             <div class="ligne-doc">
               <div><strong>${esc(x.contenu.client_nom || x.contenu.titre || "Client")}</strong>
-                <small>${x.contenu.avoir ? "Avoir" : "Facture"} ${esc(x.numero)} · ${dateFr(x.date_document)}${x.contenu.titre ? ` · ${esc(x.contenu.titre)}` : ""}</small>
+                <small>${x.contenu.avoir ? "Avoir" : x.contenu.acompte ? "Facture d'acompte" : "Facture"} ${esc(x.numero)} · ${dateFr(x.date_document)}${x.contenu.titre ? ` · ${esc(x.contenu.titre)}` : ""}</small>
                 <small>HT ${euros(m.ht)} · TVA ${euros(m.tva)}</small></div>
               <div class="droite"><strong>${euros(m.ttc)}</strong><br><span class="pastille statut-${x.statut}">${x.statut === "payee" ? "Payée" : "À encaisser"}</span></div>
             </div>
@@ -314,7 +314,7 @@ function elementsFacture(f, e) {
     ? []
     : [
         `Date d'échéance : ${dateFr(ajouterJours(f.date_document, e.delai_paiement || 30))}.`,
-        v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
+        v.acompte ? `Facture d'acompte de ${nombre(v.acompte.pourcentage)} % sur le devis n° ${v.acompte.devis_numero}.` : v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
         "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
         e.iban ? `Règlement par virement : IBAN ${e.iban}` : "",
       ];
@@ -331,7 +331,7 @@ function elementsFacture(f, e) {
     tva: franchise ? 0 : v.montant_tva,
     ttc: franchise ? v.total_ht : v.total_ttc,
     mentions: mentions.filter(Boolean),
-    titre: `${v.avoir ? "AVOIR" : "FACTURE"} n° ${f.numero}`,
+    titre: `${v.avoir ? "AVOIR" : v.acompte ? "FACTURE D'ACOMPTE" : "FACTURE"} n° ${f.numero}`,
   };
 }
 
@@ -343,7 +343,7 @@ async function telechargerPdf(f) {
   let blob = genererPdf({ d: f, entreprise: e, elements, euros, nombre, dateFr });
   try {
     const xml = xmlFacturX({ d: f, e, mentions: elements.mentions, echeance: ajouterJours(f.date_document, e.delai_paiement || 30) });
-    blob = await pdfFacturX(blob, xml, { titre: `${f.contenu.avoir ? "Avoir" : "Facture"} ${f.numero}`, auteur: e.nom || "Cagot", avoir: !!f.contenu.avoir });
+    blob = await pdfFacturX(blob, xml, { titre: `${f.contenu.avoir ? "Avoir" : f.contenu.acompte ? "Facture d'acompte" : "Facture"} ${f.numero}`, auteur: e.nom || "Cagot", avoir: !!f.contenu.avoir });
   } catch (err) {
     console.error("Factur-X", err);
   }
