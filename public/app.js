@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Suivi des signatures";
+const VERSION_APPLI = "10 nov. 2026 · Retour arrière";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -338,7 +338,54 @@ let typeDocs = "devis"; // onglet Devis ou Factures
 let ficheCourante = null; // chantier ouvert (pour revenir à sa fiche)
 let filtreDocs = "tout";
 
+// ---------------------------------------------------------------------------
+// Retour arrière (geste du téléphone, bouton ←) : chaque écran est une étape de l'historique,
+// le retour ferme d'abord une fenêtre ouverte, puis revient à l'écran précédent.
+// ---------------------------------------------------------------------------
+let retourEnCours = false;
+let etatCourant = null;
+function noterDansHistorique(vue, nom) {
+  if (retourEnCours) return;
+  const id = nom === "document" ? docCourant?.id : nom === "fiche" ? ficheDonnees?.ch?.id : nom === "note" ? noteCourante?.id : null;
+  const etat = { cagot: true, vue, id: id ?? null };
+  const actuel = history.state;
+  if (!actuel?.cagot) history.replaceState(etat, "");
+  else if (actuel.vue !== etat.vue || actuel.id !== etat.id) history.pushState(etat, "");
+  etatCourant = etat;
+}
+window.addEventListener("popstate", async (e) => {
+  if (!utilisateur) return;
+  // Une fenêtre ou un menu ouvert : on le ferme et on reste sur l'écran.
+  const fond = [...document.querySelectorAll(".dialogue-fond")].at(-1);
+  const menu = !$("#menu-plus").hidden;
+  const sousMenu = document.querySelector("details.menu-plus[open]");
+  if (fond || menu || sousMenu) {
+    if (fond) {
+      const annuler = fond.querySelector(".annuler");
+      if (annuler) annuler.click();
+      else fond.remove();
+    }
+    $("#menu-plus").hidden = true;
+    if (sousMenu) sousMenu.open = false;
+    if (etatCourant) history.pushState(etatCourant, "");
+    return;
+  }
+  const s = e.state;
+  if (!s?.cagot) return;
+  retourEnCours = true;
+  try {
+    if (s.vue === "document" && s.id) await ouvrirDocument(s.id);
+    else if (s.vue === "fiche" && s.id) await ouvrirFiche(s.id);
+    else if (s.vue === "note" && s.id) await ouvrirNote(s.id);
+    else afficherVue(s.vue);
+  } finally {
+    retourEnCours = false;
+    etatCourant = s;
+  }
+});
+
 function afficherVue(nom) {
+  const demande = nom;
   // « devis » et « factures » : même écran, filtré par type
   if (nom === "devis" || nom === "factures") {
     typeDocs = nom === "devis" ? "devis" : "facture";
@@ -370,6 +417,7 @@ function afficherVue(nom) {
   if (nom === "agenda") afficherAgenda();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
+  noterDansHistorique(nom === "documents" ? (typeDocs === "facture" ? "factures" : "devis") : demande, nom);
 }
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-vue]");
@@ -1949,7 +1997,7 @@ $("#importer-note").onchange = async (e) => {
 // Contenu reçu par « Partager → Cagot » : le service worker l'a rangé dans un cache.
 async function importerPartage() {
   if (!new URLSearchParams(location.search).has("partage")) return;
-  history.replaceState(null, "", location.pathname);
+  history.replaceState(history.state, "", location.pathname);
   if (!("caches" in window)) return;
   const cache = await caches.open("cagot-partage");
   const reponse = await cache.match("/partage/contenu.json");
@@ -4221,7 +4269,7 @@ async function afficherSignaturesRecentes() {
 function ouvrirLienNotification(url = location.href) {
   const m = String(url).match(/#doc=([0-9a-f-]{36})/);
   if (!m) return false;
-  history.replaceState(null, "", location.pathname + location.search);
+  history.replaceState(history.state, "", location.pathname + location.search);
   ouvrirDocument(m[1]);
   return true;
 }
