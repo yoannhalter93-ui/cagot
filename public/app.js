@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Pages légales";
+const VERSION_APPLI = "10 nov. 2026 · Client lié au chantier";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -1145,6 +1145,7 @@ function ouvrirConversation(ch) {
     historique: ch.historique ?? [],
     docId: ch.document_id ?? null,
     noteId: ch.note_id ?? null,
+    clientId: ch.client_id ?? null,
   };
   sauverConversation({ enLigne: false });
   reafficherConversation();
@@ -1454,6 +1455,12 @@ async function historiquePourIA() {
 
 async function enregistrerDevis(devis) {
   for (const l of (devis.sections ?? []).flatMap((s) => s.lignes ?? [])) if (!l.option) delete l.option;
+  // Chantier créé depuis la fiche d'un client : ses coordonnées vont directement dans le devis.
+  const lie = await clientParId(conversation.clientId);
+  if (lie) {
+    devis.client_nom = lie.nom;
+    for (const k of ["adresse", "email", "telephone"]) if (lie[k]) devis[`client_${k}`] = lie[k];
+  }
   await completerDepuisCarnet(devis);
   memoriserClient(devis);
   conversation.titre ||= [devis.titre, devis.client_nom].filter(Boolean).join(" – ").slice(0, 200);
@@ -1548,9 +1555,22 @@ function afficherEditeurNote(note) {
   $("#contenu-note").value = noteCourante.contenu;
   if (plateforme.stockagePhotos) photosEnAttente = []; // les photos de la note sont rangées avec elle
   afficherPhotosNote();
+  afficherClientNote(note);
   etatNote(copie && copie.updated_at > note.updated_at ? "Modifications locales à enregistrer" : "Enregistrée");
   afficherVue("note");
   if (copie && copie.updated_at > note.updated_at) programmerEnregistrementNote(0);
+}
+
+// Client lié au chantier de la note : rappelé au-dessus de la note (pas besoin de le réécrire).
+async function afficherClientNote(note) {
+  const zone = $("#client-note");
+  zone.hidden = true;
+  const { data } = await sb.from("chantiers").select("client_id").eq("note_id", note.id).not("client_id", "is", null).limit(1);
+  const c = await clientParId(data?.[0]?.client_id);
+  if (!c || noteCourante?.id !== note.id) return;
+  zone.textContent = `👤 ${[c.nom, c.adresse?.replace(/\n/g, ", "), c.telephone].filter(Boolean).join(" · ")}`;
+  zone.title = "Coordonnées reprises automatiquement dans le devis";
+  zone.hidden = false;
 }
 
 async function ouvrirNote(id) {
@@ -1651,7 +1671,10 @@ $("#envoyer-note").onclick = async () => {
   montrerListeChantiers(false);
   afficherVue("chantier");
   ficheCourante = conversation.id ?? null;
-  $("#texte").value = note.titre ? `${note.titre}\n\n${contenu}` : contenu;
+  const lie = await clientParId(lies?.[0]?.client_id);
+  const rappel = lie && !normaliser(contenu).includes(normaliser(lie.nom)) ? `Client : ${lie.nom}` : "";
+  const debut = [rappel && normaliser(note.titre) === normaliser(lie.nom) ? "" : note.titre, rappel].filter(Boolean).join("\n");
+  $("#texte").value = [debut, contenu].filter(Boolean).join("\n\n");
   envoyer();
 };
 
@@ -2189,17 +2212,14 @@ function demanderTexte(titre, placeholder, valeur = "") {
 async function nouveauChantier(client = null) {
   const titre = client ? client.nom : await demanderTexte("Nouveau chantier", "Ex. : Flora – peinture séjour");
   if (!titre) return;
-  const contenu = client
-    ? [`Client : ${client.nom}`, client.adresse && `Adresse : ${client.adresse.replace(/\n/g, ", ")}`, client.telephone && `Tél. : ${client.telephone}`, client.email && `E-mail : ${client.email}`]
-        .filter(Boolean)
-        .join("\n") + "\n\n"
-    : "";
-  const { data: note, error } = await sb.from("notes").insert({ titre: titre.slice(0, 200), contenu }).select("*").single();
+  // Les coordonnées du client ne sont pas recopiées dans la note : le chantier est lié à sa fiche.
+  const { data: note, error } = await sb.from("notes").insert({ titre: titre.slice(0, 200), contenu: "" }).select("*").single();
   if (error) return erreur("Chantier non créé (connexion ?).", error);
-  const { data: ch, error: err2 } = await sb.from("chantiers").insert({ titre: titre.slice(0, 200), note_id: note.id, historique: [] }).select("*").single();
+  const { data: ch, error: err2 } = await sb.from("chantiers").insert({ titre: titre.slice(0, 200), note_id: note.id, historique: [], ...(client ? { client_id: client.id } : {}) }).select("*").single();
   if (err2) return erreur("Chantier non créé (connexion ?).", err2);
   ficheCourante = ch.id;
   afficherEditeurNote(note);
+  $("#contenu-note").focus();
   notifier("Écris tes notes et ajoute tes photos, puis « Faire le devis avec l'IA ».");
 }
 $("#nouveau-chantier").onclick = () => nouveauChantier();
@@ -2418,6 +2438,16 @@ function choisirUnite(ligne) {
 // ---------------------------------------------------------------------------
 let clients = null; // chargés à la demande
 const telValide = (t) => /^[+\d][\d\s.()-]{5,}$/.test(String(t ?? "").trim());
+
+async function clientParId(id) {
+  if (!id) return null;
+  try {
+    if (!clients) await chargerClients();
+  } catch {
+    return null;
+  }
+  return clients.find((c) => c.id === id) ?? null;
+}
 
 async function chargerClients() {
   const { data, error } = await sb.from("clients").select("*").order("nom").limit(2000);

@@ -789,3 +789,5 @@ body { zoom: var(--zoom, 1); }
 .liens-legaux-appli { text-align: center; font-size: .82rem; color: var(--gris); margin: 12px 0 0; }
 .liens-legaux-appli a { color: inherit; }
 #champ-cgu[hidden] { display: none !important; }
+.client-note { margin: 4px 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--fond-doux, #eef3f8); color: var(--texte); font-size: .92rem; }
+.client-note[hidden] { display: none !important; }
