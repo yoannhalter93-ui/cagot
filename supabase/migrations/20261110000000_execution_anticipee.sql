@@ -1,9 +1,10 @@
 -- Contrat hors établissement : le client peut demander expressément, en signant, que les travaux
 -- commencent avant la fin du délai de rétractation de 14 jours (art. L221-25 du Code de la consommation).
 -- La demande est enregistrée dans le devis signé et dans la preuve de signature.
-drop function if exists public.signer_devis(text, text, text, jsonb);
+-- Nouvelle fonction (signer_devis_v2) à côté de l'ancienne : rien n'est supprimé, les pages déjà
+-- ouvertes chez les clients continuent de fonctionner avec signer_devis.
 -- Signature par le client : options retenues, totaux recalculés, devis passé en « accepté ».
-create or replace function public.signer_devis(p_jeton text, p_nom text, p_signature text, p_options jsonb, p_execution_anticipee boolean default false)
+create or replace function public.signer_devis_v2(p_jeton text, p_nom text, p_signature text, p_options jsonb, p_execution_anticipee boolean default false)
 returns jsonb
 language plpgsql
 security definer
@@ -92,5 +93,5 @@ begin
 end;
 $$;
 
-revoke all on function public.signer_devis(text, text, text, jsonb, boolean) from public;
-grant execute on function public.signer_devis(text, text, text, jsonb, boolean) to anon, authenticated;
+revoke all on function public.signer_devis_v2(text, text, text, jsonb, boolean) from public;
+grant execute on function public.signer_devis_v2(text, text, text, jsonb, boolean) to anon, authenticated;

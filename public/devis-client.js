@@ -168,7 +168,13 @@ async function signer() {
   const bouton = $("#signer");
   bouton.disabled = true;
   bouton.textContent = "Signature en cours…";
-  const { error } = await sb.rpc("signer_devis", { p_jeton: jeton, p_nom: nom, p_signature: $("#pad").toDataURL("image/png"), p_options: options });
+  const { error } = await sb.rpc("signer_devis_v2", {
+    p_jeton: jeton,
+    p_nom: nom,
+    p_signature: $("#pad").toDataURL("image/png"),
+    p_options: options,
+    p_execution_anticipee: horsEtablissement(contenu) && $("#execution-anticipee").checked,
+  });
   if (error) {
     bouton.disabled = false;
     rendre();
@@ -236,6 +242,7 @@ async function charger() {
   const signe = !!data.signe_at;
   $("#bloc-signe").hidden = !signe;
   $("#bloc-signature").hidden = signe || !["brouillon", "envoye"].includes(data.statut);
+  $("#bloc-anticipee").hidden = !horsEtablissement(contenu);
   if (signe) {
     $("#texte-signe").textContent = `Signé par ${data.signataire_nom} le ${dateFr(data.signe_at)} à ${heureFr(data.signe_at)}. Merci ! L'entreprise a été prévenue automatiquement dans son application.`;
     $("#image-signature").src = data.signature;

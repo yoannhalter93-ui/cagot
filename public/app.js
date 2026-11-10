@@ -90,7 +90,9 @@ function demander(message, { ok = "Confirmer", danger = false } = {}) {
     };
     fond.querySelector(".annuler").onclick = () => fermer(false);
     fond.querySelector(".valider").onclick = () => fermer(true);
-    fond.onclick = (e) => e.target === fond && fermer(false);
+    fond.onclick = (e) => {
+      if (e.target === fond) fermer(false);
+    };
     document.body.appendChild(fond);
     fond.querySelector(".valider").focus();
   });
@@ -109,7 +111,8 @@ function demanderDestinataires(initiales) {
       <h3>Envoyer à</h3>
       <div class="destinataires"></div>
       <button type="button" class="lien ajouter-adresse">+ Ajouter une adresse</button>
-      <p class="aide">${plateforme.envoiDirect ? "Cagot envoie l'e-mail lui-même, avec le PDF joint. Tu peux t'ajouter pour recevoir une copie." : "Le PDF est joint automatiquement. Les adresses sont copiées : dans Gmail, appuie longuement sur « À » puis « Coller »."}</p>
+      ${plateforme.envoiDirect ? `<label class="case-accord copie-envoi"><input type="checkbox" class="copie"><span>📩 M'envoyer une copie (le client ne la voit pas)</span></label>` : ""}
+      <p class="aide">${plateforme.envoiDirect ? "Cagot envoie l'e-mail lui-même, avec le PDF joint." : "Le PDF est joint automatiquement. Les adresses sont copiées : dans Gmail, appuie longuement sur « À » puis « Coller »."}</p>
       <div class="dialogue-actions">
         <button type="button" class="annuler">Annuler</button>
         <button type="button" class="valider btn-principal">Envoyer</button>
@@ -128,13 +131,17 @@ function demanderDestinataires(initiales) {
       return ligne.querySelector("input");
     };
     for (const m of initiales.length ? initiales : [""]) ajouter(m);
+    const caseCopie = fond.querySelector(".copie");
+    if (caseCopie) caseCopie.checked = local.lire("copie-envois", true) !== false; // cochée par défaut, choix mémorisé
     fond.querySelector(".ajouter-adresse").onclick = () => ajouter().focus();
     const fermer = (reponse) => {
       fond.remove();
       resolve(reponse);
     };
     fond.querySelector(".annuler").onclick = () => fermer(null);
-    fond.onclick = (e) => e.target === fond && fermer(null);
+    fond.onclick = (e) => {
+      if (e.target === fond) fermer(null);
+    };
     fond.querySelector(".valider").onclick = () => {
       const champs = [...liste.querySelectorAll("input")];
       const adresses = champs.map((c) => c.value.replace(/\s+/g, "").toLowerCase()).filter(Boolean);
@@ -144,7 +151,12 @@ function demanderDestinataires(initiales) {
         fausse.focus();
         return notifier("Adresse e-mail incorrecte.", "erreur");
       }
-      fermer([...new Set(adresses)]);
+      const choix = [...new Set(adresses)];
+      if (caseCopie) {
+        choix.copie = caseCopie.checked;
+        local.ecrire("copie-envois", caseCopie.checked);
+      }
+      fermer(choix);
     };
     document.body.appendChild(fond);
     if (!initiales.length) liste.querySelector("input").focus();
@@ -154,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Options incluses";
+const VERSION_APPLI = "10 nov. 2026 · Copie des envois";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2193,7 +2205,9 @@ function raccourcisChantier({ c, e }) {
   fond.innerHTML = `<div class="dialogue raccourcis-chantier"><h3></h3>${actions.map((a, i) => `<button type="button" class="btn-secondaire" data-i="${i}">${a[0]}</button>`).join("")}<button type="button" class="annuler lien">Fermer</button></div>`;
   fond.querySelector("h3").textContent = c.titre || "Chantier";
   const fermer = () => fond.remove();
-  fond.onclick = (ev) => ev.target === fond && fermer();
+  fond.onclick = (ev) => {
+    if (ev.target === fond) fermer();
+  };
   fond.querySelector(".annuler").onclick = fermer;
   for (const b of fond.querySelectorAll("[data-i]")) {
     b.onclick = () => {
@@ -2421,7 +2435,9 @@ function choisirTauxTva(ligne, devis) {
     for (const b of fond.querySelectorAll("[data-t]")) b.onclick = () => fermer(Number(b.dataset.t));
     fond.querySelector(".annuler").onclick = () => fermer(undefined);
     fond.querySelector(".valider").onclick = () => fermer(null);
-    fond.onclick = (e) => e.target === fond && fermer(undefined);
+    fond.onclick = (e) => {
+      if (e.target === fond) fermer(undefined);
+    };
     document.body.appendChild(fond);
   });
 }
@@ -2447,7 +2463,9 @@ function choisirUnite(ligne) {
     for (const b of fond.querySelectorAll("[data-u]")) b.onclick = () => fermer(b.dataset.u);
     fond.querySelector(".annuler").onclick = () => fermer(null);
     fond.querySelector(".valider").onclick = () => fermer(fond.querySelector(".unite-libre input").value.trim() || null);
-    fond.onclick = (e) => e.target === fond && fermer(null);
+    fond.onclick = (e) => {
+      if (e.target === fond) fermer(null);
+    };
     document.body.appendChild(fond);
   });
 }
@@ -3067,7 +3085,7 @@ function rendreDocument() {
     if (v.signature_client) {
       signatureDuDevis(d).then((sig) => {
         if (docCourant !== d || !sig) return;
-        info.innerHTML = `✍️ <strong>Signé en ligne par ${esc(sig.signataire_nom)}</strong> le ${dateFr(sig.signe_at)} à ${heureFr(sig.signe_at)}<br><img class="signature-client" src="${esc(sig.signature)}" alt="Signature du client">`;
+        info.innerHTML = `✍️ <strong>Signé en ligne par ${esc(sig.signataire_nom)}</strong> le ${dateFr(sig.signe_at)} à ${heureFr(sig.signe_at)}${v.signature_client?.execution_anticipee ? `<br>⏩ <strong>Le client demande que les travaux commencent avant la fin des 14 jours</strong> (s'il se rétracte, il paie les travaux déjà faits).` : ""}<br><img class="signature-client" src="${esc(sig.signature)}" alt="Signature du client">`;
       });
       info.innerHTML = `✍️ Signé en ligne par ${esc(v.signature_client.nom)}`;
     } else {
@@ -3735,9 +3753,10 @@ $("#partager").onclick = async () => {
     bouton.disabled = true;
     bouton.innerHTML = "<span>⏳</span>Envoi…";
     try {
-      if (await plateforme.envoyerEmail({ destinataires, sujet, texte, pdf, titre: titreFichier(d) }, await jetonAcces())) {
+      const envoi = await plateforme.envoyerEmail({ destinataires, sujet, texte, pdf, titre: titreFichier(d), copie: !!destinataires.copie }, await jetonAcces());
+      if (envoi) {
         noterEnvoi(d, destinataires, "email");
-        notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}.`);
+        notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}${envoi.copie ? ` · copie envoyée à ${envoi.copie}` : ""}.`);
         if (d.type === "devis" && docCourant.statut === "brouillon") changerStatut("envoye");
         return;
       }

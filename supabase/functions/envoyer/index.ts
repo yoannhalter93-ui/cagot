@@ -55,12 +55,13 @@ async function dechiffrer(s: string) {
 
 type Boite = { email: string; nom_affiche: string; hote: string; port: number; utilisateur: string; mdp_chiffre: string };
 
-async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; replyTo?: string; subject: string; text: string; pdf?: string; nomFichier?: string }) {
+async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; cci?: string[]; replyTo?: string; subject: string; text: string; pdf?: string; nomFichier?: string }) {
   await envoyerMail(
     { hote: b.hote, port: b.port, utilisateur: b.utilisateur, motDePasse: mdp },
     {
       de: { email: b.email, nom: ligne(b.nom_affiche || "") },
       a: m.to,
+      ...(m.cci?.length ? { cci: m.cci } : {}),
       ...(m.replyTo ? { repondreA: m.replyTo } : {}),
       sujet: ligne(m.subject),
       texte: m.text,
@@ -147,8 +148,13 @@ Deno.serve(async (req) => {
   }
   const nomFichier = (c.nom_fichier as string).replace(/[^\p{L}\p{N}_.-]+/gu, "_");
 
+  // Copie pour l'artisan lui-même (copie cachée) : toujours vers SA propre adresse, jamais une adresse choisie par la requête.
+  const { data: ent } = await supabase.from("entreprises").select("infos").maybeSingle();
+  const adressePerso = boite?.email ?? (emailValide(ent?.infos?.email) ? ent.infos.email : u.user.email);
+  const cci = c.copie === true && emailValide(adressePerso) && !destinataires.map((x) => String(x).toLowerCase()).includes(adressePerso.toLowerCase()) ? [adressePerso] : [];
+
   const { data: autorise, error: erreurLimite } = await supabase.rpc("enregistrer_envoi_email", {
-    p_destinataires: destinataires.length,
+    p_destinataires: destinataires.length + cci.length,
     p_limite_par_jour: LIMITE_PAR_JOUR,
   });
   if (erreurLimite) {
@@ -157,7 +163,6 @@ Deno.serve(async (req) => {
   }
   if (!autorise) return json({ erreur: "Limite d'e-mails atteinte pour aujourd'hui." }, 429);
 
-  const { data: ent } = await supabase.from("entreprises").select("infos").maybeSingle();
   const nom = ligne(String(ent?.infos?.nom || "Cagot")).slice(0, 70);
   const fichier = nomFichier.endsWith(".pdf") ? nomFichier : `${nomFichier}.pdf`;
 
@@ -166,12 +171,13 @@ Deno.serve(async (req) => {
       const mdp = await dechiffrer(boite.mdp_chiffre);
       await envoyerSmtp({ ...boite, nom_affiche: boite.nom_affiche || nom }, mdp, {
         to: destinataires as string[],
+        cci,
         subject: ligne(c.sujet as string),
         text: c.texte as string,
         pdf: c.pdf as string,
         nomFichier: fichier,
       });
-      return json({ envoye: true, destinataires, depuis: boite.email });
+      return json({ envoye: true, destinataires, copie: cci[0] ?? null, depuis: boite.email });
     } catch (err) {
       console.error("[smtp]", err);
       return json({ erreur: messageSmtp(err) }, 502);
@@ -185,6 +191,7 @@ Deno.serve(async (req) => {
     body: JSON.stringify({
       sender: { name: nom, email: EXPEDITEUR_BREVO },
       to: destinataires.map((email) => ({ email })),
+      ...(cci.length ? { bcc: cci.map((email) => ({ email })) } : {}),
       ...(repondreA ? { replyTo: { email: repondreA, name: nom } } : {}),
       subject: ligne(c.sujet as string),
       textContent: c.texte,
@@ -195,5 +202,5 @@ Deno.serve(async (req) => {
     console.error("[brevo]", rep.status, await rep.text().catch(() => ""));
     return json({ erreur: "L'e-mail n'a pas pu partir, réessaie." }, 502);
   }
-  return json({ envoye: true, destinataires });
+  return json({ envoye: true, destinataires, copie: cci[0] ?? null });
 });

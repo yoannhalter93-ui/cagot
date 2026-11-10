@@ -796,3 +796,4 @@ body { zoom: var(--zoom, 1); }
 .saisie textarea { order: -1; flex: 1 1 100%; min-height: 64px; max-height: 40vh; resize: none; line-height: 1.4; overflow-y: auto; }
 .saisie #envoyer { margin-left: auto; min-height: 44px; padding: 10px 22px; }
 button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
+#bloc-anticipee[hidden] { display: none !important; }

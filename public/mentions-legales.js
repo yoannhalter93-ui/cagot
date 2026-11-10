@@ -58,6 +58,7 @@ export function mentionsClient(d, e, dateFr) {
   if (d.type === "devis") {
     if (txt(c.date_debut)) m.push(`Date de début prévue des travaux : ${txt(c.date_debut)}.`);
     if (horsEtablissement(c)) m.push(TEXTE_RETRACTATION);
+    if (horsEtablissement(c) && c.signature_client?.execution_anticipee) m.push("À la signature, le client a expressément demandé que les travaux commencent avant la fin du délai de rétractation de 14 jours (art. L221-25 du Code de la consommation).");
   } else {
     if (c.avoir) m.push(`Avoir annulant la facture n° ${c.facture_origine || "?"}${c.facture_origine_date ? ` du ${dateFr(c.facture_origine_date)}` : ""}.`);
     else if (txt(c.date_travaux)) m.push(`Date d'exécution des travaux : ${txt(c.date_travaux)}.`);

@@ -102,7 +102,7 @@ export async function demarrerPlateforme() {
       }
       return data;
     },
-    async envoyerEmail({ destinataires, sujet, texte, pdf, titre }, jeton) {
+    async envoyerEmail({ destinataires, sujet, texte, pdf, titre, copie = false }, jeton) {
       const octets = new Uint8Array(await pdf.arrayBuffer());
       let binaire = "";
       for (let i = 0; i < octets.length; i += 0x8000) binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
@@ -114,7 +114,7 @@ export async function demarrerPlateforme() {
           method: "POST",
           signal: ctrl.signal,
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${jeton}`, apikey: config.supabaseKey },
-          body: JSON.stringify({ destinataires, sujet, texte, pdf: btoa(binaire), nom_fichier: `${nomFichier(titre)}.pdf` }),
+          body: JSON.stringify({ destinataires: [...destinataires], sujet, texte, pdf: btoa(binaire), nom_fichier: `${nomFichier(titre)}.pdf`, copie }),
         });
       } catch {
         return false; // réseau lent ou coupé : on passe par le partage du téléphone
@@ -131,7 +131,7 @@ export async function demarrerPlateforme() {
         return false;
       }
       if (!rep.ok) throw new Error(data.erreur || "L'e-mail n'a pas pu partir.");
-      return true;
+      return { envoye: true, copie: data.copie ?? null };
     },
 
     // Bibliothèques PDF servies par le site lui-même (chargées seulement quand on en a besoin).

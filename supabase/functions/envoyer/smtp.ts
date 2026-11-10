@@ -39,6 +39,7 @@ const adresse = (email: string, nom?: string) => {
 export type Message = {
   de: { email: string; nom?: string };
   a: string[];
+  cci?: string[]; // copie cachée : destinataires de l'enveloppe, absents des en-têtes
   repondreA?: string;
   sujet: string;
   texte: string;
@@ -123,7 +124,7 @@ export async function envoyerMail(
     await reponse(235);
     await envoyer(`MAIL FROM:<${m.de.email}>`);
     await reponse(250);
-    for (const a of m.a) {
+    for (const a of [...m.a, ...(m.cci ?? [])]) {
       await envoyer(`RCPT TO:<${a}>`);
       await reponse(250);
     }
