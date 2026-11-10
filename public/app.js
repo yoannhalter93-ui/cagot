@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Import de données";
+const VERSION_APPLI = "11 nov. 2026 · Import + numérotation";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -4440,6 +4440,45 @@ async function validerImport() {
   afficherArchivesImport();
 }
 
+// Après un import de factures : proposer de continuer la numérotation de l'ancien logiciel
+// (ex. Henrri 26-11-192 → première facture Cagot 26-11-193), tant qu'aucune facture n'est émise.
+async function proposerSuiteNumerotation(docs) {
+  const annee = new Date().getFullYear();
+  const yy = String(annee).slice(2);
+  const candidats = docs
+    .filter((f) => f.type !== "devis" && String(f.date_document ?? "").startsWith(String(annee)))
+    .map((f) => {
+      const n = String(f.numero).trim();
+      let m = n.match(/^(\d{2})-(\d{2})-(\d+)$/);
+      if (m && m[1] === yy) return { format: "aa-mm", prefixe: "", n: Number(m[3]) };
+      m = n.match(/^([A-Za-z]{1,10})[-_ ]?(\d{4})[-_ ](\d+)$/);
+      if (m && Number(m[2]) === annee) return { format: "", prefixe: m[1].toUpperCase(), n: Number(m[3]) };
+      return null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.n - a.n);
+  const zone = document.createElement("div");
+  zone.className = "suite-numerotation";
+  $("#archives-import").prepend(zone);
+  if (!candidats.length) return;
+  const { format, prefixe, n } = candidats[0];
+  const { data: num } = await sb.rpc("numerotation");
+  if (!num || num.facture_suivante > n + 1) return; // déjà réglé (ou factures émises au-delà)
+  const suivant = n + 1;
+  const apercu = format === "aa-mm" ? `${yy}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(suivant).padStart(3, "0")}` : `${prefixe}-${annee}-${String(suivant).padStart(3, "0")}`;
+  zone.innerHTML = `<p>🔢 <strong>Continuer ta numérotation ?</strong> Ta dernière facture importée cette année porte le n° ${n}. Ta prochaine facture Cagot serait la <strong>${esc(apercu)}</strong> (même format, sans trou ni doublon).</p>
+    <button type="button" class="btn-principal" id="appliquer-suite">Oui, continuer à ${esc(apercu)}</button>`;
+  $("#appliquer-suite").onclick = async () => {
+    const infos = { ...profil.infos, format_facture: format, ...(prefixe ? { prefixe_facture: prefixe } : {}) };
+    const { error } = await sb.from("entreprises").upsert({ user_id: utilisateur.id, infos, metiers: profil.metiers, updated_at: new Date().toISOString() });
+    if (error) return erreur("Numérotation non modifiée (connexion ?).", error);
+    profil.infos = infos;
+    const { error: e2 } = await sb.rpc("numerotation", { p_prochain_facture: suivant });
+    if (e2) return erreur("Numérotation non modifiée.", e2);
+    zone.innerHTML = `<p class="succes-import">✅ Ta prochaine facture sera la <strong>${esc(apercu)}</strong>.</p>`;
+  };
+}
+
 // Archive des anciennes factures importées.
 async function afficherArchivesImport() {
   const zone = $("#archives-import");
@@ -4462,6 +4501,7 @@ async function afficherArchivesImport() {
   };
   $("#cherche-import").oninput = rendre;
   rendre();
+  proposerSuiteNumerotation(data).catch(console.error);
   $("#vider-import").onclick = async () => {
     if (!(await demander(`Supprimer les ${data.length} documents importés ? (Tes devis et factures faits dans Cagot ne sont pas touchés.)`, { ok: "Supprimer", danger: true }))) return;
     const { error: e } = await sb.from("factures_importees").delete().neq("numero", "");

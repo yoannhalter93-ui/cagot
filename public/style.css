@@ -889,3 +889,5 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .cherche-import { width: 100%; margin: 6px 0; }
 #fichier-import { display: none !important; }
 .bouton-fichier { color: #fff !important; font-weight: 700; padding: 14px; }
+.suite-numerotation:not(:empty) { margin: 12px 0; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--bleu) 8%, var(--surface)); border: 1px solid var(--bord); }
+.suite-numerotation .btn-principal { width: 100%; }
