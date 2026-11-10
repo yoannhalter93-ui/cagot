@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Agenda + copie";
+const VERSION_APPLI = "10 nov. 2026 · Agenda : clients";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -3779,9 +3779,10 @@ async function chargerAgenda() {
   const [rdv, docs, chantiers] = await Promise.all([
     sb.from("rendez_vous").select("*").lt("debut", fin.toISOString()).gte("fin", debut.toISOString()).order("debut").limit(2000),
     sb.from("documents").select("id, type, statut, numero, date_document, contenu").in("statut", ["emise", "accepte"]).limit(1000),
-    sb.from("chantiers").select("id, titre").limit(500),
+    sb.from("chantiers").select("id, titre, client_id").limit(500),
   ]);
   if (rdv.error) throw rdv.error;
+  if (!clients) await chargerClients().catch(() => {});
   donneesAgenda = {
     rdv: rdv.data.map((r) => ({ ...r, debut: new Date(r.debut), fin: new Date(r.fin) })),
     auto: elementsAuto(docs.data ?? []).filter((x) => x.debut < fin && x.fin >= debut),
@@ -3813,7 +3814,10 @@ function htmlElementAgenda(x, j) {
   const attr = x.auto ? `data-ouvrir-doc="${esc(x.doc)}"` : `data-rdv="${esc(x.id)}"`;
   return `<button type="button" class="rdv-agenda type-${esc(x.auto ? x.auto : x.type)}" ${attr}>
       <span class="heure-rdv">${esc(quand)}</span>
-      <span><strong>${x.auto ? "" : `${t.icone} `}${esc(x.titre)}</strong>${x.lieu ? `<small>📍 ${esc(x.lieu)}</small>` : ""}</span>
+      <span><strong>${x.auto ? "" : `${t.icone} `}${esc(x.titre)}</strong>${x.lieu ? `<small>📍 ${esc(x.lieu)}</small>` : ""}${(() => {
+        const c = x.client_id && clients?.find((k) => k.id === x.client_id);
+        return c ? `<small>👤 ${esc([c.nom, c.telephone].filter(Boolean).join(" · "))}</small>` : "";
+      })()}</span>
     </button>`;
 }
 
@@ -3885,7 +3889,8 @@ $("#nouveau-rdv").onclick = () => editerRdv(null, { jour: isoJour(vueAgenda.mode
 // Fenêtre d'un rendez-vous (création / modification / suppression).
 function editerRdv(rdv, { jour, chantier = null } = {}) {
   return new Promise((resolve) => {
-    const r = rdv ?? { type: chantier ? "travaux" : "rdv", titre: chantier?.titre ?? "", journee: !!chantier, lieu: chantier?.lieu ?? "", notes: "", chantier_id: chantier?.id ?? null };
+    const r = rdv ?? { type: chantier ? "travaux" : "rdv", titre: chantier?.titre ?? "", journee: !!chantier, lieu: chantier?.lieu ?? "", notes: "", chantier_id: chantier?.id ?? null, client_id: chantier?.client_id ?? null };
+    const carnet = [...(clients ?? [])].sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr"));
     const d1 = rdv ? rdv.debut : new Date(`${jour ?? isoJour(new Date())}T08:00:00`);
     const d2 = rdv ? rdv.fin : new Date(`${jour ?? isoJour(new Date())}T10:00:00`);
     const fond = document.createElement("div");
@@ -3894,6 +3899,8 @@ function editerRdv(rdv, { jour, chantier = null } = {}) {
       <h3>${rdv ? "Rendez-vous" : "Nouveau rendez-vous"}</h3>
       <div class="types-rdv">${Object.entries(typesRdv()).map(([id, t]) => `<button type="button" class="puce" data-type-rdv="${id}">${t.icone} ${t.nom}</button>`).join("")}</div>
       <label>Quoi <input name="titre" maxlength="200" required placeholder="Ex. : Visite Mme Martin, peinture séjour"></label>
+      <label>Client <select name="client"><option value="">— aucun —</option>${carnet.map((c) => `<option value="${esc(c.id)}">${esc(c.nom || "Sans nom")}</option>`).join("")}</select></label>
+      <p class="coord-client aide" hidden></p>
       <label>Chantier <select name="chantier"><option value="">— aucun —</option>${donneesAgenda.chantiers.map((c) => `<option value="${esc(c.id)}">${esc(c.titre || "Chantier sans titre")}</option>`).join("")}</select></label>
       <div class="ligne-rdv"><label>Le <input type="date" name="jour" required></label><label class="case-accord"><input type="checkbox" name="journee"><span>Journée(s) entière(s)</span></label></div>
       <div class="ligne-rdv heures-rdv"><label>De <input type="time" name="h1" step="900"></label><label>à <input type="time" name="h2" step="900"></label></div>
@@ -3925,6 +3932,30 @@ function editerRdv(rdv, { jour, chantier = null } = {}) {
     }
     champs.titre.value = r.titre;
     champs.chantier.value = r.chantier_id ?? "";
+    champs.client.value = r.client_id ?? "";
+    // Client du carnet : ses coordonnées sont rappelées et son adresse remplit le lieu.
+    const zoneCoord = f.querySelector(".coord-client");
+    let lieuAuto = "";
+    let titreAuto = "";
+    const majClient = (remplir) => {
+      const c = carnet.find((x) => x.id === champs.client.value);
+      zoneCoord.hidden = !c;
+      zoneCoord.innerHTML = c
+        ? [c.telephone && `📞 <a href="tel:${esc(c.telephone.replace(/[^\d+]/g, ""))}">${esc(c.telephone)}</a>`, c.email && `✉️ <a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`, c.adresse && `📍 ${esc(c.adresse.replace(/\n/g, ", "))}`].filter(Boolean).join("<br>") || "Pas de coordonnées dans sa fiche."
+        : "";
+      if (!remplir || !c) return;
+      const adresse = (c.adresse || "").replace(/\n/g, ", ");
+      if (adresse && (!champs.lieu.value.trim() || champs.lieu.value === lieuAuto)) {
+        champs.lieu.value = adresse;
+        lieuAuto = adresse;
+      }
+      if (!champs.titre.value.trim() || champs.titre.value === titreAuto) {
+        titreAuto = `${typesRdv()[type]?.nom ?? "RDV"} – ${c.nom}`;
+        champs.titre.value = titreAuto;
+      }
+    };
+    champs.client.onchange = () => majClient(true);
+    majClient(false);
     champs.jour.value = isoJour(d1);
     champs.journee.checked = !!r.journee;
     champs.h1.value = heure(d1);
@@ -3936,6 +3967,10 @@ function editerRdv(rdv, { jour, chantier = null } = {}) {
     champs.chantier.onchange = () => {
       const c = donneesAgenda.chantiers.find((x) => x.id === champs.chantier.value);
       if (c && !champs.titre.value.trim()) champs.titre.value = c.titre;
+      if (c?.client_id && !champs.client.value) {
+        champs.client.value = c.client_id;
+        majClient(true);
+      }
     };
     majType();
     majJournee();
@@ -3972,6 +4007,7 @@ function editerRdv(rdv, { jour, chantier = null } = {}) {
         type,
         titre: champs.titre.value.trim().slice(0, 200),
         chantier_id: champs.chantier.value || null,
+        client_id: champs.client.value || null,
         journee: champs.journee.checked,
         debut: debut.toISOString(),
         fin: fin.toISOString(),
@@ -4016,10 +4052,12 @@ async function afficherRdvFiche(ch) {
 async function planifierChantier() {
   const { ch, devis } = ficheDonnees;
   if (!donneesAgenda.chantiers.length) await chargerAgenda().catch(() => {});
-  if (!donneesAgenda.chantiers.some((c) => c.id === ch.id)) donneesAgenda.chantiers.unshift({ id: ch.id, titre: ch.titre });
+  if (!donneesAgenda.chantiers.some((c) => c.id === ch.id)) donneesAgenda.chantiers.unshift({ id: ch.id, titre: ch.titre, client_id: ch.client_id ?? null });
   const lie = await clientParId(ch.client_id);
   const lieu = (devis?.contenu.adresse_chantier || devis?.contenu.client_adresse || lie?.adresse || "").replace(/\n/g, ", ");
-  editerRdv(null, { jour: isoJour(new Date()), chantier: { id: ch.id, titre: ch.titre, lieu } });
+  if (!clients) await chargerClients().catch(() => {});
+  const client = lie ?? (devis?.contenu.client_nom ? trouverClient({ nom: devis.contenu.client_nom, email: devis.contenu.client_email }) : null);
+  editerRdv(null, { jour: isoJour(new Date()), chantier: { id: ch.id, titre: ch.titre, lieu, client_id: client?.id ?? null } });
 }
 $("#planifier-fiche").onclick = planifierChantier;
 $("#planifier-fiche-menu").onclick = () => {

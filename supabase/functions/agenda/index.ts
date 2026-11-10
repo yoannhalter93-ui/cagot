@@ -19,11 +19,12 @@ Deno.serve(async (req) => {
   const uid = j.user_id as string;
 
   const depuis = new Date(Date.now() - 180 * 86400e3).toISOString();
-  const [rdv, factures, ent, chantiers] = await Promise.all([
+  const [rdv, factures, ent, chantiers, clients] = await Promise.all([
     admin.from("rendez_vous").select("*").eq("user_id", uid).gte("fin", depuis).order("debut").limit(3000),
     admin.from("documents").select("id, numero, date_document, contenu").eq("user_id", uid).eq("type", "facture").eq("statut", "emise").limit(1000),
     admin.from("entreprises").select("infos").eq("user_id", uid).maybeSingle(),
     admin.from("chantiers").select("id, titre").eq("user_id", uid).limit(2000),
+    admin.from("clients").select("id, nom, adresse, telephone, email").eq("user_id", uid).limit(5000),
   ]);
   if (rdv.error || factures.error) {
     console.error("[agenda]", rdv.error ?? factures.error);
@@ -32,18 +33,30 @@ Deno.serve(async (req) => {
   const infos = (ent.data?.infos ?? {}) as Record<string, unknown>;
   const delai = Number(infos.delai_paiement || 30);
   const nomChantier = new Map((chantiers.data ?? []).map((c) => [c.id, c.titre]));
+  const ficheClient = new Map((clients.data ?? []).map((c) => [c.id, c]));
   const euros = (n: unknown) => `${Number(n || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-  const evenements: Evenement[] = (rdv.data ?? []).map((r) => ({
-    uid: `${r.id}@cagot.fr`,
-    titre: `${TYPES[r.type] ?? "📅"} ${r.titre}`,
-    debut: new Date(r.debut),
-    fin: new Date(r.fin),
-    journee: r.journee,
-    lieu: r.lieu || undefined,
-    description: [r.chantier_id && nomChantier.get(r.chantier_id) ? `Chantier : ${nomChantier.get(r.chantier_id)}` : "", r.notes].filter(Boolean).join("\n") || undefined,
-    modifie: new Date(r.updated_at),
-  }));
+  const evenements: Evenement[] = (rdv.data ?? []).map((r) => {
+    const cl = r.client_id ? ficheClient.get(r.client_id) : null;
+    const adresse = cl?.adresse ? String(cl.adresse).replace(/\n/g, ", ") : "";
+    return {
+      uid: `${r.id}@cagot.fr`,
+      titre: `${TYPES[r.type] ?? "📅"} ${r.titre}`,
+      debut: new Date(r.debut),
+      fin: new Date(r.fin),
+      journee: r.journee,
+      lieu: r.lieu || adresse || undefined,
+      description: [
+        cl ? `Client : ${cl.nom}` : "",
+        cl?.telephone ? `Tél. : ${cl.telephone}` : "",
+        cl?.email ? `E-mail : ${cl.email}` : "",
+        adresse && adresse !== r.lieu ? `Adresse : ${adresse}` : "",
+        r.chantier_id && nomChantier.get(r.chantier_id) ? `Chantier : ${nomChantier.get(r.chantier_id)}` : "",
+        r.notes,
+      ].filter(Boolean).join("\n") || undefined,
+      modifie: new Date(r.updated_at),
+    };
+  });
   for (const f of factures.data ?? []) {
     const c = (f.contenu ?? {}) as Record<string, unknown>;
     if (c.avoir) continue;

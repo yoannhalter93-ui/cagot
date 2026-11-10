@@ -844,3 +844,5 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .dialogue-rdv .case-accord input { width: 22px; flex: none; }
 .dialogue-rdv .ligne-rdv > .case-accord { flex: 1 1 160px; padding-bottom: 8px; }
 .dialogue-rdv input, .dialogue-rdv select, .dialogue-rdv textarea { box-sizing: border-box; }
+.coord-client { margin: 4px 0 0; line-height: 1.6; }
+.coord-client[hidden] { display: none !important; }
