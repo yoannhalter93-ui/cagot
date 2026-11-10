@@ -154,7 +154,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Grande zone de saisie";
+const VERSION_APPLI = "10 nov. 2026 · Options incluses";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -1469,7 +1469,10 @@ async function historiquePourIA() {
 }
 
 async function enregistrerDevis(devis) {
-  for (const l of (devis.sections ?? []).flatMap((s) => s.lignes ?? [])) if (!l.option) delete l.option;
+  for (const l of (devis.sections ?? []).flatMap((s) => s.lignes ?? [])) {
+    if (!l.option) delete l.option;
+    else if (l.option_retenue === undefined) l.option_retenue = true; // option proposée par l'IA : incluse dans le prix envoyé
+  }
   // Chantier créé depuis la fiche d'un client : ses coordonnées vont directement dans le devis.
   const lie = await clientParId(conversation.clientId);
   if (lie) {
@@ -3107,7 +3110,9 @@ function rendreDocument() {
             <td><div ${editable} data-champ="designation" data-s="${si}" data-l="${li}">${esc(l.designation)}</div>
               ${l.detail ? `<div class="detail" ${editable} data-champ="detail" data-s="${si}" data-l="${li}">${esc(l.detail)}</div>` : ""}
               ${l.calcul ? `<div class="calcul">${esc(l.calcul)}</div>` : ""}
-              ${option ? `<span class="badge-option">${l.option_retenue ? "Option retenue ✓" : "Option au choix du client"}</span>` : ""}
+              ${option ? (!verrouille && !facture
+                ? `<button type="button" class="badge-option" data-inclure="${si}-${li}" title="Appuie pour changer">${l.option_retenue ? "Option incluse · le client peut l'enlever" : "Option non incluse · le client peut l'ajouter"} ⇄</button>`
+                : `<span class="badge-option">${l.option_retenue ? "Option incluse" : "Option non incluse"}</span>`) : ""}
               ${!verrouille && !facture ? `<button type="button" class="lien no-print bascule-option" data-option="${si}-${li}">${option ? "Ne plus proposer en option" : "Proposer en option"}</button>` : ""}
               ${
                 franchise || autoliquidation(v)
@@ -3286,7 +3291,16 @@ function rendreDocument() {
         if (l.option) {
           delete l.option;
           delete l.option_retenue;
-        } else l.option = true;
+        } else Object.assign(l, { option: true, option_retenue: true }); // comptée dans le prix ; le client peut l'enlever
+      });
+    };
+  }
+  for (const b of $("#document").querySelectorAll("[data-inclure]")) {
+    b.onclick = () => {
+      const [si, li] = b.dataset.inclure.split("-").map(Number);
+      majDocument((dv) => {
+        const l = dv.sections[si].lignes[li];
+        l.option_retenue = !l.option_retenue;
       });
     };
   }

@@ -144,7 +144,7 @@ export function genererPdf({ d, entreprise: e, elements, euros, nombre, dateFr }
   for (const s of v.sections ?? []) {
     corps.push([{ content: propre(s.titre), colSpan: 5, styles: modele === "epure" ? { fontStyle: "bold", textColor: BLEU } : { fillColor: BLEU_CLAIR, fontStyle: "bold" } }]);
     for (const l of s.lignes ?? []) {
-      const option = l.option ? (l.option_retenue ? "[Option retenue] " : "[Option non retenue] ") : "";
+      const option = l.option ? (l.option_retenue ? "[Option incluse] " : "[Option non incluse] ") : "";
       const tvaParticuliere = !elements.franchise && !autoliquidation(v) && tauxLigne(l, v) !== Number(v.taux_tva) ? ` (TVA ${nombre(tauxLigne(l, v))} %)` : "";
       corps.push([
         propre(`${option}${l.designation}${tvaParticuliere}${l.detail ? `\n${l.detail}` : ""}`),
