@@ -27,6 +27,7 @@ export async function demarrerPlateforme() {
     essai: false,
     agendaUrl: config.agendaUrl || `${config.supabaseUrl}/functions/v1/agenda`,
     pushUrl: config.pushUrl || `${config.supabaseUrl}/functions/v1/push`,
+    aideUrl: config.aideUrl || `${config.supabaseUrl}/functions/v1/aide`,
     sb,
     horsLigne,
     partageTelephone: true, // « Partager → Cagot » depuis les autres applis (service worker)

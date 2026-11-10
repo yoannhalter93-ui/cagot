@@ -891,3 +891,11 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .bouton-fichier { color: #fff !important; font-weight: 700; padding: 14px; }
 .suite-numerotation:not(:empty) { margin: 12px 0; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--bleu) 8%, var(--surface)); border: 1px solid var(--bord); }
 .suite-numerotation .btn-principal { width: 100%; }
+
+/* Aide : discussion avec l'assistant */
+.fil-aide { min-height: 120px; }
+.fil-aide .bulle a { color: inherit; font-weight: 600; }
+.suggestions-aide { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.suggestions-aide .puce { text-align: left; white-space: normal; }
+.saisie-aide textarea { min-height: 56px; }
+.saisie-aide #envoyer-aide { margin-left: auto; min-height: 44px; padding: 10px 22px; }

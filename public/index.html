@@ -25,6 +25,7 @@
       <button type="button" data-vue="devis">📝 Tous les devis</button>
       <button type="button" data-vue="factures">🧾 Toutes les factures</button>
       <button type="button" data-vue="notes">🗒️ Toutes les notes</button>
+      <button type="button" data-vue="aide">💬 Aide : pose ta question</button>
       <button type="button" data-vue="agenda">📅 Agenda</button>
       <button type="button" data-vue="journal">📒 Journal des ventes</button>
       <button type="button" data-vue="parametres">⚙️ Réglages</button>
@@ -109,6 +110,20 @@
     </div>
     <div id="grille-agenda"></div>
     <button type="button" id="abonnement-agenda" class="btn-secondaire bouton-large">📲 Voir ce planning dans l'agenda de mon téléphone</button>
+  </main>
+
+  <main id="vue-aide" class="vue" hidden>
+    <div class="entete-agenda">
+      <h2>💬 Aide</h2>
+      <button type="button" id="effacer-aide" class="lien">Nouvelle discussion</button>
+    </div>
+    <div id="fil-aide" class="fil fil-aide"></div>
+    <div id="suggestions-aide" class="suggestions-aide"></div>
+    <form id="saisie-aide" class="saisie saisie-aide">
+      <textarea id="texte-aide" rows="2" maxlength="1500" placeholder="Pose ta question sur Cagot… (ex. : comment j'envoie un devis ?)"></textarea>
+      <button type="submit" id="envoyer-aide" class="btn-principal">Envoyer</button>
+    </form>
+    <p class="aide centre">L'assistant peut se tromper. Pour un problème ou un cas particulier : <a href="/contact.html" target="_blank" rel="noopener">contact@cagot.fr</a></p>
   </main>
 
   <main id="vue-journal" class="vue" hidden>

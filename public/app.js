@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Import + numérotation";
+const VERSION_APPLI = "11 nov. 2026 · Assistant d'aide";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -404,7 +404,7 @@ function afficherVue(nom) {
     ? raccourci
     : ["chantier", "fiche", "chantiers"].includes(nom) || (ficheCourante && ["note", "document"].includes(nom))
       ? "chantiers"
-      : ["documents", "document", "notes", "note", "parametres", "journal", "agenda"].includes(nom)
+      : ["documents", "document", "notes", "note", "parametres", "journal", "agenda", "aide"].includes(nom)
         ? "plus"
         : nom;
   $("#menu-plus").hidden = true;
@@ -419,6 +419,7 @@ function afficherVue(nom) {
   if (nom === "clients") afficherClients();
   if (nom === "journal") afficherJournal();
   if (nom === "agenda") afficherAgenda();
+  if (nom === "aide") afficherAide();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
   noterDansHistorique(nom === "documents" ? (typeDocs === "facture" ? "factures" : "devis") : demande, nom);
@@ -4509,6 +4510,86 @@ async function afficherArchivesImport() {
     afficherArchivesImport();
   };
 }
+
+// ---------------------------------------------------------------------------
+// Aide : un assistant répond aux questions d'utilisation (fonction « aide », guide de Cagot)
+// ---------------------------------------------------------------------------
+const QUESTIONS_AIDE = [
+  "Comment faire mon premier devis ?",
+  "Comment envoyer un devis et le faire signer ?",
+  "Comment transformer un devis en facture ?",
+  "Comment annuler une facture ?",
+  "Quel taux de TVA mettre ?",
+  "Comment brancher ma boîte Gmail ?",
+  "Comment importer mes clients depuis Henrri ?",
+  "Comment être prévenu quand un client signe ?",
+];
+let echangesAide = [];
+let aideEnCours = false;
+
+function afficherAide() {
+  echangesAide = local.lire(`aide.${utilisateur.id}`, []);
+  rendreAide();
+  if (!matchMedia("(pointer: coarse)").matches) $("#texte-aide").focus();
+}
+
+// Texte de l'assistant : sauts de ligne, et l'adresse de contact devient un lien.
+const texteAide = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "$1").replace(/contact@cagot\.fr/g, '<a href="mailto:contact@cagot.fr">contact@cagot.fr</a>').replace(/\n/g, "<br>");
+
+function rendreAide() {
+  const fil = $("#fil-aide");
+  fil.innerHTML = `<div class="bulle ia">Salut ! Je réponds à tes questions sur Cagot : devis, factures, signature, TVA, réglages… Pose ta question ou touche un exemple ci-dessous.</div>${echangesAide
+    .map((e) => `<div class="bulle ${e.role === "user" ? "moi" : "ia"}">${e.role === "user" ? esc(e.texte).replace(/\n/g, "<br>") : texteAide(e.texte)}</div>`)
+    .join("")}${aideEnCours ? `<div class="bulle ia attente">Je cherche la réponse…</div>` : ""}`;
+  $("#suggestions-aide").innerHTML = echangesAide.length ? "" : QUESTIONS_AIDE.map((q) => `<button type="button" class="puce" data-question-aide="${esc(q)}">${esc(q)}</button>`).join("");
+  for (const b of document.querySelectorAll("[data-question-aide]")) b.onclick = () => poserQuestionAide(b.dataset.questionAide);
+  $("#effacer-aide").hidden = !echangesAide.length;
+  $("#envoyer-aide").disabled = aideEnCours;
+  fil.lastElementChild?.scrollIntoView({ block: "end", behavior: "smooth" });
+}
+
+async function poserQuestionAide(question) {
+  const q = String(question ?? "").trim();
+  if (!q || aideEnCours) return;
+  if (!navigator.onLine) return notifier("📴 L'aide a besoin du réseau.", "erreur");
+  echangesAide.push({ role: "user", texte: q.slice(0, 1500) });
+  aideEnCours = true;
+  $("#texte-aide").value = "";
+  rendreAide();
+  try {
+    const rep = await fetch(plateforme.aideUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await jetonAcces()}`, apikey: window.__cagotCle ?? "" },
+      body: JSON.stringify({ echanges: echangesAide.slice(-12) }),
+    });
+    const data = await rep.json().catch(() => ({}));
+    if (!rep.ok || !data.reponse) throw new Error(data.erreur || "L'assistant ne répond pas pour l'instant, réessaie dans un moment.");
+    echangesAide.push({ role: "assistant", texte: String(data.reponse).slice(0, 6000) });
+  } catch (err) {
+    echangesAide.pop(); // la question reste dans la zone de saisie pour réessayer
+    $("#texte-aide").value = q;
+    erreur(err.message, err);
+  } finally {
+    aideEnCours = false;
+    local.ecrire(`aide.${utilisateur.id}`, echangesAide.slice(-30));
+    rendreAide();
+  }
+}
+$("#saisie-aide").onsubmit = (e) => {
+  e.preventDefault();
+  poserQuestionAide($("#texte-aide").value);
+};
+$("#texte-aide").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) {
+    e.preventDefault();
+    poserQuestionAide($("#texte-aide").value);
+  }
+});
+$("#effacer-aide").onclick = () => {
+  echangesAide = [];
+  local.ecrire(`aide.${utilisateur.id}`, []);
+  rendreAide();
+};
 
 // --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---
 async function noterEnvoi(d, destinataires, moyen) {
