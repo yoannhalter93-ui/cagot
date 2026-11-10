@@ -286,23 +286,39 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
 
   <!-- ===== Vue réglages ===== -->
   <main id="vue-parametres" class="vue" hidden>
-    <div class="onglets-reglages" role="tablist">
-      <button type="button" data-onglet="entreprise" class="actif">Entreprise</button>
-      <button type="button" data-onglet="perso">🎨 Personnalisation</button>
-      <button type="button" data-onglet="tarifs">Tarifs</button>
-      <button type="button" data-onglet="mail">📧 Ma boîte mail</button>
-      <button type="button" data-onglet="comptable">🧮 Mon comptable</button>
-      <button type="button" data-onglet="interface">🖌️ Mon interface</button>
-      <button type="button" data-onglet="compte">Compte</button>
+    <div id="menu-reglages" class="menu-reglages">
+      <h2>Réglages</h2>
+      <h3>Mon entreprise</h3>
+      <button type="button" data-onglet="identite"><span class="icone-reglage">🏢</span><span><b>Coordonnées</b><small>Nom, adresse, téléphone, e-mail</small></span><i>›</i></button>
+      <button type="button" data-onglet="legal"><span class="icone-reglage">⚖️</span><span><b>Mentions légales et TVA</b><small>SIRET, TVA, assurance décennale, médiateur</small></span><i>›</i></button>
+      <button type="button" data-onglet="metiers"><span class="icone-reglage">🔨</span><span><b>Mes métiers</b><small>Ce que tu fais toi-même (le reste : sous-traitance)</small></span><i>›</i></button>
+      <h3>Mes devis et factures</h3>
+      <button type="button" data-onglet="tarifs"><span class="icone-reglage">📋</span><span><b>Ma grille de prix</b><small>Tes prix HT utilisés par l'IA</small></span><i>›</i></button>
+      <button type="button" data-onglet="paiement"><span class="icone-reglage">💶</span><span><b>Paiement et conditions</b><small>IBAN, acompte, validité, délai, conditions</small></span><i>›</i></button>
+      <button type="button" data-onglet="perso"><span class="icone-reglage">🎨</span><span><b>Apparence des documents</b><small>Logo, couleur, modèle, labels, pied de page</small></span><i>›</i></button>
+      <button type="button" data-onglet="textes"><span class="icone-reglage">✍️</span><span><b>Textes des documents</b><small>Phrases d'introduction et de fin</small></span><i>›</i></button>
+      <button type="button" data-onglet="numerotation"><span class="icone-reglage">🔢</span><span><b>Numérotation</b><small>Format des numéros de devis et factures</small></span><i>›</i></button>
+      <h3>Envoi et partage</h3>
+      <button type="button" data-onglet="mail"><span class="icone-reglage">📧</span><span><b>Ma boîte mail</b><small>Envoyer depuis ton adresse e-mail</small></span><i>›</i></button>
+      <button type="button" data-onglet="comptable"><span class="icone-reglage">🧮</span><span><b>Mon comptable</b><small>Accès en lecture seule à tes factures</small></span><i>›</i></button>
+      <button type="button" data-onglet="notifs"><span class="icone-reglage">🔔</span><span><b>Notifications</b><small>Être prévenu quand un client signe</small></span><i>›</i></button>
+      <h3>L'application</h3>
+      <button type="button" data-onglet="interface"><span class="icone-reglage">🖌️</span><span><b>Mon interface</b><small>Couleurs, taille du texte, barre du bas, accueil</small></span><i>›</i></button>
+      <button type="button" data-onglet="compte"><span class="icone-reglage">👤</span><span><b>Mon compte</b><small>Connexion, version, déconnexion</small></span><i>›</i></button>
     </div>
-    <form id="form-entreprise" class="carte">
-      <div data-panneau="entreprise">
-      <h2>Mon entreprise</h2>
+    <div id="entete-sous-reglage" class="entete-sous-reglage" hidden>
+      <button type="button" id="retour-reglages" class="lien">← Réglages</button>
+      <h2 id="titre-sous-reglage"></h2>
+    </div>
+    <form id="form-entreprise" class="carte" hidden>
+      <div data-panneau="identite" hidden>
       <label>Ton prénom (pour l'accueil) <input name="prenom" maxlength="60" autocomplete="given-name"></label>
       <label>Nom / raison sociale <input name="nom" maxlength="200"></label>
       <label>Adresse <textarea name="adresse" rows="2" maxlength="500"></textarea></label>
       <label>Téléphone <input name="telephone" type="tel" maxlength="30"></label>
       <label>E-mail <input name="email" type="email" maxlength="200"></label>
+      </div>
+      <div data-panneau="legal" hidden>
       <label>SIRET <input name="siret" maxlength="20"></label>
       <label>N° TVA intracommunautaire <input name="tva_intra" maxlength="20"></label>
       <label><input type="checkbox" name="franchise_tva"> Auto-entrepreneur (TVA non applicable, art. 293 B du CGI)</label>
@@ -310,18 +326,20 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <label>Assurance décennale (assureur, n° de contrat, zone) <textarea name="assurance" rows="2" maxlength="500"></textarea></label>
       <label>Médiateur de la consommation (nom et site internet) <input name="mediateur" maxlength="200" placeholder="Ex. : CM2C – www.cm2c.net"></label>
       <p class="aide">Obligatoire quand tu travailles pour des particuliers. Ta chambre des métiers ou ta fédération (CAPEB, FFB) t'en propose un, souvent gratuit ou à quelques euros par an.</p>
+      </div>
+      <div data-panneau="paiement" hidden>
       <label>IBAN (affiché sur les factures) <input name="iban" maxlength="40"></label>
       <label>Validité des devis (jours) <input name="validite" type="number" min="1" value="30"></label>
       <label>Acompte demandé à la signature (%) <input name="acompte" type="number" min="0" max="100" value="30"></label>
       <label>Délai de paiement des factures (jours) <input name="delai_paiement" type="number" min="0" value="30"></label>
-
-      <h2>Mes métiers</h2>
+      <label>Conditions particulières des devis <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
+      <label>Conditions particulières des factures <textarea name="conditions_facture" rows="3" maxlength="1500" placeholder="Laisse vide pour reprendre celles des devis."></textarea></label>
+      </div>
+      <div data-panneau="metiers" hidden>
       <p class="aide">L'IA te prévient quand des travaux sortent de tes métiers (sous-traitance).</p>
       <div id="liste-metiers" class="metiers"></div>
       </div>
-
       <div data-panneau="perso" hidden>
-      <h2>Personnalisation des documents</h2>
       <p class="aide">Ton logo et ta couleur apparaissent sur l'écran et dans les PDF envoyés aux clients.</p>
       <div class="reglage-logo">
         <div class="cadre-logo"><img id="apercu-logo" alt="Mon logo" hidden><span id="sans-logo">Pas de logo</span></div>
@@ -343,16 +361,6 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
         <label class="modele"><input type="radio" name="modele" value="epure"><span class="mini mini-epure"><i></i><b></b><em></em><em></em><u></u></span><strong>Épuré</strong><small>Lignes fines, sans aplats</small></label>
       </div>
 
-      <h3 class="titre-reglage">Textes des devis</h3>
-      <label>Introduction (avant le détail des travaux) <textarea name="intro_devis" rows="2" maxlength="1500" placeholder="Ex : Suite à notre visite, voici notre proposition pour les travaux demandés."></textarea></label>
-      <label>Texte de fin <textarea name="fin_devis" rows="2" maxlength="1500" placeholder="Ex : Merci de votre confiance. Nous restons à votre disposition pour toute question."></textarea></label>
-      <label>Conditions particulières des devis <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
-
-      <h3 class="titre-reglage">Textes des factures</h3>
-      <label>Introduction <textarea name="intro_facture" rows="2" maxlength="1500" placeholder="Ex : Facture des travaux réalisés conformément au devis accepté."></textarea></label>
-      <label>Texte de fin <textarea name="fin_facture" rows="2" maxlength="1500" placeholder="Ex : Merci pour votre règlement et pour votre confiance."></textarea></label>
-      <label>Conditions particulières des factures <textarea name="conditions_facture" rows="3" maxlength="1500" placeholder="Laisse vide pour reprendre celles des devis."></textarea></label>
-
       <h3 class="titre-reglage">Labels et certifications</h3>
       <p class="aide">RGE, Qualibat, Handibat, Artisan de confiance… Ajoute leurs logos : ils apparaissent en bas de tes devis et factures et rassurent tes clients.</p>
       <div id="liste-labels" class="liste-labels"></div>
@@ -361,8 +369,16 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
 
       <h3 class="titre-reglage">Pied de page</h3>
       <label>Texte en bas de chaque page <textarea name="pied_page" rows="2" maxlength="400" placeholder="Ex : SARL au capital de 5 000 € – RCS Lyon 123 456 789 – APE 4334Z"></textarea></label>
-
-      <h3 class="titre-reglage">Numérotation</h3>
+      </div>
+      <div data-panneau="textes" hidden>
+      <h3 class="titre-reglage">Devis</h3>
+      <label>Introduction (avant le détail des travaux) <textarea name="intro_devis" rows="2" maxlength="1500" placeholder="Ex : Suite à notre visite, voici notre proposition pour les travaux demandés."></textarea></label>
+      <label>Texte de fin <textarea name="fin_devis" rows="2" maxlength="1500" placeholder="Ex : Merci de votre confiance. Nous restons à votre disposition pour toute question."></textarea></label>
+      <h3 class="titre-reglage">Factures</h3>
+      <label>Introduction <textarea name="intro_facture" rows="2" maxlength="1500" placeholder="Ex : Facture des travaux réalisés conformément au devis accepté."></textarea></label>
+      <label>Texte de fin <textarea name="fin_facture" rows="2" maxlength="1500" placeholder="Ex : Merci pour votre règlement et pour votre confiance."></textarea></label>
+      </div>
+      <div data-panneau="numerotation" hidden>
       <label>Format des numéros de factures
         <select name="format_facture">
           <option value="">Début-année-numéro (ex. FAC-2026-001)</option>
@@ -381,7 +397,6 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
     </form>
 
     <div class="carte" data-panneau="tarifs" hidden>
-      <h2>Ma grille de prix (HT)</h2>
       <p class="aide">L'IA chiffre avec tes prix. Quand un prix manque, elle l'estime et le signale sur le devis : tu peux alors l'ajouter à ta grille en un clic.</p>
       <div id="grille-tarifs"></div>
       <div class="actions">
@@ -390,7 +405,6 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
     </div>
 
     <div class="carte" data-panneau="mail" hidden>
-      <h2>Ma boîte mail</h2>
       <p class="aide">Branche ta boîte mail : tes devis et factures partent de <strong>ton adresse</strong>, avec le PDF joint, en un appui sur « Envoyer ». Ils apparaissent dans tes messages envoyés et ton client te répond directement.</p>
       <div id="etat-boite" class="etat-boite"><p class="aide">Chargement…</p></div>
       <form id="form-boite" hidden>
@@ -419,7 +433,6 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
     </div>
 
     <div class="carte" data-panneau="comptable" hidden>
-      <h2>Mon expert-comptable</h2>
       <p class="aide">Donne à ton expert-comptable un accès direct, <strong>en lecture seule</strong>, à tes <strong>factures émises et payées</strong> : il les consulte, télécharge les PDF et exporte le tableau pour ta compta et ta TVA. Il ne voit ni tes devis, ni tes chantiers, ni tes notes, et ne peut rien modifier. Tu peux retirer l'accès à tout moment.</p>
       <div id="liste-comptables"></div>
       <form id="form-comptable">
@@ -431,7 +444,6 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
     </div>
 
     <div class="carte" data-panneau="interface" hidden>
-      <h2>Mon interface</h2>
       <p class="aide">Choisis l'apparence de Cagot. Tout s'applique tout de suite et se retrouve sur ton téléphone comme sur ta tablette.</p>
       <h3 class="titre-reglage">Couleurs</h3>
       <div id="choix-themes" class="choix-themes"></div>
@@ -457,10 +469,14 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
     </div>
 
     <div class="carte" id="carte-compte" data-panneau="compte" hidden>
-      <h2>Mon compte</h2>
       <p class="aide">Connecté en tant que <strong id="email-compte"></strong></p>
       <p class="aide">Version de l'appli : <strong id="version-appli"></strong></p>
       <button id="deconnexion">Se déconnecter</button>
+    </div>
+    <div class="carte" data-panneau="notifs" hidden>
+      <p class="aide">Reçois une notification sur ce téléphone quand un client signe un devis en ligne, même quand Cagot est fermé.</p>
+      <button type="button" id="reglage-notifs" class="btn-principal">🔔 Activer les notifications sur ce téléphone</button>
+      <p class="aide">À faire sur chaque téléphone ou tablette où tu veux être prévenu. Sur iPhone, installe d'abord Cagot sur l'écran d'accueil.</p>
     </div>
   </main>
 

@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Logo → accueil";
+const VERSION_APPLI = "10 nov. 2026 · Réglages rangés";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -377,7 +377,10 @@ window.addEventListener("popstate", async (e) => {
     if (s.vue === "document" && s.id) await ouvrirDocument(s.id);
     else if (s.vue === "fiche" && s.id) await ouvrirFiche(s.id);
     else if (s.vue === "note" && s.id) await ouvrirNote(s.id);
-    else afficherVue(s.vue);
+    else if (s.vue === "parametres") {
+      if ($("#vue-parametres").hidden) afficherVue("parametres");
+      ouvrirReglage(s.id ?? null, { historique: false });
+    } else afficherVue(s.vue);
   } finally {
     retourEnCours = false;
     etatCourant = s;
@@ -942,18 +945,29 @@ document.addEventListener(
   { passive: false },
 );
 
-// Réglages en onglets
-for (const b of document.querySelectorAll(".onglets-reglages [data-onglet]")) {
-  b.onclick = () => {
-    if (b.dataset.onglet === "mail") afficherBoite();
-    if (b.dataset.onglet === "comptable") afficherComptables();
-    if (b.dataset.onglet === "interface") rendreReglagesInterface();
-    if (b.dataset.onglet === "tarifs") requestAnimationFrame(ajusterNomsTarifs);
-    for (const x of document.querySelectorAll(".onglets-reglages [data-onglet]")) x.classList.toggle("actif", x === b);
-    for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== b.dataset.onglet;
-    $("#form-entreprise").hidden = !["entreprise", "perso"].includes(b.dataset.onglet);
-  };
+// Réglages : un menu rangé par thème ; chaque ligne ouvre sa page (← Réglages pour revenir).
+function ouvrirReglage(nom, { historique = true } = {}) {
+  const PANNEAUX_FORMULAIRE = ["identite", "legal", "paiement", "metiers", "perso", "textes", "numerotation"];
+  const b = document.querySelector(`#menu-reglages [data-onglet="${nom}"]`);
+  $("#menu-reglages").hidden = !!nom;
+  $("#entete-sous-reglage").hidden = !nom;
+  $("#titre-sous-reglage").textContent = b ? b.querySelector("b").textContent : "";
+  for (const p of document.querySelectorAll("#vue-parametres [data-panneau]")) p.hidden = p.dataset.panneau !== nom;
+  $("#form-entreprise").hidden = !PANNEAUX_FORMULAIRE.includes(nom);
+  if (nom === "mail") afficherBoite();
+  if (nom === "comptable") afficherComptables();
+  if (nom === "interface") rendreReglagesInterface();
+  if (nom === "tarifs") requestAnimationFrame(ajusterNomsTarifs);
+  window.scrollTo(0, 0);
+  if (historique && nom && !retourEnCours) {
+    etatCourant = { cagot: true, vue: "parametres", id: nom };
+    history.pushState(etatCourant, "");
+  }
 }
+for (const b of document.querySelectorAll("#menu-reglages [data-onglet]")) b.onclick = () => ouvrirReglage(b.dataset.onglet);
+if (plateforme.demo) window.ouvrirReglageTest = (o) => ouvrirReglage(o); // tests automatiques (mode démo uniquement)
+$("#retour-reglages").onclick = () => (history.state?.vue === "parametres" && history.state?.id ? history.back() : ouvrirReglage(null));
+$("#reglage-notifs").onclick = () => activerNotifications();
 
 // ---------------------------------------------------------------------------
 // Voix : dictée (reconnaissance vocale) et synthèse vocale
@@ -4524,6 +4538,8 @@ $("#supprimer").onclick = async () => {
 // Réglages : entreprise, métiers et grille de prix
 // ---------------------------------------------------------------------------
 function afficherParametres() {
+  // Arrivée dans les réglages : le menu (ou directement les coordonnées au tout premier lancement).
+  ouvrirReglage(profil.infos.nom ? null : "identite", { historique: false });
   const form = $("#form-entreprise");
   for (const champ of form.elements) {
     if (!champ.name || champ.name === "labels") continue;

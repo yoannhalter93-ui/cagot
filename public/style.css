@@ -858,3 +858,19 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .bandeau-signatures .lien { display: block; margin: 2px auto 0; }
 :root[data-theme="dark"] .bandeau-signatures { background: #183526; border-color: #2e6b45; }
 .logo-bouton { display: inline-flex; align-items: center; gap: inherit; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+/* Réglages : menu rangé par thème */
+.menu-reglages h2 { margin: 0 0 6px; }
+.menu-reglages h3 { margin: 18px 4px 6px; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gris); }
+.menu-reglages button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; margin: 0; border: 1px solid var(--bord); border-bottom-width: 0; background: var(--surface); color: var(--texte); font: inherit; cursor: pointer; }
+.menu-reglages h3 + button { border-radius: 14px 14px 0 0; }
+.menu-reglages button:has(+ h3), .menu-reglages button:last-child { border-bottom-width: 1px; border-radius: 0 0 14px 14px; }
+.menu-reglages h3 + button:has(+ h3), .menu-reglages h3 + button:last-child { border-radius: 14px; }
+.menu-reglages b { display: block; font-size: 1rem; }
+.menu-reglages small { display: block; color: var(--gris); font-size: .85rem; }
+.menu-reglages .icone-reglage { font-size: 1.35rem; width: 30px; text-align: center; flex: none; }
+.menu-reglages i { margin-left: auto; font-style: normal; font-size: 1.4rem; color: var(--gris); }
+.menu-reglages[hidden], .entete-sous-reglage[hidden] { display: none !important; }
+.entete-sous-reglage { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 10px; }
+.entete-sous-reglage h2 { margin: 0; }
+#form-entreprise .btn-enregistrer { position: sticky; bottom: calc(var(--nav, 64px) + 10px); width: 100%; margin-top: 16px; }
