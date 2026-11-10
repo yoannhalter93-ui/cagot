@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Ma semaine";
+const VERSION_APPLI = "11 nov. 2026 · Semaine compacte";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -616,32 +616,33 @@ function htmlPlanning() {
     ${aujourdhui.map(ligne).join("")}${suite.length && aujourdhui.length ? `<p class="petit-titre">Ensuite</p>` : ""}${suite.map(avecJour).join("")}`;
 }
 
-// Planning en grand : les 7 prochains jours, une ligne par jour (chantiers sur plusieurs jours répétés chaque jour).
+// Planning en grand : bande compacte des 7 prochains jours (points de couleur), détail du jour touché en dessous.
+let jourBandeAccueil = 0;
 function htmlSemaine() {
   const auj = jourSeul(new Date());
   const rdv = donneesAccueil.rdv ?? [];
   const jours = Array.from({ length: 7 }, (_, i) => ajouterJoursDate(auj, i));
-  const i0 = (j) => j.getTime() === auj.getTime();
   const duJour = (j) => {
     const lendemain = ajouterJoursDate(j, 1);
-    // Journées entières : chaque jour couvert ; rendez-vous à l'heure : seulement le jour où il commence.
-    return rdv.filter((x) => (x.journee ? x.debut < lendemain && x.fin > j : x.debut >= j && x.debut < lendemain) || (!x.journee && i0(j) && x.debut < j && x.fin > new Date()));
+    // Journées entières : chaque jour couvert ; rendez-vous à l'heure : le jour où il commence (ou aujourd'hui s'il est en cours).
+    return rdv.filter((x) => (x.journee ? x.debut < lendemain && x.fin > j : (x.debut >= j && x.debut < lendemain) || (j.getTime() === auj.getTime() && x.debut < j && x.fin > new Date())));
   };
-  if (!jours.some((j) => duJour(j).length)) return ""; // semaine vide : pas d'agenda vide
-  const puce = (x) => {
-    const t = typesRdv()[x.type] ?? typesRdv().rdv;
-    return `<button type="button" class="puce-rdv type-${esc(x.type)}" data-rdv="${esc(x.id)}">${x.journee ? "" : `<b>${esc(heure(x.debut))}</b> `}${t.icone} ${esc(x.titre)}</button>`;
-  };
+  const parJour = jours.map(duJour);
+  if (!parJour.some((l) => l.length)) return ""; // semaine vide : pas d'agenda vide
+  const choisi = Math.min(Math.max(jourBandeAccueil, 0), 6);
+  const liste = parJour[choisi];
+  const nomChoisi = choisi === 0 ? "Aujourd'hui" : choisi === 1 ? "Demain" : jours[choisi].toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
   return `<div class="titre-section ligne-titre"><h3>🗓️ Ma semaine</h3><button type="button" class="lien" data-vue="agenda">Agenda ›</button></div>
-    <div class="semaine-accueil">${jours
-      .map((j, i) => {
-        const liste = duJour(j);
-        const nom = i === 0 ? "Auj." : i === 1 ? "Demain" : j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
-        return `<div class="jour-semaine ${i === 0 ? "aujourdhui" : ""} ${liste.length ? "" : "libre"}">
-          <span class="nom-jour-semaine">${esc(nom[0].toUpperCase() + nom.slice(1))}<small>${j.getDate()}</small></span>
-          <span class="puces-jour">${liste.length ? liste.map(puce).join("") : `<em>libre</em>`}</span></div>`;
-      })
-      .join("")}</div>`;
+    <div class="bande-semaine">${jours
+      .map(
+        (j, i) => `<button type="button" class="jour-bande ${i === 0 ? "aujourdhui" : ""} ${i === choisi ? "choisi" : ""}" data-jour-bande="${i}" aria-label="${esc(j.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" }))}">
+          <small>${esc(j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").slice(0, 3))}</small><b>${j.getDate()}</b>
+          <span class="points">${parJour[i].slice(0, 3).map((x) => `<i class="type-${esc(x.type)}"></i>`).join("")}</span></button>`,
+      )
+      .join("")}</div>
+    <div class="detail-jour"><p class="petit-titre">${esc(nomChoisi[0].toUpperCase() + nomChoisi.slice(1))}</p>${
+      liste.length ? liste.map((x) => htmlElementAgenda(x, jours[choisi])).join("") : `<p class="aide">Libre 🙂</p>`
+    }</div>`;
 }
 
 // À faire : ce qui demande l'attention de l'artisan, le plus urgent d'abord (argent en jeu, puis clients qui attendent).
@@ -702,6 +703,12 @@ function rendreAccueil() {
   }
   for (const b of grille.querySelectorAll("[data-ouvrir-chantier]")) b.onclick = () => ouvrirFiche(b.dataset.ouvrirChantier);
   for (const b of grille.querySelectorAll("[data-ouvrir-doc]")) b.onclick = () => ouvrirDocument(b.dataset.ouvrirDoc);
+  for (const b of grille.querySelectorAll("[data-jour-bande]")) {
+    b.onclick = () => {
+      jourBandeAccueil = Number(b.dataset.jourBande);
+      rendreAccueil();
+    };
+  }
   for (const b of grille.querySelectorAll("[data-rdv]")) {
     b.onclick = () => {
       const x = (donneesAccueil.rdv ?? []).find((r) => r.id === b.dataset.rdv);
