@@ -874,3 +874,18 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .entete-sous-reglage { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 10px; }
 .entete-sous-reglage h2 { margin: 0; }
 #form-entreprise .btn-enregistrer { position: sticky; bottom: calc(var(--nav, 64px) + 10px); width: 100%; margin-top: 16px; }
+
+/* Import de données */
+.bouton-fichier { display: block; text-align: center; margin: 12px 0; cursor: pointer; }
+.aide-import { margin: 8px 0; font-size: .92rem; }
+.aide-import summary { cursor: pointer; font-weight: 600; color: var(--bleu); }
+.colonnes-import { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 12px; }
+.colonnes-import label { font-size: .9rem; }
+.colonnes-import select { width: 100%; }
+.table-import { width: 100%; border-collapse: collapse; font-size: .85rem; margin: 6px 0; }
+.table-import th, .table-import td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--bord); overflow-wrap: anywhere; vertical-align: top; }
+.table-import .num { text-align: right; white-space: nowrap; }
+.succes-import { background: #e3f4ea; color: #1e5c35; padding: 10px 12px; border-radius: 12px; }
+.cherche-import { width: 100%; margin: 6px 0; }
+#fichier-import { display: none !important; }
+.bouton-fichier { color: #fff !important; font-weight: 700; padding: 14px; }

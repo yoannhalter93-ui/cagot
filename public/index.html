@@ -304,6 +304,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <button type="button" data-onglet="notifs"><span class="icone-reglage">🔔</span><span><b>Notifications</b><small>Être prévenu quand un client signe</small></span><i>›</i></button>
       <h3>L'application</h3>
       <button type="button" data-onglet="interface"><span class="icone-reglage">🖌️</span><span><b>Mon interface</b><small>Couleurs, taille du texte, barre du bas, accueil</small></span><i>›</i></button>
+      <button type="button" data-onglet="importer"><span class="icone-reglage">📥</span><span><b>Importer mes données</b><small>Clients et anciennes factures (Henrri, Excel…)</small></span><i>›</i></button>
       <button type="button" data-onglet="compte"><span class="icone-reglage">👤</span><span><b>Mon compte</b><small>Connexion, version, déconnexion</small></span><i>›</i></button>
     </div>
     <div id="entete-sous-reglage" class="entete-sous-reglage" hidden>
@@ -472,6 +473,15 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <p class="aide">Connecté en tant que <strong id="email-compte"></strong></p>
       <p class="aide">Version de l'appli : <strong id="version-appli"></strong></p>
       <button id="deconnexion">Se déconnecter</button>
+    </div>
+    <div class="carte" data-panneau="importer" hidden>
+      <p class="aide">Tu viens d'un autre logiciel (Henrri, Excel, autre) ? Récupère tes <strong>clients</strong> et tes <strong>anciennes factures</strong>. Exporte-les d'abord depuis ton ancien logiciel en fichier <strong>Excel (.xlsx)</strong> ou <strong>CSV</strong>, puis choisis le fichier ici.</p>
+      <details class="aide-import"><summary>Où trouver l'export dans Henrri ?</summary>
+        <p>Sur ordinateur (henrri.com) : dans la liste de tes <b>Clients</b>, puis dans la liste de tes <b>Documents</b> (factures, devis), cherche le bouton <b>Exporter</b> (Excel). Autre possibilité : menu <b>Comptabilité → export comptable</b> (option à activer dans « Gérer mes options »), qui donne un fichier .zip : décompresse-le et importe ici les fichiers .csv qu'il contient.</p>
+      </details>
+      <label class="btn-principal bouton-fichier">📂 Choisir un fichier<input type="file" id="fichier-import" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
+      <div id="apercu-import"></div>
+      <div id="archives-import"></div>
     </div>
     <div class="carte" data-panneau="notifs" hidden>
       <p class="aide">Reçois une notification sur ce téléphone quand un client signe un devis en ligne, même quand Cagot est fermé.</p>

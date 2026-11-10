@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 const lire = (f) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
 
 // Modules concaténés dans l'ordre des dépendances ; les import/export sont retirés.
-const modules = ["src/calcul.js", "src/corps-etat.js", "src/prompt.js", "scripts/essai/plateforme-essai.js", "public/personnalisation.js", "public/mentions-legales.js", "public/interface.js", "public/facturx.js", "public/pdf-devis.js", "public/logo.js", "public/app.js"];
+const modules = ["src/calcul.js", "src/corps-etat.js", "src/prompt.js", "scripts/essai/plateforme-essai.js", "public/personnalisation.js", "public/mentions-legales.js", "public/interface.js", "public/facturx.js", "public/import.js", "public/pdf-devis.js", "public/logo.js", "public/app.js"];
 const code = modules
   .map((f) => `// ---- ${f}\n${lire(f).replace(/^import [^;]+;\n/gm, "").replace(/^export /gm, "")}`)
   .join("\n");

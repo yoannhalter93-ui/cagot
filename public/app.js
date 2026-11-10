@@ -6,6 +6,7 @@ import { xmlFacturX } from "/facturx.js";
 import { couleurDominante, nettoyerLogo } from "/logo.js";
 import { NATURES, autoliquidation, estParticulier, mentionsTvaReduite, ventilationTva, formulaireRetractation, horsEtablissement, mentionsClient, texteAcompte } from "/mentions-legales.js";
 import { BLOCS_ACCUEIL, INTERFACE_DEFAUT, RACCOURCIS, THEMES, appliquerInterface, interfaceValide } from "/interface.js";
+import { CHAMPS_IMPORT, construireClients, construireFactures, detecterColonnes, devinerSorte, lireFichierImport, trouverEntete } from "/import.js";
 import { LABELS_MAX, conditionsDe, htmlPersonnalisation, labelsDe, modeleDe } from "/personnalisation.js";
 
 // ---------------------------------------------------------------------------
@@ -166,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Réglages rangés";
+const VERSION_APPLI = "10 nov. 2026 · Import de données";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -958,6 +959,7 @@ function ouvrirReglage(nom, { historique = true } = {}) {
   if (nom === "comptable") afficherComptables();
   if (nom === "interface") rendreReglagesInterface();
   if (nom === "tarifs") requestAnimationFrame(ajusterNomsTarifs);
+  if (nom === "importer") afficherArchivesImport().catch(console.error);
   window.scrollTo(0, 0);
   if (historique && nom && !retourEnCours) {
     etatCourant = { cagot: true, vue: "parametres", id: nom };
@@ -4300,6 +4302,173 @@ navigator.serviceWorker?.addEventListener("message", (e) => {
 window.addEventListener("hashchange", () => {
   if (utilisateur) ouvrirLienNotification();
 });
+
+// ---------------------------------------------------------------------------
+// Import depuis un autre logiciel (Henrri, Excel…) : clients et anciennes factures (archive)
+// ---------------------------------------------------------------------------
+let importEnCours = null; // { lignes, entete, sorte, col, nomFichier }
+
+$("#fichier-import").onchange = async (ev) => {
+  const f = ev.target.files?.[0];
+  ev.target.value = "";
+  if (!f) return;
+  if (f.size > 20 * 1024 * 1024) return notifier("Fichier trop lourd (20 Mo au maximum).", "erreur");
+  try {
+    const lignes = await lireFichierImport(f);
+    if (lignes.length < 2) return notifier("Ce fichier ne contient pas de lignes à importer.", "erreur");
+    const entete = trouverEntete(lignes);
+    const sorte = devinerSorte(lignes[entete]);
+    importEnCours = { lignes, entete, sorte, col: detecterColonnes(lignes[entete], sorte), nomFichier: f.name };
+    await rendreApercuImport();
+  } catch (err) {
+    erreur(err.message?.includes("format") || err.message?.includes("Excel") ? err.message : "Fichier illisible : exporte-le en .xlsx ou en .csv et réessaie.", err);
+  }
+};
+
+async function rendreApercuImport() {
+  const zone = $("#apercu-import");
+  const x = importEnCours;
+  if (!x) return (zone.innerHTML = "");
+  const entetes = x.lignes[x.entete];
+  const corps = x.lignes.slice(x.entete + 1);
+  const exemple = (i) => corps.map((l) => String(l[i] ?? "").trim()).find(Boolean) ?? "";
+  const options = (choisi) =>
+    `<option value="">— ne pas importer —</option>${entetes.map((t, i) => `<option value="${i}" ${choisi === i ? "selected" : ""}>${esc(String(t || `Colonne ${i + 1}`))}${exemple(i) ? ` (ex. ${esc(exemple(i).slice(0, 25))})` : ""}</option>`).join("")}`;
+  const champs = CHAMPS_IMPORT[x.sorte];
+  const donnees = x.sorte === "clients" ? construireClients(corps, x.col) : construireFactures(corps, x.col, sourceImport(x.nomFichier));
+  // Déjà présents : clients (même e-mail ou même nom) ; factures (même type + numéro).
+  let deja = 0;
+  if (x.sorte === "clients") {
+    if (!clients) await chargerClients().catch(() => {});
+    const emails = new Set((clients ?? []).map((c) => normaliser(c.email)).filter(Boolean));
+    const noms = new Set((clients ?? []).map((c) => normaliser(c.nom)).filter(Boolean));
+    x.aImporter = [];
+    for (const c of donnees) {
+      const present = (c.email && emails.has(normaliser(c.email))) || noms.has(normaliser(c.nom));
+      if (present) deja++;
+      else {
+        x.aImporter.push(c);
+        if (c.email) emails.add(normaliser(c.email));
+        noms.add(normaliser(c.nom));
+      }
+    }
+  } else {
+    const { data } = await sb.from("factures_importees").select("type, numero").limit(20000);
+    const vus = new Set((data ?? []).map((f) => `${f.type}|${f.numero}`));
+    x.aImporter = [];
+    for (const f of donnees) {
+      const cle = `${f.type}|${f.numero}`;
+      if (vus.has(cle)) deja++;
+      else {
+        x.aImporter.push(f);
+        vus.add(cle);
+      }
+    }
+  }
+  const n = x.aImporter.length;
+  const nom = x.sorte === "clients" ? (k) => `${k} client${k > 1 ? "s" : ""}` : (k) => `${k} document${k > 1 ? "s" : ""}`;
+  const apercu =
+    x.sorte === "clients"
+      ? `<table class="table-import"><thead><tr><th>Nom</th><th>Adresse</th><th>Téléphone</th><th>E-mail</th></tr></thead><tbody>${x.aImporter
+          .slice(0, 5)
+          .map((c) => `<tr><td>${esc(c.nom)}</td><td>${esc(c.adresse.replace(/\n/g, ", "))}</td><td>${esc(c.telephone)}</td><td>${esc(c.email)}</td></tr>`)
+          .join("")}</tbody></table>`
+      : `<table class="table-import"><thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">TTC</th></tr></thead><tbody>${x.aImporter
+          .slice(0, 5)
+          .map((f) => `<tr><td>${f.type === "facture" ? "" : `${f.type === "avoir" ? "Avoir" : "Devis"} `}${esc(f.numero)}</td><td>${f.date_document ? dateFr(f.date_document) : "?"}</td><td>${esc(f.client_nom)}</td><td class="num">${f.total_ttc === null ? "?" : euros(f.total_ttc)}</td></tr>`)
+          .join("")}</tbody></table>`;
+  zone.innerHTML = `<div class="etape-import">
+    <h3 class="titre-reglage">1. Ce fichier contient</h3>
+    <div class="segments"><label><input type="radio" name="sorte-import" value="clients" ${x.sorte === "clients" ? "checked" : ""}><span>👤 Des clients</span></label><label><input type="radio" name="sorte-import" value="factures" ${x.sorte === "factures" ? "checked" : ""}><span>🧾 Des factures / devis</span></label></div>
+    <h3 class="titre-reglage">2. Colonnes reconnues</h3>
+    <p class="aide">Vérifie : corrige une colonne si besoin.</p>
+    <div class="colonnes-import">${Object.entries(champs)
+      .map(([k, def]) => `<label>${esc(def.libelle)}<select data-champ-import="${k}">${options(x.col[k])}</select></label>`)
+      .join("")}</div>
+    <h3 class="titre-reglage">3. Aperçu</h3>
+    <p><strong>${nom(n)} à importer</strong>${deja ? ` · ${nom(deja)} déjà dans Cagot (ignoré${deja > 1 ? "s" : ""})` : ""}</p>
+    ${n ? apercu : ""}${n > 5 ? `<p class="aide">… et ${n - 5} de plus.</p>` : ""}
+    ${x.sorte === "factures" ? `<p class="aide">Les anciennes factures sont gardées en <strong>archive</strong> avec leur numéro d'origine : consultables, mais pas renumérotées ni modifiables (obligation légale). Garde aussi leurs PDF de ton ancien logiciel pendant 10 ans.</p>` : ""}
+    <div class="dialogue-actions"><button type="button" class="annuler" id="annuler-import">Annuler</button><button type="button" class="btn-principal" id="valider-import" ${n ? "" : "disabled"}>📥 Importer ${nom(n)}</button></div>
+  </div>`;
+  for (const r of zone.querySelectorAll("[name=sorte-import]")) {
+    r.onchange = () => {
+      x.sorte = r.value;
+      x.col = detecterColonnes(entetes, x.sorte);
+      rendreApercuImport();
+    };
+  }
+  for (const sel of zone.querySelectorAll("[data-champ-import]")) {
+    sel.onchange = () => {
+      if (sel.value === "") delete x.col[sel.dataset.champImport];
+      else x.col[sel.dataset.champImport] = Number(sel.value);
+      rendreApercuImport();
+    };
+  }
+  $("#annuler-import").onclick = () => {
+    importEnCours = null;
+    rendreApercuImport();
+  };
+  $("#valider-import").onclick = validerImport;
+}
+
+const sourceImport = (nomFichier) => (/henrri|exportcomptable/i.test(nomFichier) ? "henrri" : "import");
+
+async function validerImport() {
+  const x = importEnCours;
+  const bouton = $("#valider-import");
+  bouton.disabled = true;
+  const table = x.sorte === "clients" ? "clients" : "factures_importees";
+  let faits = 0;
+  try {
+    for (let i = 0; i < x.aImporter.length; i += 200) {
+      const paquet = x.aImporter.slice(i, i + 200);
+      bouton.textContent = `Import… ${faits}/${x.aImporter.length}`;
+      const { error } = x.sorte === "clients" ? await sb.from(table).insert(paquet) : await sb.from(table).upsert(paquet, { onConflict: "user_id,type,numero", ignoreDuplicates: true });
+      if (error) throw error;
+      faits += paquet.length;
+    }
+  } catch (err) {
+    bouton.disabled = false;
+    bouton.textContent = "📥 Réessayer";
+    return erreur(`Import interrompu après ${faits} ligne${faits > 1 ? "s" : ""} (connexion ?). Relance : ce qui est déjà importé ne sera pas recréé.`, err);
+  }
+  if (x.sorte === "clients") clients = null;
+  importEnCours = null;
+  $("#apercu-import").innerHTML = `<p class="succes-import">✅ ${faits} ${x.sorte === "clients" ? `client${faits > 1 ? "s" : ""} ajouté${faits > 1 ? "s" : ""} à ton carnet` : `document${faits > 1 ? "s" : ""} archivé${faits > 1 ? "s" : ""}`}.</p>`;
+  notifier("Import terminé.");
+  afficherArchivesImport();
+}
+
+// Archive des anciennes factures importées.
+async function afficherArchivesImport() {
+  const zone = $("#archives-import");
+  const { data, error } = await sb.from("factures_importees").select("*").order("date_document", { ascending: false, nullsFirst: false }).limit(5000);
+  if (error || !data?.length) return (zone.innerHTML = "");
+  const factures = data.filter((f) => f.type !== "devis");
+  const total = factures.reduce((t, f) => t + Number(f.total_ttc || 0), 0);
+  const derniere = data.filter((f) => f.type === "facture").sort((a, b) => String(b.date_document).localeCompare(String(a.date_document)) || String(b.numero).localeCompare(String(a.numero)))[0];
+  zone.innerHTML = `<h3 class="titre-reglage">📚 Anciens documents importés (${data.length})</h3>
+    <p class="aide">Factures et avoirs : ${euros(total)} TTC au total.${derniere ? ` Dernière facture : <strong>${esc(derniere.numero)}</strong> du ${dateFr(derniere.date_document)}. Pour continuer ta numérotation, va dans Réglages → Numérotation.` : ""}</p>
+    <input type="search" id="cherche-import" placeholder="Chercher (client, numéro…)" class="cherche-import">
+    <div id="liste-import"></div>
+    <button type="button" id="vider-import" class="lien danger-texte">Supprimer tous les documents importés</button>`;
+  const rendre = () => {
+    const q = normaliser($("#cherche-import").value);
+    const l = data.filter((f) => !q || normaliser(`${f.numero} ${f.client_nom} ${f.objet}`).includes(q)).slice(0, 100);
+    $("#liste-import").innerHTML = `<div class="defilement-table"><table class="table-import"><thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="num">TTC</th><th>Statut</th></tr></thead><tbody>${l
+      .map((f) => `<tr><td>${f.type === "facture" ? "" : `${f.type === "avoir" ? "Avoir" : "Devis"} `}${esc(f.numero)}</td><td>${f.date_document ? dateFr(f.date_document) : ""}</td><td>${esc(f.client_nom)}</td><td class="num">${f.total_ttc === null ? "" : euros(f.total_ttc)}</td><td>${esc(f.statut)}</td></tr>`)
+      .join("")}</tbody></table></div>`;
+  };
+  $("#cherche-import").oninput = rendre;
+  rendre();
+  $("#vider-import").onclick = async () => {
+    if (!(await demander(`Supprimer les ${data.length} documents importés ? (Tes devis et factures faits dans Cagot ne sont pas touchés.)`, { ok: "Supprimer", danger: true }))) return;
+    const { error: e } = await sb.from("factures_importees").delete().neq("numero", "");
+    if (e) return erreur("Suppression impossible.", e);
+    afficherArchivesImport();
+  };
+}
 
 // --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---
 async function noterEnvoi(d, destinataires, moyen) {
