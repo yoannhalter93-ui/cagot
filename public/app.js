@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Notifications";
+const VERSION_APPLI = "10 nov. 2026 · Suivi des signatures";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2291,7 +2291,13 @@ async function ouvrirFiche(id) {
     const { data: f } = await sb.from("documents").select("*").eq("devis_id", devis.id).eq("type", "facture").limit(1);
     facture = f?.[0] ?? null;
   }
-  ficheDonnees = { ch, note, devis, facture };
+  // Lien de signature : ouvert ? signé ? (pour dire clairement où en est le client)
+  let partage = null;
+  if (devis) {
+    const { data: p } = await sb.from("partages_devis").select("consulte_at, signe_at, signataire_nom, created_at").eq("document_id", devis.id).order("created_at", { ascending: false }).limit(5);
+    partage = { ouvert: (p ?? []).map((x) => x.consulte_at).filter(Boolean).sort()[0] ?? null, signe: (p ?? []).find((x) => x.signe_at) ?? null, existe: !!p?.length };
+  }
+  ficheDonnees = { ch, note, devis, facture, partage };
   afficherVue("fiche");
   ficheCourante = ch.id;
   rendreFiche();
@@ -2300,7 +2306,7 @@ async function ouvrirFiche(id) {
 }
 
 function rendreFiche() {
-  const { ch, note, devis, facture } = ficheDonnees;
+  const { ch, note, devis, facture, partage } = ficheDonnees;
   $("#titre-fiche").textContent = ch.titre || "Chantier sans titre";
   $("#client-fiche").textContent = devis?.contenu.client_nom || "";
   $("#vue-fiche .menu-plus").open = false;
@@ -2326,9 +2332,15 @@ function rendreFiche() {
     },
     {
       n: 3, titre: "Envoi au client", etat: etat(accepte || !!facture, !!devis && !accepte),
-      detail: !devis ? "Après le devis." : devis.statut === "brouillon" ? "Pas encore envoyé." : devis.statut === "envoye" ? `Envoyé ${ilYa(dateSuivi(devis, "envoye") || devis.updated_at)} · en attente de réponse` : accepte ? "Accepté par le client 🎉" : "Refusé par le client",
+      detail: !devis ? "Après le devis." : devis.statut === "brouillon" ? "Pas encore envoyé."
+        : devis.statut === "envoye"
+          ? `Envoyé ${ilYa(dateSuivi(devis, "envoye") || devis.updated_at)}<br>${
+              partage?.ouvert ? `👀 Lien ouvert le ${dateFr(partage.ouvert)} à ${heureFr(partage.ouvert)}` : partage?.existe ? "👀 Lien pas encore ouvert" : ""
+            }${partage?.existe ? "<br>⏳ <strong>Pas encore signé</strong>" : " · en attente de réponse"}`
+        : accepte ? (partage?.signe ? `✍️ <strong>Signé en ligne par ${esc(partage.signe.signataire_nom)}</strong> le ${dateFr(partage.signe.signe_at)} à ${heureFr(partage.signe.signe_at)} 🎉` : "✅ Accepté (marqué à la main)")
+        : "Refusé par le client",
       actions: !devis ? "" : devis.statut === "brouillon" ? bouton("envoyer", "📤 Envoyer", true) + bouton("statut-envoye", "Déjà envoyé")
-        : devis.statut === "envoye" ? bouton("statut-accepte", "✅ Accepté", true) + bouton("statut-refuse", "❌ Refusé")
+        : devis.statut === "envoye" ? bouton("envoyer", "🔁 Relancer") + bouton("statut-accepte", "✅ Accepté (sur papier)") + bouton("statut-refuse", "❌ Refusé")
         : devis.statut === "refuse" ? bouton("statut-envoye", "↩️ Remettre en attente") : "",
     },
     {
@@ -2346,7 +2358,7 @@ function rendreFiche() {
   const suivante = !s1 ? ["✍️ Écrire mes notes", "note"]
     : !devis ? ["🤖 Faire le devis avec l'IA", "faire-devis"]
     : devis.statut === "brouillon" ? ["📤 Envoyer le devis", "envoyer"]
-    : devis.statut === "envoye" ? ["✅ Le client a accepté", "statut-accepte"]
+    : devis.statut === "envoye" ? ["⏳ En attente de la signature · relancer", "envoyer"]
     : accepte && !facture ? ["🧾 Créer la facture", "facturer"]
     : facture?.statut === "brouillon" ? ["✅ Vérifier et émettre la facture", "facture"]
     : facture?.statut === "emise" ? ["💶 Marquer la facture payée", "payee"]
