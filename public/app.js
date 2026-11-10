@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Compagnon déplaçable";
+const VERSION_APPLI = "11 nov. 2026 · Nouvel accueil";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -458,7 +458,10 @@ let donneesAccueil = { docs: [], chantiers: [], erreurChantiers: false };
 
 async function afficherAccueil() {
   const e = profil.infos;
-  $("#bonjour").textContent = `Bonjour${e.prenom ? ` ${e.prenom}` : ""} 👋`;
+  const prenom = String(e.prenom ?? "").trim();
+  $("#bonjour").textContent = `Bonjour${prenom ? ` ${prenom[0].toUpperCase()}${prenom.slice(1)}` : ""} 👋`;
+  const jour = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  $("#date-accueil").textContent = jour[0].toUpperCase() + jour.slice(1);
   $("#nom-entreprise-accueil").textContent = e.nom || "";
   rendreAccueil();
   proposerNotifications();
@@ -499,6 +502,20 @@ function htmlCase(id) {
   const ligneDoc = (d, info) => `<button type="button" class="carte-chantier" data-ouvrir-doc="${esc(d.id)}"><span class="icone-chantier">${d.type === "devis" ? "📝" : "🧾"}</span>
       <span><strong>${esc(d.contenu.client_nom || d.contenu.titre || "Sans titre")}</strong><small>${esc(d.numero || "")} · ${info}</small></span><span class="montant">${euros(montantDoc(d))}</span></button>`;
   switch (id) {
+    case "planning":
+      return htmlPlanning();
+    case "a-faire":
+      return htmlAFaire(docs);
+    case "mon-activite": {
+      if (!docs.length) return "";
+      const { tuiles: t } = indicateurs(docs);
+      const court = (n) => `${Math.round(n).toLocaleString("fr-FR")} €`;
+      const somme = (liste) => liste.reduce((x, d) => x + montantDoc(d), 0);
+      const cellule = (cle, titre, liste, type) =>
+        `<button type="button" class="tuile chiffre ${liste.length ? "" : "vide"} ${t[cle].alerte ? "alerte" : ""}" data-filtre="${cle}" data-type="${type}"><strong>${court(somme(liste))}</strong><small>${titre}</small><span>${liste.length}</span></button>`;
+      return `<div class="titre-section ligne-titre"><h3>📊 Mon activité</h3><button type="button" class="lien" data-vue="journal">Détail ›</button></div>
+        <div class="mon-activite">${cellule("envoye", "En attente", par.envoye, "devis")}${cellule("accepte", "Acceptés", par.accepte, "devis")}${cellule("a-encaisser", "À encaisser", par["a-encaisser"], "facture")}${cellule("payee", "Encaissé", par.payee, "facture")}</div>`;
+    }
     case "ca-mois": {
       const debut = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
       const liste = docs.filter((d) => d.type === "facture" && d.statut !== "brouillon" && new Date(d.date_document) >= debut);
@@ -539,8 +556,11 @@ function htmlCase(id) {
         <svg viewBox="0 0 ${L} ${H + 20}" class="courbe-ca" role="img" aria-label="Chiffre d'affaires HT des 6 derniers mois">${barres}${noms}</svg></div>`;
     }
     case "nouveau":
-      return `<button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouveau chantier</button>
-        <p class="aide centre">Un chantier = le client, tes notes et photos, le devis et la facture, étape par étape.</p>`;
+      return `<div class="carte-ia">
+          <p class="carte-ia-titre">🎤 Tes notes de chantier deviennent un devis</p>
+          <p class="carte-ia-texte">Dicte, écris ou prends en photo : l'IA rédige le devis avec tes prix, prêt à signer.</p>
+          <button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouveau chantier</button>
+        </div>`;
     case "raccourcis":
       return `<div class="titre-section"><h3>⚡ Actions rapides</h3></div><div class="actions-rapides">
         <button type="button" data-action-accueil="chantier">🏗️<span>Chantier</span></button>
@@ -548,10 +568,12 @@ function htmlCase(id) {
         <button type="button" data-action-accueil="facture">🧾<span>Facture</span></button>
         <button type="button" data-action-accueil="client">👤<span>Client</span></button></div>`;
     case "chantiers":
+      if (!chantiers.length && !erreurChantiers) return ""; // le bouton « Nouveau chantier » suffit
       return `<div class="titre-section ligne-titre"><h3>Mes chantiers en cours</h3><button type="button" class="lien" data-vue="chantiers">Voir tout ›</button></div>
         ${
           chantiers.length
             ? chantiers
+                .slice(0, 3)
                 .map(
                   (ch) => `<button type="button" class="carte-chantier" data-ouvrir-chantier="${esc(ch.id)}">
             <span class="icone-chantier">🏗️</span><span><strong>${esc(ch.titre || "Chantier sans titre")}</strong><small>${ilYa(ch.updated_at)}</small></span>
@@ -579,16 +601,63 @@ function htmlCase(id) {
   return "";
 }
 
+// Mon planning : ce qui m'attend aujourd'hui (chantiers, visites, RDV), sinon les prochains jours.
+function htmlPlanning() {
+  if (!donneesAccueil.docs) return "";
+  const auj = jourSeul(new Date());
+  const demain = ajouterJoursDate(auj, 1);
+  const rdv = (donneesAccueil.rdv ?? []).filter((x) => x.fin >= new Date());
+  const aujourdhui = rdv.filter((x) => x.debut < demain);
+  const suite = rdv.filter((x) => x.debut >= demain).slice(0, aujourdhui.length ? 2 : 3);
+  if (!aujourdhui.length && !suite.length) return ""; // rien de prévu : pas d'agenda vide
+  const ligne = (x) => htmlElementAgenda(x, x.debut < auj ? auj : jourSeul(x.debut));
+  const avecJour = (x) => ligne(x).replace('<span class="heure-rdv">', `<span class="heure-rdv">${esc(jourSeul(x.debut).getTime() === demain.getTime() ? "demain" : nomJour(x.debut))} · `);
+  return `<div class="titre-section ligne-titre"><h3>🗓️ ${aujourdhui.length ? "Aujourd'hui" : "Prochainement"}</h3><button type="button" class="lien" data-vue="agenda">Agenda ›</button></div>
+    ${aujourdhui.map(ligne).join("")}${suite.length && aujourdhui.length ? `<p class="petit-titre">Ensuite</p>` : ""}${suite.map(avecJour).join("")}`;
+}
+
+// À faire : ce qui demande l'attention de l'artisan, le plus urgent d'abord (argent en jeu, puis clients qui attendent).
+function htmlAFaire(docs) {
+  if (!docs.length) return "";
+  const { par, factureDe } = indicateurs(docs);
+  const delai = Number(profil.infos.delai_paiement || 30);
+  const qui = (d) => d.contenu?.client_nom || d.contenu?.titre || "client";
+  const taches = [
+    ...par["a-encaisser"]
+      .filter((d) => joursDepuis(d.date_document) > delai)
+      .map((d) => ({ d, icone: "💶", texte: `Paiement en retard : ${qui(d)}`, detail: `échéance ${dateFr(ajouterJours(d.date_document, delai))}` })),
+    ...par.accepte.filter((d) => !factureDe.has(d.id)).map((d) => ({ d, icone: "🧾", texte: `Facturer ${qui(d)}`, detail: "devis accepté" })),
+    ...docs.filter((d) => d.type === "facture" && d.statut === "brouillon").map((d) => ({ d, icone: "✅", texte: `Émettre la facture de ${qui(d)}`, detail: "en brouillon" })),
+    ...par.envoye
+      .filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7)
+      .map((d) => ({ d, icone: "⏰", texte: `Relancer ${qui(d)}`, detail: `devis envoyé ${ilYa(dateSuivi(d, "envoye") || d.updated_at)}` })),
+    ...docs
+      .filter((d) => d.type === "devis" && d.statut === "brouillon" && Number(d.contenu?.total_ht) > 0)
+      .map((d) => ({ d, icone: "📤", texte: `Envoyer le devis de ${qui(d)}`, detail: "prêt, pas encore envoyé" })),
+  ];
+  if (!taches.length) return `<p class="rien-a-faire">✅ Rien d'urgent. Bonne journée sur le chantier !</p>`;
+  return `<div class="titre-section ligne-titre"><h3>👉 À faire <span class="compteur">${taches.length}</span></h3>${taches.length > 4 ? `<button type="button" class="lien" data-vue="chantiers">Tout voir ›</button>` : ""}</div>
+    ${taches
+      .slice(0, 4)
+      .map(
+        (t) => `<button type="button" class="carte-chantier tache" data-ouvrir-doc="${esc(t.d.id)}"><span class="icone-chantier">${t.icone}</span>
+        <span><strong>${esc(t.texte)}</strong><small>${esc(t.detail)}</small></span><span class="montant">${euros(montantDoc(t.d))}</span></button>`,
+      )
+      .join("")}`;
+}
+
 function rendreAccueil() {
   const grille = $("#blocs-accueil");
   const cases = reglagesInterface.accueil.filter((b) => b.visible);
   grille.classList.toggle("en-perso", persoAccueil);
   grille.innerHTML = cases
-    .map(
-      (b) => `<div class="case-accueil ${b.taille}" data-case="${b.id}">
+    .map((b) => {
+      const contenu = htmlCase(b.id);
+      if (!contenu && !persoAccueil) return ""; // accueil intelligent : rien à montrer, pas de place perdue
+      return `<div class="case-accueil ${b.taille}" data-case="${b.id}">
         ${persoAccueil ? `<div class="outils-case"><span class="poignee" aria-hidden="true">⠿</span><button type="button" data-taille-case="${b.id}" aria-label="Changer la taille">${b.taille === "large" ? "↙︎ Petite" : "↗︎ Grande"}</button><button type="button" data-masquer-case="${b.id}" aria-label="Retirer">✕</button></div>` : ""}
-        <div class="contenu-case">${htmlCase(b.id)}</div></div>`,
-    )
+        <div class="contenu-case">${contenu || `<p class="aide">${BLOCS_ACCUEIL[b.id].icone} ${esc(BLOCS_ACCUEIL[b.id].nom)} : s'affiche seulement quand il y a quelque chose.</p>`}</div></div>`;
+    })
     .join("");
   $("#barre-perso-accueil").hidden = !persoAccueil;
   $("#perso-accueil").hidden = persoAccueil;

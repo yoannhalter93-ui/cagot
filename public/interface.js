@@ -25,6 +25,9 @@ export const RACCOURCIS = {
 
 // Cases de l'accueil : l'artisan les déplace au doigt, les agrandit, les masque ou en ajoute.
 export const BLOCS_ACCUEIL = {
+  planning: { nom: "Mon planning (chantiers du jour)", icone: "🗓️", taille: "large" },
+  "a-faire": { nom: "À faire (relances, factures…)", icone: "👉", taille: "large" },
+  "mon-activite": { nom: "Mon activité (chiffres)", icone: "📊", taille: "large" },
   envoye: { nom: "Devis en attente", icone: "⏳", taille: "petit" },
   accepte: { nom: "Devis acceptés", icone: "✅", taille: "petit" },
   "a-encaisser": { nom: "À encaisser", icone: "💶", taille: "petit" },
@@ -48,14 +51,19 @@ export const INTERFACE_DEFAUT = {
   mode: "auto", // auto | clair | sombre
   taille: "normale",
   raccourcis: ["accueil", "chantiers", "clients"],
+  // Accueil « intelligent » : ce qu'il y a à faire d'abord, les chiffres ensuite ; un bloc vide ne s'affiche pas.
+  versionAccueil: 2,
   accueil: [
-    { id: "envoye", visible: true, taille: "petit" },
-    { id: "accepte", visible: true, taille: "petit" },
-    { id: "a-encaisser", visible: true, taille: "petit" },
-    { id: "payee", visible: true, taille: "petit" },
     { id: "nouveau", visible: true, taille: "large" },
+    { id: "planning", visible: true, taille: "large" },
+    { id: "a-faire", visible: true, taille: "large" },
+    { id: "mon-activite", visible: true, taille: "large" },
     { id: "chantiers", visible: true, taille: "large" },
-    { id: "agenda", visible: true, taille: "large" },
+    { id: "envoye", visible: false, taille: "petit" },
+    { id: "accepte", visible: false, taille: "petit" },
+    { id: "a-encaisser", visible: false, taille: "petit" },
+    { id: "payee", visible: false, taille: "petit" },
+    { id: "agenda", visible: false, taille: "large" },
     { id: "raccourcis", visible: false, taille: "large" },
     { id: "relances", visible: false, taille: "large" },
     { id: "retards", visible: false, taille: "large" },
@@ -69,6 +77,9 @@ export const INTERFACE_DEFAUT = {
 // Réglages complets et valides (un réglage abîmé ou ancien retombe sur la valeur par défaut).
 export function interfaceValide(i) {
   const v = { ...INTERFACE_DEFAUT, ...(i && typeof i === "object" ? i : {}) };
+  // Nouvel accueil (v2) : les anciens réglages d'accueil laissent place à la nouvelle disposition, une fois.
+  if (!(Number(i?.versionAccueil) >= INTERFACE_DEFAUT.versionAccueil)) v.accueil = structuredClone(INTERFACE_DEFAUT.accueil);
+  v.versionAccueil = INTERFACE_DEFAUT.versionAccueil;
   if (!THEMES.some((t) => t.id === v.theme)) v.theme = INTERFACE_DEFAUT.theme;
   if (!["auto", "clair", "sombre"].includes(v.mode)) v.mode = "auto";
   if (!(v.taille in TAILLES)) v.taille = "normale";

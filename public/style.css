@@ -422,9 +422,10 @@ body { padding-bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px)); }
 .vue-note:not([hidden]) { height: calc(100dvh - 64px - var(--nav) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 
 /* Accueil */
-.accueil-entete { background: linear-gradient(135deg, var(--bleu), #2c5288); color: #fff; margin: -16px -16px 14px; padding: 20px 18px 26px; border-radius: 0 0 22px 22px; }
-.accueil-entete h2 { margin: 0; font-size: 1.5rem; }
-.accueil-entete p { margin: 4px 0 0; opacity: .85; text-transform: uppercase; letter-spacing: .5px; font-size: .85rem; }
+.accueil-entete { background: linear-gradient(135deg, var(--bleu), #2c5288); color: #fff; margin: -16px -16px 12px; padding: 12px 18px 14px; border-radius: 0 0 18px 18px; }
+.accueil-entete h2 { margin: 0; font-size: 1.2rem; }
+.accueil-entete p { margin: 2px 0 0; opacity: .85; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#nom-entreprise-accueil { text-transform: uppercase; letter-spacing: .4px; }
 #activite-accueil { margin-top: -6px; }
 .btn-devis-rapide { width: 100%; border: 0; border-radius: 16px; padding: 16px; font-size: 1.15rem; font-weight: 800; color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--vert) 82%, #fff), var(--vert)); box-shadow: 0 6px 16px rgba(47,138,78,.35); cursor: pointer; margin: 4px 0 6px; }
 .btn-devis-rapide:active { transform: scale(.98); }
@@ -940,3 +941,21 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
   background: #fff url(/marque/logo-cagot-barre.png) no-repeat; background-size: 40px 40px; background-position: -4px 3px;
   box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
+
+/* Nouvel accueil : carte IA, planning, à faire, activité compacte */
+.carte-ia { background: var(--surface); border: 1px solid var(--bord); border-radius: 16px; padding: 12px 12px 6px; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+.carte-ia-titre { margin: 0; font-weight: 800; font-size: 1rem; }
+.carte-ia-texte { margin: 2px 0 8px; color: var(--gris); font-size: .85rem; }
+.carte-ia .btn-devis-rapide { margin: 0 0 6px; padding: 13px; }
+.petit-titre { margin: 6px 2px 6px; color: var(--gris); font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.compteur { display: inline-block; min-width: 1.5em; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--orange, #f07c1e); color: #fff; font-size: .8rem; text-align: center; vertical-align: middle; }
+.carte-chantier.tache { padding: 10px 12px; margin-bottom: 6px; }
+.carte-chantier.tache .montant { font-size: .85rem; white-space: nowrap; }
+.rien-a-faire { margin: 4px 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--bord); color: var(--gris); font-size: .9rem; }
+.mon-activite { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mon-activite .tuile.chiffre { padding: 8px 6px; align-items: center; text-align: center; gap: 0; }
+.mon-activite .tuile.chiffre strong { font-size: .95rem; white-space: nowrap; }
+.mon-activite .tuile.chiffre small { font-size: .7rem; }
+.mon-activite .tuile.chiffre span { font-size: .68rem; }
+.mon-activite .tuile.chiffre.vide { opacity: .55; }
+@media (max-width: 360px) { .mon-activite { grid-template-columns: 1fr 1fr; } }
