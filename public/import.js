@@ -259,7 +259,8 @@ export function typeDocument(texte, numero) {
 export function construireFactures(lignes, col, source = "import") {
   return lignes
     .map((l) => {
-      const numero = valImport(l, col.numero).slice(0, 60);
+      // « N° 26-11-192 » → « 26-11-192 »
+      const numero = valImport(l, col.numero).replace(/^(n\s*[°º]|no\.?|num(e|é)ro)\s*:?\s*/i, "").slice(0, 60);
       const ht = lireMontant(l[col.ht]);
       const tva = lireMontant(l[col.tva]);
       let ttc = lireMontant(l[col.ttc]);
@@ -273,7 +274,7 @@ export function construireFactures(lignes, col, source = "import") {
         total_ht: ht,
         total_tva: tva ?? (ht !== null && ttc !== null ? Math.round((ttc - ht) * 100) / 100 : null),
         total_ttc: ttc,
-        statut: valImport(l, col.statut).slice(0, 60),
+        statut: /^-?[\d\s.,]+$/.test(valImport(l, col.statut)) ? "" : valImport(l, col.statut).slice(0, 60), // un chiffre seul n'est pas un statut lisible
         source,
       };
     })
