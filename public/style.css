@@ -910,7 +910,14 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
   transition: padding .35s ease, transform .2s ease;
 }
 .compagnon[hidden] { display: none !important; }
-.compagnon:active { transform: scale(.94); }
+/* Rétracté : à moitié caché contre le bord ; appui long pour le déplacer (haut/bas, gauche/droite) */
+.compagnon { right: 6px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: padding .35s ease, transform .3s ease, opacity .3s ease; }
+.compagnon:not(.deplie):not(.glisse) { transform: translateX(42%); opacity: .92; }
+.compagnon.a-gauche { right: auto; left: 6px; }
+.compagnon.a-gauche:not(.deplie):not(.glisse) { transform: translateX(-42%); }
+.compagnon.place, .compagnon.place[data-vue] { bottom: auto; }
+.compagnon.glisse { transform: scale(1.12); opacity: 1; box-shadow: 0 10px 26px rgba(232, 83, 42, .5); transition: none; }
+.compagnon img { pointer-events: none; -webkit-user-drag: none; }
 .compagnon[data-vue="document"] { bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 150px); }
 .compagnon[data-vue="fiche"] { bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 78px); }
 .compagnon-tete {

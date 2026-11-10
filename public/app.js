@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Compagnon Cagot";
+const VERSION_APPLI = "11 nov. 2026 · Compagnon déplaçable";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -4635,12 +4635,19 @@ function majCompagnon(nom) {
   const visible = !!utilisateur && !!profil?.infos?.nom && VUES_COMPAGNON.includes(nom); // pas pendant la toute première configuration
   b.hidden = !visible;
   b.dataset.vue = nom;
+  if (visible) placerCompagnon();
   if (nom !== "aide") contexteAide = null;
   // Il se présente une fois à l'ouverture de l'appli, puis se rétracte pour ne laisser que l'escargot.
   if (visible && !compagnonPresente) {
     compagnonPresente = true;
     b.classList.add("deplie");
-    setTimeout(() => b.classList.remove("deplie"), 4000);
+    setTimeout(() => {
+      b.classList.remove("deplie");
+      if (!local.lire("compagnon.astuce", false)) {
+        local.ecrire("compagnon.astuce", true);
+        notifier("🐌 Astuce : reste appuyé sur l'escargot pour le déplacer où tu veux.");
+      }
+    }, 4000);
   }
 }
 
@@ -4729,7 +4736,72 @@ function contexteCompagnon(vue) {
   return parVue ? { ...generique, actions: [], ...parVue } : generique;
 }
 
+// Position choisie par l'artisan (appui long puis glisser) : hauteur et côté de l'écran, mémorisés sur l'appareil.
+function clePositionCompagnon() {
+  return `compagnon.${utilisateur?.id}`;
+}
+function borneCompagnon(y) {
+  const bas = innerHeight - ($("#navigation")?.offsetHeight || 64) - 70;
+  return Math.round(Math.min(Math.max(y, 72), bas));
+}
+function placerCompagnon() {
+  const b = $("#compagnon");
+  const pos = utilisateur ? local.lire(clePositionCompagnon(), null) : null;
+  b.classList.toggle("a-gauche", pos?.cote === "gauche");
+  b.classList.toggle("place", Number.isFinite(pos?.y));
+  b.style.top = Number.isFinite(pos?.y) ? `${borneCompagnon(pos.y * innerHeight)}px` : "";
+}
+addEventListener("resize", () => placerCompagnon());
+let appuiCompagnon = null;
+let ignorerClicCompagnon = false;
+{
+  const b = $("#compagnon");
+  b.addEventListener("contextmenu", (e) => e.preventDefault());
+  b.addEventListener("pointerdown", (e) => {
+    const a = { x: e.clientX, y: e.clientY, id: e.pointerId, glisse: false };
+    a.minuteur = setTimeout(() => {
+      a.glisse = true;
+      b.style.top = `${b.getBoundingClientRect().top}px`; // part de là où il est, sans sauter
+      b.classList.remove("deplie");
+      b.classList.add("glisse", "place");
+      try {
+        b.setPointerCapture(a.id);
+      } catch {}
+      navigator.vibrate?.(15);
+    }, 380);
+    appuiCompagnon = a;
+  });
+  b.addEventListener("pointermove", (e) => {
+    const a = appuiCompagnon;
+    if (!a) return;
+    if (!a.glisse) {
+      if (Math.hypot(e.clientX - a.x, e.clientY - a.y) > 10) {
+        clearTimeout(a.minuteur);
+        appuiCompagnon = null;
+      }
+      return;
+    }
+    e.preventDefault();
+    b.style.top = `${borneCompagnon(e.clientY - b.offsetHeight / 2)}px`;
+    b.classList.toggle("a-gauche", e.clientX < innerWidth / 2);
+  });
+  const lacher = () => {
+    const a = appuiCompagnon;
+    appuiCompagnon = null;
+    if (!a) return;
+    clearTimeout(a.minuteur);
+    if (!a.glisse) return;
+    b.classList.remove("glisse");
+    ignorerClicCompagnon = true; // le clic qui suit le lâcher n'ouvre pas l'aide
+    setTimeout(() => (ignorerClicCompagnon = false), 400);
+    local.ecrire(clePositionCompagnon(), { y: b.getBoundingClientRect().top / innerHeight, cote: b.classList.contains("a-gauche") ? "gauche" : "droite" });
+  };
+  b.addEventListener("pointerup", lacher);
+  b.addEventListener("pointercancel", lacher);
+}
+
 $("#compagnon").onclick = () => {
+  if (ignorerClicCompagnon) return;
   const vue = $("#compagnon").dataset.vue;
   const cx = contexteCompagnon(vue);
   afficherVue("aide"); // remet contexteAide à zéro…
