@@ -7,6 +7,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.1";
 import { envoyerMail } from "./smtp.ts";
+import { texteVersHtml } from "./html.ts";
 
 const CLE_BREVO = Deno.env.get("BREVO_API_KEY");
 const EXPEDITEUR_BREVO = Deno.env.get("EMAIL_EXPEDITEUR");
@@ -55,7 +56,7 @@ async function dechiffrer(s: string) {
 
 type Boite = { email: string; nom_affiche: string; hote: string; port: number; utilisateur: string; mdp_chiffre: string };
 
-async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; cci?: string[]; replyTo?: string; subject: string; text: string; pdf?: string; nomFichier?: string }) {
+async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; cci?: string[]; replyTo?: string; subject: string; text: string; html?: string; pdf?: string; nomFichier?: string }) {
   await envoyerMail(
     { hote: b.hote, port: b.port, utilisateur: b.utilisateur, motDePasse: mdp },
     {
@@ -65,6 +66,7 @@ async function envoyerSmtp(b: Boite, mdp: string, m: { to: string[]; cci?: strin
       ...(m.replyTo ? { repondreA: m.replyTo } : {}),
       sujet: ligne(m.subject),
       texte: m.text,
+      ...(m.html ? { html: m.html } : {}),
       ...(m.pdf ? { pdf: { base64: m.pdf, nom: m.nomFichier ?? "document.pdf" } } : {}),
     },
   );
@@ -165,6 +167,7 @@ Deno.serve(async (req) => {
 
   const nom = ligne(String(ent?.infos?.nom || "Cagot")).slice(0, 70);
   const fichier = nomFichier.endsWith(".pdf") ? nomFichier : `${nomFichier}.pdf`;
+  const html = texteVersHtml(c.texte as string, ent?.infos?.couleur);
 
   if (boite) {
     try {
@@ -174,6 +177,7 @@ Deno.serve(async (req) => {
         to: destinataires as string[],
         subject: ligne(c.sujet as string),
         text: c.texte as string,
+        html,
         pdf: c.pdf as string,
         nomFichier: fichier,
       });
@@ -186,6 +190,7 @@ Deno.serve(async (req) => {
             to: cci,
             subject: ligne(`Copie – ${c.sujet as string}`),
             text: `Copie de l'e-mail envoyé par Cagot à ${destinataires.join(", ")} :\n\n${c.texte as string}`,
+            html: texteVersHtml(`Copie de l'e-mail envoyé par Cagot à ${destinataires.join(", ")} :\n\n${c.texte as string}`, ent?.infos?.couleur),
             pdf: c.pdf as string,
             nomFichier: fichier,
           });
@@ -212,6 +217,7 @@ Deno.serve(async (req) => {
       ...(repondreA ? { replyTo: { email: repondreA, name: nom } } : {}),
       subject: ligne(c.sujet as string),
       textContent: c.texte,
+      htmlContent: html,
       attachment: [{ content: c.pdf, name: fichier }],
     }),
   });

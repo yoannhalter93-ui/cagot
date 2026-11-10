@@ -43,6 +43,7 @@ export type Message = {
   repondreA?: string;
   sujet: string;
   texte: string;
+  html?: string; // version mise en page (le texte reste pour les messageries simples)
   pdf?: { base64: string; nom: string };
 };
 
@@ -59,13 +60,24 @@ export function construireMime(m: Message): string {
     "MIME-Version: 1.0",
     `Content-Type: multipart/mixed; boundary="${frontiere}"`,
   ];
-  const parties = [
-    `--${frontiere}`,
-    "Content-Type: text/plain; charset=utf-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    enLignes(b64(enc.encode(m.texte.replace(/\r?\n/g, CRLF)))),
-  ];
+  const texte = ["Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", enLignes(b64(enc.encode(m.texte.replace(/\r?\n/g, CRLF))))];
+  const parties = [`--${frontiere}`];
+  if (m.html) {
+    const alt = `cagot-alt-${crypto.randomUUID()}`;
+    parties.push(
+      `Content-Type: multipart/alternative; boundary="${alt}"`,
+      "",
+      `--${alt}`,
+      ...texte,
+      `--${alt}`,
+      "Content-Type: text/html; charset=utf-8",
+      "Content-Transfer-Encoding: base64",
+      "",
+      enLignes(b64(enc.encode(m.html))),
+      `--${alt}--`,
+      "",
+    );
+  } else parties.push(...texte);
   if (m.pdf) {
     parties.push(
       `--${frontiere}`,
