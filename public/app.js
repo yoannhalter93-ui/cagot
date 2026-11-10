@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Copie des envois";
+const VERSION_APPLI = "10 nov. 2026 · Agenda";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -352,7 +352,7 @@ function afficherVue(nom) {
     ? raccourci
     : ["chantier", "fiche", "chantiers"].includes(nom) || (ficheCourante && ["note", "document"].includes(nom))
       ? "chantiers"
-      : ["documents", "document", "notes", "note", "parametres", "journal"].includes(nom)
+      : ["documents", "document", "notes", "note", "parametres", "journal", "agenda"].includes(nom)
         ? "plus"
         : nom;
   $("#menu-plus").hidden = true;
@@ -366,6 +366,7 @@ function afficherVue(nom) {
   if (nom === "documents") afficherListe();
   if (nom === "clients") afficherClients();
   if (nom === "journal") afficherJournal();
+  if (nom === "agenda") afficherAgenda();
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
 }
@@ -393,9 +394,10 @@ async function afficherAccueil() {
   $("#bonjour").textContent = `Bonjour${e.prenom ? ` ${e.prenom}` : ""} 👋`;
   $("#nom-entreprise-accueil").textContent = e.nom || "";
   rendreAccueil();
-  const [docs, chantiers] = await Promise.all([
+  const [docs, chantiers, rdvAccueil] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
     sb.from("chantiers").select("id, titre, document_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(100),
+    sb.from("rendez_vous").select("*").gte("fin", new Date().toISOString()).lt("debut", new Date(Date.now() + 14 * 864e5).toISOString()).order("debut").limit(8),
   ]);
   // Comme la page Chantiers : un devis = un seul chantier (le plus ancien s'il y a eu un doublon).
   const vus = new Set();
@@ -404,7 +406,7 @@ async function afficherAccueil() {
     .filter((c) => !c.document_id || (!vus.has(c.document_id) && vus.add(c.document_id)))
     .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
     .slice(0, 4);
-  donneesAccueil = { docs: docs.data ?? [], chantiers: uniques, erreurChantiers: !!chantiers.error };
+  donneesAccueil = { docs: docs.data ?? [], chantiers: uniques, erreurChantiers: !!chantiers.error, rdv: (rdvAccueil.data ?? []).map((x) => ({ ...x, debut: new Date(x.debut), fin: new Date(x.fin) })) };
   rendreAccueil();
 }
 
@@ -489,6 +491,13 @@ function htmlCase(id) {
                 .join("")
             : `<p class="aide">${erreurChantiers ? "Liste indisponible (connexion ?)." : "Pas encore de chantier. Appuie sur « Nouveau chantier » pour commencer."}</p>`
         }`;
+    case "agenda": {
+      const auto = elementsAuto(docs).filter((x) => x.debut <= new Date(Date.now() + 14 * 864e5) && x.fin >= jourSeul(new Date()));
+      const liste = [...(donneesAccueil.rdv ?? []), ...auto].sort((a, b) => a.debut - b.debut).slice(0, 6);
+      return `<div class="titre-section ligne-titre"><h3>📅 À venir</h3><button type="button" class="lien" data-vue="agenda">Agenda ›</button></div>${
+        liste.length ? liste.map((x) => htmlElementAgenda(x, jourSeul(x.debut)).replace('<span class="heure-rdv">', `<span class="heure-rdv">${esc(nomJour(x.debut))} · `)).join("") : `<p class="aide">Rien de prévu dans les 2 semaines. <button type="button" class="lien" data-vue="agenda">Ouvrir l'agenda</button></p>`
+      }`;
+    }
     case "relances": {
       const liste = par.envoye.filter((d) => joursDepuis(dateSuivi(d, "envoye") || d.updated_at) >= 7);
       return `<div class="titre-section"><h3>⏰ Devis à relancer</h3></div>${liste.length ? liste.slice(0, 5).map((d) => ligneDoc(d, `envoyé ${ilYa(dateSuivi(d, "envoye") || d.updated_at)}`)).join("") : `<p class="aide">Aucun devis à relancer 👍</p>`}`;
@@ -527,6 +536,13 @@ function rendreAccueil() {
   }
   for (const b of grille.querySelectorAll("[data-ouvrir-chantier]")) b.onclick = () => ouvrirFiche(b.dataset.ouvrirChantier);
   for (const b of grille.querySelectorAll("[data-ouvrir-doc]")) b.onclick = () => ouvrirDocument(b.dataset.ouvrirDoc);
+  for (const b of grille.querySelectorAll("[data-rdv]")) {
+    b.onclick = () => {
+      const x = (donneesAccueil.rdv ?? []).find((r) => r.id === b.dataset.rdv);
+      if (x) vueAgenda = { mode: "semaine", date: x.debut };
+      afficherVue("agenda");
+    };
+  }
   for (const b of grille.querySelectorAll("[data-action-accueil]")) {
     b.onclick = () => {
       const a = b.dataset.actionAccueil;
@@ -2276,6 +2292,8 @@ async function ouvrirFiche(id) {
   afficherVue("fiche");
   ficheCourante = ch.id;
   rendreFiche();
+  $("#rdv-fiche").innerHTML = "";
+  afficherRdvFiche(ch).catch(console.error);
 }
 
 function rendreFiche() {
@@ -3687,6 +3705,367 @@ function rendreJournal() {
 $("#journal-debut").onchange = () => rendreJournal();
 $("#journal-fin").onchange = () => rendreJournal();
 $("#journal-imprimer").onclick = () => window.print();
+
+// ---------------------------------------------------------------------------
+// Agenda : rendez-vous, visites et jours de chantier (+ échéances de factures et fins de
+// délai de rétractation calculées automatiquement). Abonnement possible depuis le téléphone.
+// ---------------------------------------------------------------------------
+// (fonctions classiques : l'accueil peut les utiliser avant la fin du chargement du module)
+function typesRdv() {
+  return {
+    visite: { nom: "Visite", icone: "👀" },
+    travaux: { nom: "Chantier", icone: "🔨" },
+    rdv: { nom: "RDV", icone: "📅" },
+    autre: { nom: "Autre", icone: "📌" },
+  };
+}
+let vueAgenda = { mode: local.lire("agenda-mode", "semaine"), date: new Date() };
+let donneesAgenda = { rdv: [], auto: [], chantiers: [] };
+
+function jourSeul(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function ajouterJoursDate(d, n) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+function lundi(d) {
+  return ajouterJoursDate(jourSeul(d), -((d.getDay() + 6) % 7));
+}
+function memeJour(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function isoJour(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function heure(d) {
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+function nomJour(d, opts = { weekday: "short", day: "numeric", month: "short" }) {
+  return d.toLocaleDateString("fr-FR", opts);
+}
+
+function bornesAgenda() {
+  if (vueAgenda.mode === "mois") {
+    const premier = new Date(vueAgenda.date.getFullYear(), vueAgenda.date.getMonth(), 1);
+    const debut = lundi(premier);
+    const dernier = new Date(vueAgenda.date.getFullYear(), vueAgenda.date.getMonth() + 1, 0);
+    return [debut, ajouterJoursDate(lundi(dernier), 7)];
+  }
+  const debut = lundi(vueAgenda.date);
+  return [debut, ajouterJoursDate(debut, 7)];
+}
+
+// Éléments calculés : échéances des factures à encaisser, fin du délai de 14 jours des devis signés.
+function elementsAuto(docs) {
+  const delai = Number(profil.infos.delai_paiement || 30);
+  const auto = [];
+  for (const d of docs) {
+    const c = d.contenu ?? {};
+    if (d.type === "facture" && d.statut === "emise" && !c.avoir) {
+      const j = jourSeul(new Date(ajouterJours(d.date_document, delai)));
+      auto.push({ auto: "echeance", doc: d.id, type: "autre", titre: `💶 Échéance ${d.numero} – ${c.client_nom || "client"} (${euros(profil.infos.franchise_tva ? c.total_ht : c.total_ttc)})`, debut: j, fin: j, journee: true });
+    }
+    const signe = c.signature_client?.date;
+    if (d.type === "devis" && d.statut === "accepte" && signe && horsEtablissement(c) && !c.signature_client.execution_anticipee) {
+      const j = ajouterJoursDate(jourSeul(new Date(signe)), 14);
+      if (j >= ajouterJoursDate(jourSeul(new Date()), -1)) auto.push({ auto: "retractation", doc: d.id, type: "autre", titre: `⚖️ Fin du délai de rétractation – ${c.client_nom || d.numero}`, debut: j, fin: j, journee: true });
+    }
+  }
+  return auto;
+}
+
+async function chargerAgenda() {
+  const [debut, fin] = bornesAgenda();
+  const [rdv, docs, chantiers] = await Promise.all([
+    sb.from("rendez_vous").select("*").lt("debut", fin.toISOString()).gte("fin", debut.toISOString()).order("debut").limit(2000),
+    sb.from("documents").select("id, type, statut, numero, date_document, contenu").in("statut", ["emise", "accepte"]).limit(1000),
+    sb.from("chantiers").select("id, titre").limit(500),
+  ]);
+  if (rdv.error) throw rdv.error;
+  donneesAgenda = {
+    rdv: rdv.data.map((r) => ({ ...r, debut: new Date(r.debut), fin: new Date(r.fin) })),
+    auto: elementsAuto(docs.data ?? []).filter((x) => x.debut < fin && x.fin >= debut),
+    chantiers: chantiers.data ?? [],
+  };
+}
+
+async function afficherAgenda() {
+  rendreAgenda();
+  try {
+    await chargerAgenda();
+  } catch (err) {
+    $("#grille-agenda").innerHTML = `<p class="aide">Agenda indisponible (connexion ?).</p>`;
+    return console.error(err);
+  }
+  rendreAgenda();
+}
+
+const elementsDuJour = (j) =>
+  [...donneesAgenda.rdv, ...donneesAgenda.auto]
+    .filter((x) => jourSeul(x.debut) <= j && jourSeul(x.fin) >= j)
+    .sort((a, b) => (a.journee === b.journee ? a.debut - b.debut : a.journee ? -1 : 1));
+
+function htmlElementAgenda(x, j) {
+  const t = typesRdv()[x.type] ?? typesRdv().rdv;
+  const quand = x.journee
+    ? jourSeul(x.debut) < jourSeul(x.fin) ? `jour ${Math.round((j - jourSeul(x.debut)) / 864e5) + 1}/${Math.round((jourSeul(x.fin) - jourSeul(x.debut)) / 864e5) + 1}` : "journée"
+    : `${heure(x.debut)}–${heure(x.fin)}`;
+  const attr = x.auto ? `data-ouvrir-doc="${esc(x.doc)}"` : `data-rdv="${esc(x.id)}"`;
+  return `<button type="button" class="rdv-agenda type-${esc(x.auto ? x.auto : x.type)}" ${attr}>
+      <span class="heure-rdv">${esc(quand)}</span>
+      <span><strong>${x.auto ? "" : `${t.icone} `}${esc(x.titre)}</strong>${x.lieu ? `<small>📍 ${esc(x.lieu)}</small>` : ""}</span>
+    </button>`;
+}
+
+function rendreAgenda() {
+  local.ecrire("agenda-mode", vueAgenda.mode);
+  for (const b of document.querySelectorAll("[data-mode-agenda]")) b.classList.toggle("choisie", b.dataset.modeAgenda === vueAgenda.mode);
+  const [debut, fin] = bornesAgenda();
+  const auj = jourSeul(new Date());
+  const zone = $("#grille-agenda");
+  if (vueAgenda.mode === "mois") {
+    $("#agenda-periode").textContent = vueAgenda.date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    const jours = [];
+    for (let j = debut; j < fin; j = ajouterJoursDate(j, 1)) jours.push(j);
+    zone.innerHTML = `<div class="mois-agenda">${["L", "M", "M", "J", "V", "S", "D"].map((x) => `<span class="entete-mois">${x}</span>`).join("")}${jours
+      .map((j) => {
+        const l = elementsDuJour(j);
+        return `<button type="button" class="case-mois ${j.getMonth() !== vueAgenda.date.getMonth() ? "hors-mois" : ""} ${memeJour(j, auj) ? "aujourdhui" : ""}" data-jour="${isoJour(j)}">
+          <b>${j.getDate()}</b>${l.slice(0, 2).map((x) => `<i class="type-${esc(x.auto ? x.auto : x.type)}">${esc(x.titre.replace(/^\S+\s/, (m) => (x.auto ? "" : m)).slice(0, 14))}</i>`).join("")}${l.length > 2 ? `<small>+${l.length - 2}</small>` : ""}</button>`;
+      })
+      .join("")}</div>`;
+    for (const b of zone.querySelectorAll("[data-jour]")) {
+      b.onclick = () => {
+        vueAgenda = { mode: "semaine", date: new Date(`${b.dataset.jour}T12:00:00`) };
+        afficherAgenda();
+      };
+    }
+    return;
+  }
+  const dernier = ajouterJoursDate(fin, -1);
+  $("#agenda-periode").textContent = `${nomJour(debut, { day: "numeric", month: debut.getMonth() === dernier.getMonth() ? undefined : "short" })} – ${nomJour(dernier, { day: "numeric", month: "long", year: "numeric" })}`;
+  const jours = [];
+  for (let j = debut; j < fin; j = ajouterJoursDate(j, 1)) jours.push(j);
+  zone.innerHTML = jours
+    .map((j) => {
+      const l = elementsDuJour(j);
+      return `<section class="jour-agenda ${memeJour(j, auj) ? "aujourdhui" : ""} ${j < auj ? "passe" : ""}">
+        <h4><span>${esc(nomJour(j, { weekday: "long", day: "numeric", month: "short" }))}</span><button type="button" class="lien ajout-jour" data-ajout-jour="${isoJour(j)}" aria-label="Ajouter ce jour-là">＋</button></h4>
+        ${l.length ? l.map((x) => htmlElementAgenda(x, j)).join("") : `<p class="aide vide-jour">—</p>`}
+      </section>`;
+    })
+    .join("");
+  for (const b of zone.querySelectorAll("[data-ajout-jour]")) b.onclick = () => editerRdv(null, { jour: b.dataset.ajoutJour });
+  for (const b of zone.querySelectorAll("[data-rdv]")) b.onclick = () => editerRdv(donneesAgenda.rdv.find((r) => r.id === b.dataset.rdv));
+  for (const b of zone.querySelectorAll("[data-ouvrir-doc]")) b.onclick = () => ouvrirDocument(b.dataset.ouvrirDoc);
+}
+
+$("#agenda-avant").onclick = () => {
+  const d = vueAgenda.date;
+  vueAgenda.date = vueAgenda.mode === "mois" ? new Date(d.getFullYear(), d.getMonth() - 1, 1) : ajouterJoursDate(d, -7);
+  afficherAgenda();
+};
+$("#agenda-apres").onclick = () => {
+  const d = vueAgenda.date;
+  vueAgenda.date = vueAgenda.mode === "mois" ? new Date(d.getFullYear(), d.getMonth() + 1, 1) : ajouterJoursDate(d, 7);
+  afficherAgenda();
+};
+$("#agenda-aujourdhui").onclick = () => {
+  vueAgenda.date = new Date();
+  afficherAgenda();
+};
+for (const b of document.querySelectorAll("[data-mode-agenda]")) {
+  b.onclick = () => {
+    vueAgenda.mode = b.dataset.modeAgenda;
+    afficherAgenda();
+  };
+}
+$("#nouveau-rdv").onclick = () => editerRdv(null, { jour: isoJour(vueAgenda.mode === "semaine" && lundi(vueAgenda.date) > new Date() ? lundi(vueAgenda.date) : new Date()) });
+
+// Fenêtre d'un rendez-vous (création / modification / suppression).
+function editerRdv(rdv, { jour, chantier = null } = {}) {
+  return new Promise((resolve) => {
+    const r = rdv ?? { type: chantier ? "travaux" : "rdv", titre: chantier?.titre ?? "", journee: !!chantier, lieu: chantier?.lieu ?? "", notes: "", chantier_id: chantier?.id ?? null };
+    const d1 = rdv ? rdv.debut : new Date(`${jour ?? isoJour(new Date())}T08:00:00`);
+    const d2 = rdv ? rdv.fin : new Date(`${jour ?? isoJour(new Date())}T10:00:00`);
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<form class="dialogue dialogue-rdv">
+      <h3>${rdv ? "Rendez-vous" : "Nouveau rendez-vous"}</h3>
+      <div class="types-rdv">${Object.entries(typesRdv()).map(([id, t]) => `<button type="button" class="puce" data-type-rdv="${id}">${t.icone} ${t.nom}</button>`).join("")}</div>
+      <label>Quoi <input name="titre" maxlength="200" required placeholder="Ex. : Visite Mme Martin, peinture séjour"></label>
+      <label>Chantier <select name="chantier"><option value="">— aucun —</option>${donneesAgenda.chantiers.map((c) => `<option value="${esc(c.id)}">${esc(c.titre || "Chantier sans titre")}</option>`).join("")}</select></label>
+      <div class="ligne-rdv"><label>Le <input type="date" name="jour" required></label><label class="case-accord"><input type="checkbox" name="journee"><span>Journée(s) entière(s)</span></label></div>
+      <div class="ligne-rdv heures-rdv"><label>De <input type="time" name="h1" step="900"></label><label>à <input type="time" name="h2" step="900"></label></div>
+      <div class="ligne-rdv jusqua-rdv"><label>Jusqu'au <input type="date" name="jusqua"></label></div>
+      <label>Lieu <input name="lieu" maxlength="300" placeholder="Adresse du chantier"></label>
+      <label>Notes <textarea name="notes" maxlength="2000" rows="2"></textarea></label>
+      <div class="dialogue-actions">
+        ${rdv ? `<button type="button" class="supprimer-rdv danger-texte">Supprimer</button>` : ""}
+        <button type="button" class="annuler">Annuler</button>
+        <button class="valider btn-principal">Enregistrer</button>
+      </div></form>`;
+    const f = fond.querySelector("form");
+    const champs = f.elements;
+    let type = r.type;
+    const majType = () => {
+      for (const b of f.querySelectorAll("[data-type-rdv]")) b.classList.toggle("choisie", b.dataset.typeRdv === type);
+    };
+    const majJournee = () => {
+      f.querySelector(".heures-rdv").hidden = champs.journee.checked;
+      f.querySelector(".jusqua-rdv").hidden = !champs.journee.checked;
+    };
+    for (const b of f.querySelectorAll("[data-type-rdv]")) {
+      b.onclick = () => {
+        type = b.dataset.typeRdv;
+        if (type === "travaux" && !rdv) champs.journee.checked = true;
+        majType();
+        majJournee();
+      };
+    }
+    champs.titre.value = r.titre;
+    champs.chantier.value = r.chantier_id ?? "";
+    champs.jour.value = isoJour(d1);
+    champs.journee.checked = !!r.journee;
+    champs.h1.value = heure(d1);
+    champs.h2.value = heure(d2);
+    champs.jusqua.value = isoJour(d2);
+    champs.lieu.value = r.lieu ?? "";
+    champs.notes.value = r.notes ?? "";
+    champs.journee.onchange = majJournee;
+    champs.chantier.onchange = () => {
+      const c = donneesAgenda.chantiers.find((x) => x.id === champs.chantier.value);
+      if (c && !champs.titre.value.trim()) champs.titre.value = c.titre;
+    };
+    majType();
+    majJournee();
+    const fermer = (v) => {
+      fond.remove();
+      resolve(v);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.onclick = (e) => {
+      if (e.target === fond) fermer(null);
+    };
+    fond.querySelector(".supprimer-rdv")?.addEventListener("click", async () => {
+      if (!(await demander("Supprimer ce rendez-vous ?", { ok: "Supprimer", danger: true }))) return;
+      const { error } = await sb.from("rendez_vous").delete().eq("id", rdv.id);
+      if (error) return erreur("Suppression impossible.", error);
+      fermer(true);
+      apresChangementAgenda();
+    });
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const jourChoisi = champs.jour.value;
+      let debut;
+      let fin;
+      if (champs.journee.checked) {
+        debut = new Date(`${jourChoisi}T00:00:00`);
+        fin = new Date(`${champs.jusqua.value && champs.jusqua.value >= jourChoisi ? champs.jusqua.value : jourChoisi}T23:59:00`);
+      } else {
+        debut = new Date(`${jourChoisi}T${champs.h1.value || "08:00"}:00`);
+        fin = new Date(`${jourChoisi}T${champs.h2.value || "10:00"}:00`);
+        if (fin <= debut) fin = new Date(debut.getTime() + 3600e3);
+      }
+      if (Number.isNaN(debut.getTime())) return notifier("Date incorrecte.", "erreur");
+      const ligne = {
+        type,
+        titre: champs.titre.value.trim().slice(0, 200),
+        chantier_id: champs.chantier.value || null,
+        journee: champs.journee.checked,
+        debut: debut.toISOString(),
+        fin: fin.toISOString(),
+        lieu: champs.lieu.value.trim().slice(0, 300),
+        notes: champs.notes.value.trim().slice(0, 2000),
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = rdv ? await sb.from("rendez_vous").update(ligne).eq("id", rdv.id) : await sb.from("rendez_vous").insert(ligne);
+      if (error) return erreur("Rendez-vous non enregistré (connexion ?).", error);
+      fermer(true);
+      notifier("Rendez-vous enregistré.");
+      vueAgenda.date = debut;
+      apresChangementAgenda();
+    };
+    document.body.appendChild(fond);
+    if (!rdv) champs.titre.focus();
+  });
+}
+
+function apresChangementAgenda() {
+  if (!$("#vue-agenda").hidden) afficherAgenda();
+  if (!$("#vue-fiche").hidden && ficheDonnees) afficherRdvFiche(ficheDonnees.ch);
+}
+
+// Fiche chantier : ses prochains rendez-vous + bouton « Planifier ».
+async function afficherRdvFiche(ch) {
+  const zone = $("#rdv-fiche");
+  const { data } = await sb.from("rendez_vous").select("*").eq("chantier_id", ch.id).gte("fin", jourSeul(new Date()).toISOString()).order("debut").limit(10);
+  if (ficheDonnees?.ch.id !== ch.id) return;
+  const l = (data ?? []).map((r) => ({ ...r, debut: new Date(r.debut), fin: new Date(r.fin) }));
+  zone.innerHTML = l.length
+    ? `<h3>📅 Prévu</h3>${l.map((x) => `<div class="ligne-rdv-fiche">${htmlElementAgenda(x, jourSeul(x.debut)).replace("<span class=\"heure-rdv\">", `<span class="heure-rdv">${esc(nomJour(x.debut))} · `)}</div>`).join("")}`
+    : "";
+  for (const b of zone.querySelectorAll("[data-rdv]")) {
+    b.onclick = async () => {
+      if (!donneesAgenda.chantiers.length) await chargerAgenda().catch(() => {});
+      editerRdv(l.find((r) => r.id === b.dataset.rdv));
+    };
+  }
+}
+
+async function planifierChantier() {
+  const { ch, devis } = ficheDonnees;
+  if (!donneesAgenda.chantiers.length) await chargerAgenda().catch(() => {});
+  if (!donneesAgenda.chantiers.some((c) => c.id === ch.id)) donneesAgenda.chantiers.unshift({ id: ch.id, titre: ch.titre });
+  const lie = await clientParId(ch.client_id);
+  const lieu = (devis?.contenu.adresse_chantier || devis?.contenu.client_adresse || lie?.adresse || "").replace(/\n/g, ", ");
+  editerRdv(null, { jour: isoJour(new Date()), chantier: { id: ch.id, titre: ch.titre, lieu } });
+}
+$("#planifier-fiche").onclick = planifierChantier;
+$("#planifier-fiche-menu").onclick = () => {
+  $("#vue-fiche .menu-plus").open = false;
+  planifierChantier();
+};
+
+// Abonnement : le planning Cagot dans Google Agenda / l'agenda de l'iPhone / Outlook.
+async function abonnementAgenda(nouveau = false) {
+  if (nouveau && !(await demander("Créer un nouveau lien ? L'ancien lien ne fonctionnera plus (à refaire sur chaque téléphone abonné).", { ok: "Nouveau lien", danger: true }))) return;
+  const { data: jeton, error } = await sb.rpc("lien_agenda", { p_nouveau: nouveau });
+  if (error || !jeton) return erreur("Lien d'agenda indisponible (connexion ?).", error);
+  const https = `${plateforme.agendaUrl}?t=${jeton}`;
+  const webcal = https.replace(/^https?:/, "webcal:");
+  const google = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`;
+  const fond = document.createElement("div");
+  fond.className = "dialogue-fond";
+  fond.innerHTML = `<div class="dialogue dialogue-abonnement">
+    <h3>📲 Mon planning dans mon téléphone</h3>
+    <p class="aide">Tes rendez-vous, jours de chantier et échéances de factures apparaissent dans ton agenda habituel et se mettent à jour tout seuls (environ toutes les heures).</p>
+    <a class="btn-principal bouton-large" target="_blank" rel="noopener" href="${esc(google)}">Google Agenda (Android)</a>
+    <a class="btn-secondaire bouton-large" href="${esc(webcal)}">iPhone / iPad / Mac</a>
+    <button type="button" class="btn-secondaire bouton-large copier-lien">📋 Copier le lien (Outlook, autre)</button>
+    <p class="aide">Ce lien est personnel : ne le partage pas. Sur Google, l'ajout se fait une fois depuis le navigateur ; ensuite l'agenda apparaît dans l'appli Google Agenda (pense à le cocher dans la liste des agendas).</p>
+    <div class="dialogue-actions"><button type="button" class="lien nouveau-lien">Changer le lien</button><button type="button" class="valider btn-principal">Fermer</button></div>
+  </div>`;
+  const fermer = () => fond.remove();
+  fond.onclick = (e) => {
+    if (e.target === fond) fermer();
+  };
+  fond.querySelector(".valider").onclick = fermer;
+  fond.querySelector(".copier-lien").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(https);
+      notifier("Lien copié : colle-le dans « Ajouter un agenda → À partir d'une URL ».");
+    } catch {
+      prompt("Copie ce lien :", https);
+    }
+  };
+  fond.querySelector(".nouveau-lien").onclick = () => {
+    fermer();
+    abonnementAgenda(true);
+  };
+  document.body.appendChild(fond);
+}
+$("#abonnement-agenda").onclick = () => abonnementAgenda();
 
 // --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---
 async function noterEnvoi(d, destinataires, moyen) {

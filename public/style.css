@@ -797,3 +797,50 @@ body { zoom: var(--zoom, 1); }
 .saisie #envoyer { margin-left: auto; min-height: 44px; padding: 10px 22px; }
 button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 #bloc-anticipee[hidden] { display: none !important; }
+
+/* ---------- Agenda ---------- */
+.entete-agenda { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.entete-agenda h2 { margin: 0; }
+.barre-agenda { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; }
+.barre-agenda strong { text-align: center; flex: 1; }
+.barre-agenda strong::first-letter, .jour-agenda h4 span::first-letter { text-transform: uppercase; }
+.barre-agenda-2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.bascule-agenda { display: inline-flex; gap: 4px; }
+.jour-agenda { background: var(--surface); border: 1px solid var(--bord); border-radius: 14px; padding: 8px 10px; margin-bottom: 8px; }
+.jour-agenda.aujourdhui { border-color: var(--bleu); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bleu) 25%, transparent); }
+.jour-agenda.passe { opacity: .7; }
+.jour-agenda h4 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 4px; font-size: .95rem; }
+.jour-agenda h4 span { display: inline-block; }
+.jour-agenda .ajout-jour { font-size: 1.3rem; text-decoration: none; padding: 0 6px; }
+.vide-jour { margin: 0; }
+.rdv-agenda { display: flex; gap: 10px; width: 100%; text-align: left; align-items: flex-start; padding: 8px 10px; margin: 4px 0; border: 0; border-left: 4px solid var(--bleu); border-radius: 10px; background: color-mix(in srgb, var(--bleu) 8%, var(--surface)); color: var(--texte); cursor: pointer; font: inherit; }
+.rdv-agenda strong { display: block; font-size: .95rem; }
+.rdv-agenda small { display: block; color: var(--gris); font-size: .82rem; overflow-wrap: anywhere; }
+.rdv-agenda .heure-rdv { flex: none; min-width: 84px; font-size: .82rem; color: var(--gris); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.rdv-agenda.type-travaux, .mois-agenda i.type-travaux { border-color: #e67e22; background: color-mix(in srgb, #e67e22 10%, var(--surface)); }
+.rdv-agenda.type-visite, .mois-agenda i.type-visite { border-color: #16a085; background: color-mix(in srgb, #16a085 10%, var(--surface)); }
+.rdv-agenda.type-echeance, .mois-agenda i.type-echeance { border-color: #c0392b; background: color-mix(in srgb, #c0392b 8%, var(--surface)); }
+.rdv-agenda.type-retractation, .mois-agenda i.type-retractation { border-color: #8e44ad; background: color-mix(in srgb, #8e44ad 8%, var(--surface)); }
+.mois-agenda { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.entete-mois { text-align: center; font-size: .8rem; color: var(--gris); font-weight: 700; }
+.case-mois { min-height: 62px; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 3px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--texte); cursor: pointer; font: inherit; overflow: hidden; }
+.case-mois b { font-size: .85rem; text-align: left; }
+.case-mois.hors-mois { opacity: .45; }
+.case-mois.aujourdhui { border-color: var(--bleu); border-width: 2px; }
+.case-mois i { display: block; font-style: normal; font-size: .62rem; line-height: 1.25; padding: 1px 3px; border-radius: 4px; border-left: 3px solid var(--bleu); background: color-mix(in srgb, var(--bleu) 10%, var(--surface)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.case-mois small { font-size: .65rem; color: var(--gris); text-align: left; }
+.bouton-large { display: block; width: 100%; margin-top: 12px; text-align: center; text-decoration: none; }
+.dialogue-rdv label { display: block; margin: 8px 0 0; }
+.dialogue-rdv input, .dialogue-rdv select, .dialogue-rdv textarea { width: 100%; }
+.types-rdv { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.ligne-rdv { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.ligne-rdv > label { flex: 1 1 130px; }
+.ligne-rdv[hidden] { display: none !important; }
+.dialogue-rdv .case-accord { margin: 8px 0 0; }
+.dialogue-abonnement .bouton-large { margin-top: 8px; }
+.rdv-fiche h3 { margin: 16px 0 4px; font-size: 1rem; }
+.bouton-large { box-sizing: border-box; max-width: 100%; white-space: normal; }
+.dialogue-rdv .case-accord { display: flex !important; align-items: center; gap: 8px; }
+.dialogue-rdv .case-accord input { width: 22px; flex: none; }
+.dialogue-rdv .ligne-rdv > .case-accord { flex: 1 1 160px; padding-bottom: 8px; }
+.dialogue-rdv input, .dialogue-rdv select, .dialogue-rdv textarea { box-sizing: border-box; }

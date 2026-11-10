@@ -20,6 +20,7 @@ export const RACCOURCIS = {
   devis: { nom: "Devis", svg: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 16h5"/>' },
   factures: { nom: "Factures", svg: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>' },
   notes: { nom: "Notes", svg: '<path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
+  agenda: { nom: "Agenda", svg: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>' },
 };
 
 // Cases de l'accueil : l'artisan les déplace au doigt, les agrandit, les masque ou en ajoute.
@@ -35,6 +36,7 @@ export const BLOCS_ACCUEIL = {
   nouveau: { nom: "Bouton « Nouveau chantier »", icone: "＋", taille: "large" },
   raccourcis: { nom: "Actions rapides", icone: "⚡", taille: "large" },
   chantiers: { nom: "Mes chantiers en cours", icone: "🏗️", taille: "large" },
+  agenda: { nom: "À venir (agenda)", icone: "📅", taille: "large" },
   relances: { nom: "Devis à relancer", icone: "⏰", taille: "large" },
   retards: { nom: "Factures en retard", icone: "⚠️", taille: "large" },
 };
@@ -53,6 +55,7 @@ export const INTERFACE_DEFAUT = {
     { id: "payee", visible: true, taille: "petit" },
     { id: "nouveau", visible: true, taille: "large" },
     { id: "chantiers", visible: true, taille: "large" },
+    { id: "agenda", visible: true, taille: "large" },
     { id: "raccourcis", visible: false, taille: "large" },
     { id: "relances", visible: false, taille: "large" },
     { id: "retards", visible: false, taille: "large" },

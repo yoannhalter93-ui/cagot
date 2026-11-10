@@ -25,6 +25,7 @@
       <button type="button" data-vue="devis">📝 Tous les devis</button>
       <button type="button" data-vue="factures">🧾 Toutes les factures</button>
       <button type="button" data-vue="notes">🗒️ Toutes les notes</button>
+      <button type="button" data-vue="agenda">📅 Agenda</button>
       <button type="button" data-vue="journal">📒 Journal des ventes</button>
       <button type="button" data-vue="parametres">⚙️ Réglages</button>
       <p class="liens-legaux-appli"><a href="/contact.html" target="_blank" rel="noopener">💬 Aide et contact</a> · <a href="/conditions.html" target="_blank" rel="noopener">Conditions</a> · <a href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité</a> · <a href="/mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a></p>
@@ -86,6 +87,24 @@
   </main>
 
   <!-- ===== Journal des ventes ===== -->
+  <main id="vue-agenda" class="vue" hidden>
+    <div class="entete-agenda">
+      <h2>Agenda</h2>
+      <button type="button" id="nouveau-rdv" class="btn-principal">＋ Rendez-vous</button>
+    </div>
+    <div class="barre-agenda">
+      <button type="button" id="agenda-avant" class="btn-icone" aria-label="Période précédente">‹</button>
+      <strong id="agenda-periode"></strong>
+      <button type="button" id="agenda-apres" class="btn-icone" aria-label="Période suivante">›</button>
+    </div>
+    <div class="barre-agenda-2">
+      <button type="button" id="agenda-aujourdhui" class="puce">Aujourd'hui</button>
+      <span class="bascule-agenda"><button type="button" class="puce" data-mode-agenda="semaine">Semaine</button><button type="button" class="puce" data-mode-agenda="mois">Mois</button></span>
+    </div>
+    <div id="grille-agenda"></div>
+    <button type="button" id="abonnement-agenda" class="btn-secondaire bouton-large">📲 Voir ce planning dans l'agenda de mon téléphone</button>
+  </main>
+
   <main id="vue-journal" class="vue" hidden>
     <div class="entete-documents no-print"><h2>Journal des ventes</h2></div>
     <h2 class="titre-impression">Journal des ventes – <span id="periode-journal-texte"></span></h2>
@@ -203,12 +222,15 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
         <div class="menu-plus-liste">
           <button id="renommer-fiche">✏️ Renommer le chantier</button>
           <button id="discuter-fiche">💬 Discuter avec l'IA</button>
+          <button id="planifier-fiche-menu">📅 Planifier sur l'agenda</button>
           <button id="supprimer-fiche" class="danger">🗑️ Supprimer le chantier</button>
         </div>
       </details>
     </div>
     <ol id="etapes-fiche" class="etapes"></ol>
     <button type="button" id="etape-suivante" class="btn-action-principale"></button>
+    <div id="rdv-fiche" class="rdv-fiche"></div>
+    <button type="button" id="planifier-fiche" class="btn-secondaire bouton-large">📅 Planifier (visite, jours de chantier…)</button>
   </main>
 
   <main id="vue-clients" class="vue" hidden>
