@@ -169,15 +169,32 @@ Deno.serve(async (req) => {
   if (boite) {
     try {
       const mdp = await dechiffrer(boite.mdp_chiffre);
-      await envoyerSmtp({ ...boite, nom_affiche: boite.nom_affiche || nom }, mdp, {
+      const expediteur = { ...boite, nom_affiche: boite.nom_affiche || nom };
+      await envoyerSmtp(expediteur, mdp, {
         to: destinataires as string[],
-        cci,
         subject: ligne(c.sujet as string),
         text: c.texte as string,
         pdf: c.pdf as string,
         nomFichier: fichier,
       });
-      return json({ envoye: true, destinataires, copie: cci[0] ?? null, depuis: boite.email });
+      // Copie : un mail à part (Gmail ne livre pas en boîte de réception une copie cachée
+      // envoyée à soi-même, il la range seulement dans « Envoyés »).
+      let copie: string | null = null;
+      if (cci.length) {
+        try {
+          await envoyerSmtp(expediteur, mdp, {
+            to: cci,
+            subject: ligne(`Copie – ${c.sujet as string}`),
+            text: `Copie de l'e-mail envoyé par Cagot à ${destinataires.join(", ")} :\n\n${c.texte as string}`,
+            pdf: c.pdf as string,
+            nomFichier: fichier,
+          });
+          copie = cci[0];
+        } catch (err) {
+          console.error("[smtp copie]", err);
+        }
+      }
+      return json({ envoye: true, destinataires, copie, depuis: boite.email });
     } catch (err) {
       console.error("[smtp]", err);
       return json({ erreur: messageSmtp(err) }, 502);

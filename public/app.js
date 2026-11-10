@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Agenda";
+const VERSION_APPLI = "10 nov. 2026 · Agenda + copie";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -4135,7 +4135,7 @@ $("#partager").onclick = async () => {
       const envoi = await plateforme.envoyerEmail({ destinataires, sujet, texte, pdf, titre: titreFichier(d), copie: !!destinataires.copie }, await jetonAcces());
       if (envoi) {
         noterEnvoi(d, destinataires, "email");
-        notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}${envoi.copie ? ` · copie envoyée à ${envoi.copie}` : ""}.`);
+        notifier(`${d.type === "facture" ? "Facture envoyée" : "Devis envoyé"} à ${destinataires.join(", ")}${envoi.copie ? ` · copie envoyée à ${envoi.copie}` : destinataires.copie ? " (la copie pour toi n'a pas pu partir)" : ""}.`);
         if (d.type === "devis" && docCourant.statut === "brouillon") changerStatut("envoye");
         return;
       }
