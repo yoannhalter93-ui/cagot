@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Agenda : clients";
+const VERSION_APPLI = "10 nov. 2026 · Notifications";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -327,6 +327,7 @@ async function demarrerSession() {
   if (!conversation.id && conversation.historique.length) sauverConversation();
   else afficherTitreChantier();
   afficherVue(profil.infos.nom ? "accueil" : "parametres");
+  if (profil.infos.nom) setTimeout(() => ouvrirLienNotification(), 0);
   importerPartage().catch((err) => erreur("Le contenu partagé n'a pas pu être importé.", err));
 }
 
@@ -394,6 +395,8 @@ async function afficherAccueil() {
   $("#bonjour").textContent = `Bonjour${e.prenom ? ` ${e.prenom}` : ""} 👋`;
   $("#nom-entreprise-accueil").textContent = e.nom || "";
   rendreAccueil();
+  proposerNotifications();
+  afficherSignaturesRecentes().catch(console.error);
   const [docs, chantiers, rdvAccueil] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
     sb.from("chantiers").select("id, titre, document_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(100),
@@ -4104,6 +4107,118 @@ async function abonnementAgenda(nouveau = false) {
   document.body.appendChild(fond);
 }
 $("#abonnement-agenda").onclick = () => abonnementAgenda();
+
+// ---------------------------------------------------------------------------
+// Notifications : « un client a signé » sur le téléphone (Web Push) + bandeau sur l'accueil
+// ---------------------------------------------------------------------------
+const notifsPossibles = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const iosSansInstallation = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.matchMedia("(display-mode: standalone)").matches;
+
+function base64UrlVersOctets(b) {
+  const s = atob(b.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(b.length / 4) * 4, "="));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+
+async function appelPush(corps) {
+  const rep = await fetch(plateforme.pushUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await jetonAcces()}`, apikey: window.__cagotCle ?? "" },
+    body: JSON.stringify(corps),
+  });
+  const data = await rep.json().catch(() => ({}));
+  if (!rep.ok) throw new Error(data.erreur || "Notifications indisponibles.");
+  return data;
+}
+
+async function activerNotifications() {
+  if (iosSansInstallation()) {
+    return demander("Sur iPhone, les notifications marchent quand Cagot est installé : bouton Partager ⬆️ → « Sur l'écran d'accueil », puis ouvre Cagot depuis son icône et réessaie.", { ok: "Compris" });
+  }
+  if (!notifsPossibles()) return demander("Ce navigateur ne sait pas recevoir de notifications. Sur Android, utilise Chrome ; sur iPhone, installe Cagot sur l'écran d'accueil.", { ok: "Compris" });
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    return demander("Les notifications sont bloquées pour Cagot. Autorise-les dans les réglages du téléphone (Paramètres → Applications → Chrome → Notifications, ou appui long sur l'icône Cagot), puis réessaie.", { ok: "Compris" });
+  }
+  try {
+    const enregistrement = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    const { cle } = await appelPush({ action: "cle" });
+    let abo = await enregistrement.pushManager.getSubscription();
+    if (!abo) abo = await enregistrement.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlVersOctets(cle) });
+    const j = abo.toJSON();
+    const { error } = await sb.from("push_abonnements").insert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, appareil: navigator.userAgent.slice(0, 200) });
+    if (error && error.code !== "23505") throw error; // 23505 : appareil déjà inscrit
+    local.ecrire("notifs-activees", true);
+    $("#proposer-notifs").hidden = true;
+    const { envoyes } = await appelPush({ action: "test" });
+    notifier(envoyes ? "🔔 Notifications activées : tu vas recevoir un message d'essai." : "🔔 Notifications activées.");
+  } catch (err) {
+    erreur("Activation des notifications impossible. Réessaie avec une bonne connexion.", err);
+  }
+}
+$("#activer-notifs").onclick = activerNotifications;
+$("#menu-notifs").onclick = () => {
+  $("#menu-plus").hidden = true;
+  activerNotifications();
+};
+$("#plus-tard-notifs").onclick = () => {
+  local.ecrire("notifs-plus-tard", Date.now());
+  $("#proposer-notifs").hidden = true;
+};
+
+// Proposition d'activer (une fois tous les 7 jours au plus, si pas déjà fait sur ce téléphone).
+function proposerNotifications() {
+  const deja = local.lire("notifs-activees", false) && "Notification" in window && Notification.permission === "granted";
+  const plusTard = Date.now() - Number(local.lire("notifs-plus-tard", 0)) < 7 * 864e5;
+  $("#proposer-notifs").hidden = deja || plusTard || !(notifsPossibles() || iosSansInstallation());
+}
+
+// Bandeau « devis signé » : signatures reçues depuis la dernière fois qu'on les a vues.
+async function afficherSignaturesRecentes() {
+  const zone = $("#bandeau-signatures");
+  // Premier passage sur ce téléphone : signatures des 3 derniers jours.
+  const vu = local.lire(`signatures-vues.${utilisateur.id}`, null) ?? new Date(Date.now() - 3 * 864e5).toISOString();
+  const { data } = await sb.from("partages_devis").select("document_id, signataire_nom, signe_at").gt("signe_at", vu).order("signe_at", { ascending: false }).limit(5);
+  if (!data?.length) {
+    zone.hidden = true;
+    return;
+  }
+  const { data: docs } = await sb.from("documents").select("id, numero, contenu").in("id", data.map((x) => x.document_id));
+  const docDe = new Map((docs ?? []).map((d) => [d.id, d]));
+  zone.innerHTML = `${data
+    .map((s) => {
+      const d = docDe.get(s.document_id);
+      return `<button type="button" class="signature-recente" data-ouvrir-signe="${esc(s.document_id)}">🎉 <span><strong>${esc(s.signataire_nom)} a signé ${esc(d?.numero ?? "un devis")}</strong><small>${d ? `${esc(d.contenu.titre || "")} · ${euros(montantDoc(d))} · ` : ""}${ilYa(s.signe_at)}</small></span></button>`;
+    })
+    .join("")}<button type="button" class="lien fermer-signatures">J'ai vu</button>`;
+  zone.hidden = false;
+  const marquerVu = () => {
+    local.ecrire(`signatures-vues.${utilisateur.id}`, new Date().toISOString());
+    zone.hidden = true;
+  };
+  zone.querySelector(".fermer-signatures").onclick = marquerVu;
+  for (const b of zone.querySelectorAll("[data-ouvrir-signe]")) {
+    b.onclick = () => {
+      marquerVu();
+      ouvrirDocument(b.dataset.ouvrirSigne);
+    };
+  }
+}
+
+// Ouverture depuis une notification : /#doc=<id>
+function ouvrirLienNotification(url = location.href) {
+  const m = String(url).match(/#doc=([0-9a-f-]{36})/);
+  if (!m) return false;
+  history.replaceState(null, "", location.pathname + location.search);
+  ouvrirDocument(m[1]);
+  return true;
+}
+navigator.serviceWorker?.addEventListener("message", (e) => {
+  if (e.data?.ouvrir && utilisateur) ouvrirLienNotification(e.data.ouvrir);
+});
+window.addEventListener("hashchange", () => {
+  if (utilisateur) ouvrirLienNotification();
+});
 
 // --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---
 async function noterEnvoi(d, destinataires, moyen) {

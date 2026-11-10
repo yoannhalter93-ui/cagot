@@ -15,6 +15,7 @@ const heureFr = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-di
 const jeton = decodeURIComponent(location.hash.slice(1));
 
 let sb = null;
+let pushUrl = "";
 let donnees = null;
 let contenu = null; // contenu avec les options cochées
 let traceFaite = false;
@@ -181,6 +182,8 @@ async function signer() {
     const msg = /deja_signe/.test(error.message) ? "Ce devis a déjà été signé." : /devis_indisponible/.test(error.message) ? "Ce devis n'est plus disponible pour signature : contactez l'entreprise." : "La signature n'a pas pu être enregistrée. Vérifiez votre connexion et réessayez.";
     return alerte(msg);
   }
+  // Notification sur le téléphone de l'artisan (sans attendre ; une seule fois côté serveur).
+  if (pushUrl) fetch(pushUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "signature", jeton }), keepalive: true }).catch(() => {});
   await charger();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -244,7 +247,7 @@ async function charger() {
   $("#bloc-signature").hidden = signe || !["brouillon", "envoye"].includes(data.statut);
   $("#bloc-anticipee").hidden = !horsEtablissement(contenu);
   if (signe) {
-    $("#texte-signe").textContent = `Signé par ${data.signataire_nom} le ${dateFr(data.signe_at)} à ${heureFr(data.signe_at)}. Merci ! L'entreprise a été prévenue automatiquement dans son application.`;
+    $("#texte-signe").textContent = `Signé par ${data.signataire_nom} le ${dateFr(data.signe_at)} à ${heureFr(data.signe_at)}. Merci ! L'entreprise est prévenue automatiquement.`;
     $("#image-signature").src = data.signature;
   } else if (!["brouillon", "envoye"].includes(data.statut)) {
     $("#erreur-client").hidden = false;
@@ -257,6 +260,7 @@ async function charger() {
   try {
     const config = await fetch("config.json", { cache: "no-store" }).then((r) => r.json());
     sb = window.supabase.createClient(config.supabaseUrl, config.supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    pushUrl = config.pushUrl || `${config.supabaseUrl}/functions/v1/push`;
   } catch {
     return erreurPage("Connexion impossible. Vérifiez votre réseau et rechargez la page.");
   }

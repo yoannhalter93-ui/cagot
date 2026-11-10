@@ -28,6 +28,7 @@
       <button type="button" data-vue="agenda">📅 Agenda</button>
       <button type="button" data-vue="journal">📒 Journal des ventes</button>
       <button type="button" data-vue="parametres">⚙️ Réglages</button>
+      <button type="button" id="menu-notifs">🔔 Notifications sur ce téléphone</button>
       <p class="liens-legaux-appli"><a href="/contact.html" target="_blank" rel="noopener">💬 Aide et contact</a> · <a href="/conditions.html" target="_blank" rel="noopener">Conditions</a> · <a href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité</a> · <a href="/mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a></p>
     </div>
   </div>
@@ -74,6 +75,11 @@
       <h2 id="bonjour">Bonjour 👋</h2>
       <p id="nom-entreprise-accueil"></p>
     </section>
+    <div id="bandeau-signatures" class="bandeau-signatures" hidden></div>
+    <div id="proposer-notifs" class="proposer-notifs" hidden>
+      <span>🔔 Être prévenu sur ce téléphone quand un client signe un devis</span>
+      <span class="actions-notifs"><button type="button" id="activer-notifs" class="btn-principal">Activer</button><button type="button" id="plus-tard-notifs" class="lien">Plus tard</button></span>
+    </div>
     <div id="barre-perso-accueil" class="barre-perso" hidden>
       <span>✋ Glisse les cases pour les ranger.</span>
       <button type="button" id="fin-perso" class="btn-principal">✓ Terminé</button>

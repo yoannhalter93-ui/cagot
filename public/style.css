@@ -846,3 +846,14 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .dialogue-rdv input, .dialogue-rdv select, .dialogue-rdv textarea { box-sizing: border-box; }
 .coord-client { margin: 4px 0 0; line-height: 1.6; }
 .coord-client[hidden] { display: none !important; }
+
+/* Notifications : proposition d'activation et signatures reçues */
+.proposer-notifs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--bleu) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--bleu) 30%, var(--bord)); }
+.proposer-notifs[hidden], .bandeau-signatures[hidden] { display: none !important; }
+.actions-notifs { display: inline-flex; gap: 10px; align-items: center; }
+.bandeau-signatures { margin: 0 0 12px; padding: 10px; border-radius: 14px; background: #e3f4ea; border: 1px solid #9fd5b3; }
+.signature-recente { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 8px; border: 0; border-radius: 10px; background: #fff; color: #1c2430; font: inherit; cursor: pointer; margin-bottom: 6px; font-size: 1.05rem; }
+.signature-recente strong, .signature-recente small { display: block; }
+.signature-recente small { color: #5d6878; font-size: .85rem; }
+.bandeau-signatures .lien { display: block; margin: 2px auto 0; }
+:root[data-theme="dark"] .bandeau-signatures { background: #183526; border-color: #2e6b45; }

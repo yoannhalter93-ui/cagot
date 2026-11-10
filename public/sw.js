@@ -70,3 +70,36 @@ async function recevoirPartage(requete) {
   }
   return Response.redirect("/?partage=1", 303);
 }
+
+// Notifications (ex. « devis signé ») : affichage, et ouverture de Cagot sur le bon document.
+self.addEventListener("push", (e) => {
+  let m = {};
+  try {
+    m = e.data ? e.data.json() : {};
+  } catch {
+    m = { texte: e.data?.text() };
+  }
+  e.waitUntil(
+    self.registration.showNotification(m.titre || "Cagot", {
+      body: m.texte || "",
+      icon: "/icones/icone-192.png",
+      badge: "/icones/icone-192.png",
+      tag: m.tag,
+      data: { url: m.url || "/" },
+    }),
+  );
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || "/", self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((fenetres) => {
+      const ouverte = fenetres.find((f) => new URL(f.url).origin === self.location.origin);
+      if (ouverte) {
+        ouverte.postMessage({ ouvrir: url });
+        return ouverte.focus();
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});
