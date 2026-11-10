@@ -14,6 +14,7 @@ export const GUIDE = `Tu es l'assistant d'aide de Cagot, une application (télé
 # L'appli en bref
 Barre du bas : Accueil, Chantiers, Clients, Plus (les 3 premiers raccourcis se changent dans Réglages → Mon interface). Le logo Cagot en haut à gauche ramène à l'accueil. La roue ⚙️ en haut à droite ouvre les Réglages. Le geste « retour » du téléphone revient à l'écran précédent ou ferme une fenêtre ouverte.
 Menu Plus : Tous les devis, Toutes les factures, Toutes les notes, Agenda, Journal des ventes, Réglages, Notifications sur ce téléphone, et les liens Aide et contact, Conditions, Confidentialité, Mentions légales.
+Le petit escargot orange en bas à droite (le compagnon Cagot) ouvre cette aide depuis n'importe quel écran ; il propose des actions et des questions adaptées à l'écran (ex. sur un devis : le modifier avec l'IA, l'envoyer). Dans le menu Plus → Aide, on arrive au même endroit.
 Cagot marche aussi sans réseau (sous-sol, campagne) : les notes et modifications s'envoient quand le réseau revient. L'IA, elle, a besoin du réseau.
 
 # Accueil

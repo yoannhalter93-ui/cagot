@@ -899,3 +899,37 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .suggestions-aide .puce { text-align: left; white-space: normal; }
 .saisie-aide textarea { min-height: 56px; }
 .saisie-aide #envoyer-aide { margin-left: auto; min-height: 44px; padding: 10px 22px; }
+
+/* Compagnon : l'escargot Cagot en bas à droite, déplié à l'ouverture puis rétracté */
+.compagnon {
+  position: fixed; right: 14px; z-index: 18;
+  bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 14px);
+  display: flex; align-items: center; gap: 0; padding: 4px; border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, #f26b3a, #e8532a); color: #fff;
+  box-shadow: 0 6px 18px rgba(232, 83, 42, .35); cursor: pointer;
+  transition: padding .35s ease, transform .2s ease;
+}
+.compagnon[hidden] { display: none !important; }
+.compagnon:active { transform: scale(.94); }
+.compagnon[data-vue="document"] { bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 150px); }
+.compagnon[data-vue="fiche"] { bottom: calc(var(--nav) + env(safe-area-inset-bottom, 0px) + 78px); }
+.compagnon-tete {
+  width: 52px; height: 52px; border-radius: 50%; background: #fff; overflow: hidden; position: relative; flex: none;
+}
+.compagnon-tete img { position: absolute; width: 64px; height: 64px; max-width: none; left: -7px; top: 5px; }
+.compagnon-texte {
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; font-weight: 700; font-size: .95rem; line-height: 1.15; text-align: left;
+  transition: max-width .35s ease, opacity .25s ease, margin .35s ease;
+}
+.compagnon.deplie { padding-right: 18px; }
+.compagnon.deplie .compagnon-texte { max-width: 120px; opacity: 1; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.5); }
+@media (prefers-reduced-motion: reduce) { .compagnon, .compagnon-texte { transition: none; } }
+@media print { .compagnon { display: none !important; } }
+.puce-action { background: var(--bleu); color: #fff; border-color: var(--bleu); font-weight: 600; }
+/* Petit escargot à côté des réponses de l'aide */
+.fil-aide .bulle.ia { position: relative; margin-left: 40px; }
+.fil-aide .bulle.ia::before {
+  content: ""; position: absolute; left: -40px; bottom: 0; width: 32px; height: 32px; border-radius: 50%;
+  background: #fff url(/marque/logo-cagot-barre.png) no-repeat; background-size: 40px 40px; background-position: -4px 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}

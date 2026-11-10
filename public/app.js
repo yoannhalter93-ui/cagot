@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Factures d'acompte";
+const VERSION_APPLI = "11 nov. 2026 · Compagnon Cagot";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -388,6 +388,11 @@ window.addEventListener("popstate", async (e) => {
   }
 });
 
+// Compagnon (escargot d'aide) : état partagé, déclaré avant le premier affichage d'écran.
+let contexteAide = null; // écran d'où l'aide a été ouverte (salut, actions et questions adaptées)
+let suggestionsAide = true;
+let compagnonPresente = false;
+const VUES_COMPAGNON = ["accueil", "chantiers", "fiche", "clients", "documents", "document", "agenda", "journal", "parametres", "notes"];
 function afficherVue(nom) {
   const demande = nom;
   // « devis » et « factures » : même écran, filtré par type
@@ -423,6 +428,7 @@ function afficherVue(nom) {
   if (nom === "parametres") afficherParametres();
   window.scrollTo(0, 0);
   noterDansHistorique(nom === "documents" ? (typeDocs === "facture" ? "factures" : "devis") : demande, nom);
+  majCompagnon(nom);
 }
 // Logo Cagot en haut à gauche : retour à l'accueil (une fois connecté).
 $("#logo-accueil").onclick = () => {
@@ -4544,6 +4550,10 @@ let aideEnCours = false;
 
 function afficherAide() {
   echangesAide = local.lire(`aide.${utilisateur.id}`, []);
+  // Arrivée par le compagnon après une pause : on repart d'une discussion neuve, adaptée à l'écran.
+  if (contexteAide && Date.now() - Number(local.lire(`aide.t.${utilisateur.id}`, 0)) > 30 * 60_000) echangesAide = [];
+  if (!contexteAide) contexteAide = contexteCompagnon("menu");
+  suggestionsAide = true;
   rendreAide();
   if (!matchMedia("(pointer: coarse)").matches) $("#texte-aide").focus();
 }
@@ -4553,11 +4563,19 @@ const texteAide = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "$1").replace(/contact
 
 function rendreAide() {
   const fil = $("#fil-aide");
-  fil.innerHTML = `<div class="bulle ia">Salut ! Je réponds à tes questions sur Cagot : devis, factures, signature, TVA, réglages… Pose ta question ou touche un exemple ci-dessous.</div>${echangesAide
+  const cx = contexteAide ?? contexteCompagnon("menu");
+  fil.innerHTML = `<div class="bulle ia">Salut ! 🐌 Je suis Cagot. Besoin d'un coup de main pour ton devis, ta facture ou ton chantier ?</div>${
+    cx.ligne ? `<div class="bulle ia">${esc(cx.ligne)}</div>` : ""
+  }${echangesAide
     .map((e) => `<div class="bulle ${e.role === "user" ? "moi" : "ia"}">${e.role === "user" ? esc(e.texte).replace(/\n/g, "<br>") : texteAide(e.texte)}</div>`)
     .join("")}${aideEnCours ? `<div class="bulle ia attente">Je cherche la réponse…</div>` : ""}`;
-  $("#suggestions-aide").innerHTML = echangesAide.length ? "" : QUESTIONS_AIDE.map((q) => `<button type="button" class="puce" data-question-aide="${esc(q)}">${esc(q)}</button>`).join("");
+  const montrer = suggestionsAide && !aideEnCours;
+  $("#suggestions-aide").innerHTML = montrer
+    ? cx.actions.map((x, i) => `<button type="button" class="puce puce-action" data-action-aide="${i}">${esc(x.texte)}</button>`).join("") +
+      cx.questions.map((q) => `<button type="button" class="puce" data-question-aide="${esc(q)}">${esc(q)}</button>`).join("")
+    : "";
   for (const b of document.querySelectorAll("[data-question-aide]")) b.onclick = () => poserQuestionAide(b.dataset.questionAide);
+  for (const b of document.querySelectorAll("[data-action-aide]")) b.onclick = () => cx.actions[Number(b.dataset.actionAide)].faire();
   $("#effacer-aide").hidden = !echangesAide.length;
   $("#envoyer-aide").disabled = aideEnCours;
   fil.lastElementChild?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -4569,13 +4587,14 @@ async function poserQuestionAide(question) {
   if (!navigator.onLine) return notifier("📴 L'aide a besoin du réseau.", "erreur");
   echangesAide.push({ role: "user", texte: q.slice(0, 1500) });
   aideEnCours = true;
+  suggestionsAide = false;
   $("#texte-aide").value = "";
   rendreAide();
   try {
     const rep = await fetch(plateforme.aideUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${await jetonAcces()}`, apikey: window.__cagotCle ?? "" },
-      body: JSON.stringify({ echanges: echangesAide.slice(-12) }),
+      body: JSON.stringify({ echanges: echangesAide.slice(-12), contexte: (contexteAide ?? contexteCompagnon("menu")).pourIa }),
     });
     const data = await rep.json().catch(() => ({}));
     if (!rep.ok || !data.reponse) throw new Error(data.erreur || "L'assistant ne répond pas pour l'instant, réessaie dans un moment.");
@@ -4587,6 +4606,7 @@ async function poserQuestionAide(question) {
   } finally {
     aideEnCours = false;
     local.ecrire(`aide.${utilisateur.id}`, echangesAide.slice(-30));
+    local.ecrire(`aide.t.${utilisateur.id}`, Date.now());
     rendreAide();
   }
 }
@@ -4604,6 +4624,117 @@ $("#effacer-aide").onclick = () => {
   echangesAide = [];
   local.ecrire(`aide.${utilisateur.id}`, []);
   rendreAide();
+};
+
+// ---------------------------------------------------------------------------
+// Le compagnon : l'escargot Cagot, toujours à portée de doigt, qui sait où en est l'artisan.
+// ---------------------------------------------------------------------------
+
+function majCompagnon(nom) {
+  const b = $("#compagnon");
+  const visible = !!utilisateur && !!profil?.infos?.nom && VUES_COMPAGNON.includes(nom); // pas pendant la toute première configuration
+  b.hidden = !visible;
+  b.dataset.vue = nom;
+  if (nom !== "aide") contexteAide = null;
+  // Il se présente une fois à l'ouverture de l'appli, puis se rétracte pour ne laisser que l'escargot.
+  if (visible && !compagnonPresente) {
+    compagnonPresente = true;
+    b.classList.add("deplie");
+    setTimeout(() => b.classList.remove("deplie"), 4000);
+  }
+}
+
+// Revenir sur le document d'où l'aide a été ouverte, puis y lancer une action.
+const surDocument = (id, bouton) => async () => {
+  await ouvrirDocument(id);
+  $(bouton).click();
+};
+
+function contexteCompagnon(vue) {
+  const generique = { ligne: "", actions: [], questions: QUESTIONS_AIDE.slice(0, 6), pourIa: "" };
+  const d = docCourant;
+  if (vue === "document" && d) {
+    const v = d.contenu ?? {};
+    const qui = v.client_nom ? ` pour ${v.client_nom}` : "";
+    const num = d.numero || "en brouillon";
+    const base = `Écran : ${nomDoc(d).toLowerCase()} ${num}${qui}, statut « ${LIBELLES_STATUT[d.statut]} ».`;
+    if (d.type === "devis") {
+      if (d.statut === "brouillon")
+        return {
+          ligne: `Tu es sur ton devis${qui}. Je peux t'aider à le rédiger : dis-moi ce qu'il faut changer, ou pose-moi une question.`,
+          actions: [
+            { texte: "✍️ Modifier ce devis avec l'IA", faire: surDocument(d.id, "#modifier-ia") },
+            { texte: "📤 L'envoyer au client", faire: surDocument(d.id, "#partager") },
+          ],
+          questions: ["Comment proposer une ligne en option ?", "Quel taux de TVA mettre sur ce devis ?", "Comment le client signe en ligne ?"],
+          pourIa: base,
+        };
+      if (d.statut === "envoye")
+        return {
+          ligne: `Ton devis${qui} est envoyé. Je peux t'aider à suivre la signature.`,
+          actions: [{ texte: "🔁 Le renvoyer / relancer", faire: surDocument(d.id, "#partager") }],
+          questions: ["Comment savoir si le client a ouvert le devis ?", "Le client a signé sur papier, je fais quoi ?", "Comment être prévenu quand il signe ?"],
+          pourIa: base,
+        };
+      if (d.statut === "accepte")
+        return {
+          ligne: `Bravo, devis accepté${qui} 🎉 On passe à la facture ?`,
+          actions: [
+            { texte: "💰 Faire une facture d'acompte", faire: surDocument(d.id, "#facture-acompte") },
+            { texte: "🧾 Créer la facture", faire: surDocument(d.id, "#en-facture") },
+          ],
+          questions: ["C'est quoi une facture d'acompte ?", "Quand puis-je demander un paiement au client ?"],
+          pourIa: base,
+        };
+      return { ...generique, ligne: "Ce devis est refusé. Je peux t'aider à en refaire un ou à comprendre une fonction.", pourIa: base };
+    }
+    if (v.avoir) return { ligne: "Tu es sur un avoir. Je t'explique comment ça marche si besoin.", actions: [], questions: ["À quoi sert un avoir ?", "Après l'avoir, comment refaire la facture ?"], pourIa: base };
+    if (d.statut === "brouillon")
+      return {
+        ligne: `${v.acompte ? "Ta facture d'acompte" : "Ta facture"}${qui} est en brouillon. Je t'explique ce qu'il faut vérifier avant de l'émettre ?`,
+        actions: [],
+        questions: [
+          "Que faut-il vérifier avant d'émettre une facture ?",
+          "Pourquoi je ne pourrai plus la modifier après ?",
+          v.acompte ? "Comment l'acompte sera déduit de la facture finale ?" : "C'est quoi la date d'exécution des travaux ?",
+        ],
+        pourIa: base,
+      };
+    return {
+      ligne: `${v.acompte ? "Ta facture d'acompte" : "Ta facture"} ${num}${qui} est ${d.statut === "payee" ? "payée 👍" : "émise"}. Une question sur la suite ?`,
+      actions: [],
+      questions: ["Comment enregistrer un paiement ?", "J'ai fait une erreur sur la facture, comment la corriger ?", "C'est quoi le format Factur-X ?"],
+      pourIa: base,
+    };
+  }
+  const parVue = {
+    fiche: {
+      ligne: "Tu es sur la fiche d'un chantier. Je t'aide pour l'étape suivante ?",
+      questions: ["Quelle est la prochaine étape de mon chantier ?", "Comment planifier ce chantier dans l'agenda ?", "Comment faire une facture d'acompte ?"],
+      pourIa: "Écran : fiche d'un chantier (étapes notes, devis, envoi, facture).",
+    },
+    chantiers: { ligne: "Tu es sur la liste de tes chantiers.", questions: ["Comment supprimer un chantier ?", "À quoi servent les raccourcis en glissant une carte ?", "Comment faire mon premier devis ?"], pourIa: "Écran : liste des chantiers." },
+    clients: { ligne: "Tu es dans ton carnet de clients.", questions: ["Comment importer mes clients depuis Henrri ?", "Comment faire un devis pour un client du carnet ?"], pourIa: "Écran : carnet de clients." },
+    agenda: { ligne: "Tu es dans ton agenda.", questions: ["Comment voir mon planning dans l'agenda de mon téléphone ?", "Comment ajouter un rendez-vous avec un client ?"], pourIa: "Écran : agenda." },
+    journal: { ligne: "Tu es dans le journal des ventes.", questions: ["C'est quoi les clôtures ?", "Où télécharger l'attestation anti-fraude TVA ?", "Comment envoyer mes chiffres à mon comptable ?"], pourIa: "Écran : journal des ventes." },
+    parametres: { ligne: "Tu es dans les réglages.", questions: ["Comment brancher ma boîte Gmail ?", "Comment continuer ma numérotation d'avant ?", "Comment changer le logo sur mes devis ?"], pourIa: "Écran : réglages." },
+    documents: { ligne: "", questions: ["Comment transformer un devis en facture ?", "Comment faire une facture sans devis ?", "Comment annuler une facture ?"], pourIa: "Écran : liste des devis et factures." },
+    accueil: {
+      ligne: "",
+      actions: [{ texte: "＋ Nouveau chantier", faire: () => nouveauChantier() }],
+      questions: ["Comment faire mon premier devis ?", "Comment envoyer un devis et le faire signer ?", "Comment faire une facture d'acompte ?"],
+      pourIa: "Écran : accueil.",
+    },
+  }[vue];
+  return parVue ? { ...generique, actions: [], ...parVue } : generique;
+}
+
+$("#compagnon").onclick = () => {
+  const vue = $("#compagnon").dataset.vue;
+  const cx = contexteCompagnon(vue);
+  afficherVue("aide"); // remet contexteAide à zéro…
+  contexteAide = cx; // …puis on garde l'écran d'origine pour le salut et les suggestions
+  afficherAide();
 };
 
 // --- Historique d'envoi : à qui, quand et comment chaque devis / facture est parti ---

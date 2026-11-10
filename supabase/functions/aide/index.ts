@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   if (!u?.user) return json({ erreur: "Session expirée, reconnecte-toi." }, 401);
   if (!client) return json({ reponse: "L'assistant n'est pas encore branché. Écris à contact@cagot.fr, on te répond vite." });
 
-  let corps: { echanges?: Echange[] };
+  let corps: { echanges?: Echange[]; contexte?: string };
   try {
     corps = await req.json();
   } catch {
@@ -45,6 +45,9 @@ Deno.serve(async (req) => {
   while (echanges.length && echanges[0].role !== "user") echanges.shift();
   if (!echanges.length || echanges.at(-1)!.role !== "user") return json({ erreur: "Pose ta question." }, 400);
 
+  // Écran d'où l'aide est ouverte (après le guide mis en cache, pour ne pas casser le cache).
+  const contexte = typeof corps.contexte === "string" ? corps.contexte.replace(/[\r\n]+/g, " ").slice(0, 400).trim() : "";
+
   const { data: autorise } = await supabase.rpc("enregistrer_appel_ia", { p_limite_par_heure: LIMITE_PAR_HEURE });
   if (autorise === false) return json({ erreur: "Beaucoup de questions cette heure-ci : réessaie un peu plus tard." }, 429);
 
@@ -55,7 +58,10 @@ Deno.serve(async (req) => {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: [{ model: "claude-opus-4-8" }],
       output_config: { effort: "low" },
-      system: [{ type: "text", text: GUIDE, cache_control: { type: "ephemeral", ttl: "1h" } }],
+      system: [
+        { type: "text", text: GUIDE, cache_control: { type: "ephemeral", ttl: "1h" } },
+        ...(contexte ? [{ type: "text" as const, text: `# Où est l'artisan en ce moment\n${contexte}\nAdapte ta réponse à cet écran quand c'est utile.` }] : []),
+      ],
       messages: echanges,
     });
     if (rep.stop_reason === "refusal") return json({ reponse: "Je ne peux pas répondre à ça. Pour une question sur Cagot, reformule-la ou écris à contact@cagot.fr." });
