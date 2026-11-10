@@ -857,3 +857,4 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .signature-recente small { color: #5d6878; font-size: .85rem; }
 .bandeau-signatures .lien { display: block; margin: 2px auto 0; }
 :root[data-theme="dark"] .bandeau-signatures { background: #183526; border-color: #2e6b45; }
+.logo-bouton { display: inline-flex; align-items: center; gap: inherit; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }

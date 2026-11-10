@@ -166,7 +166,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "10 nov. 2026 · Retour arrière";
+const VERSION_APPLI = "10 nov. 2026 · Logo → accueil";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -419,6 +419,13 @@ function afficherVue(nom) {
   window.scrollTo(0, 0);
   noterDansHistorique(nom === "documents" ? (typeDocs === "facture" ? "factures" : "devis") : demande, nom);
 }
+// Logo Cagot en haut à gauche : retour à l'accueil (une fois connecté).
+$("#logo-accueil").onclick = () => {
+  if (!utilisateur || !profil?.infos?.nom) return;
+  if (!$("#vue-accueil").hidden) return window.scrollTo({ top: 0, behavior: "smooth" });
+  afficherVue("accueil");
+};
+
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("[data-vue]");
   if (b && !b.closest(".vue[hidden]")) {
