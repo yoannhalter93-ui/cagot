@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Nouvel accueil";
+const VERSION_APPLI = "11 nov. 2026 · Ma semaine";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -469,7 +469,7 @@ async function afficherAccueil() {
   const [docs, chantiers, rdvAccueil] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
     sb.from("chantiers").select("id, titre, document_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(100),
-    sb.from("rendez_vous").select("*").gte("fin", new Date().toISOString()).lt("debut", new Date(Date.now() + 14 * 864e5).toISOString()).order("debut").limit(8),
+    sb.from("rendez_vous").select("*").gte("fin", new Date().toISOString()).lt("debut", new Date(Date.now() + 14 * 864e5).toISOString()).order("debut").limit(40),
   ]);
   // Comme la page Chantiers : un devis = un seul chantier (le plus ancien s'il y a eu un doublon).
   const vus = new Set();
@@ -493,7 +493,7 @@ function pastilleChantier(ch, docs) {
   return `<span class="pastille ${classe}">${texte}</span>`;
 }
 
-function htmlCase(id) {
+function htmlCase(id, taille = "large") {
   const { docs, chantiers, erreurChantiers } = donneesAccueil;
   const { tuiles, par } = indicateurs(docs);
   if (tuiles[id]) return htmlTuile(id, tuiles[id]);
@@ -503,7 +503,7 @@ function htmlCase(id) {
       <span><strong>${esc(d.contenu.client_nom || d.contenu.titre || "Sans titre")}</strong><small>${esc(d.numero || "")} · ${info}</small></span><span class="montant">${euros(montantDoc(d))}</span></button>`;
   switch (id) {
     case "planning":
-      return htmlPlanning();
+      return taille === "large" ? htmlSemaine() : htmlPlanning();
     case "a-faire":
       return htmlAFaire(docs);
     case "mon-activite": {
@@ -557,7 +557,7 @@ function htmlCase(id) {
     }
     case "nouveau":
       return `<div class="carte-ia">
-          <p class="carte-ia-titre">🎤 Tes notes de chantier deviennent un devis</p>
+          <p class="carte-ia-titre">Tes notes de chantier deviennent un devis</p>
           <p class="carte-ia-texte">Dicte, écris ou prends en photo : l'IA rédige le devis avec tes prix, prêt à signer.</p>
           <button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouveau chantier</button>
         </div>`;
@@ -616,6 +616,34 @@ function htmlPlanning() {
     ${aujourdhui.map(ligne).join("")}${suite.length && aujourdhui.length ? `<p class="petit-titre">Ensuite</p>` : ""}${suite.map(avecJour).join("")}`;
 }
 
+// Planning en grand : les 7 prochains jours, une ligne par jour (chantiers sur plusieurs jours répétés chaque jour).
+function htmlSemaine() {
+  const auj = jourSeul(new Date());
+  const rdv = donneesAccueil.rdv ?? [];
+  const jours = Array.from({ length: 7 }, (_, i) => ajouterJoursDate(auj, i));
+  const i0 = (j) => j.getTime() === auj.getTime();
+  const duJour = (j) => {
+    const lendemain = ajouterJoursDate(j, 1);
+    // Journées entières : chaque jour couvert ; rendez-vous à l'heure : seulement le jour où il commence.
+    return rdv.filter((x) => (x.journee ? x.debut < lendemain && x.fin > j : x.debut >= j && x.debut < lendemain) || (!x.journee && i0(j) && x.debut < j && x.fin > new Date()));
+  };
+  if (!jours.some((j) => duJour(j).length)) return ""; // semaine vide : pas d'agenda vide
+  const puce = (x) => {
+    const t = typesRdv()[x.type] ?? typesRdv().rdv;
+    return `<button type="button" class="puce-rdv type-${esc(x.type)}" data-rdv="${esc(x.id)}">${x.journee ? "" : `<b>${esc(heure(x.debut))}</b> `}${t.icone} ${esc(x.titre)}</button>`;
+  };
+  return `<div class="titre-section ligne-titre"><h3>🗓️ Ma semaine</h3><button type="button" class="lien" data-vue="agenda">Agenda ›</button></div>
+    <div class="semaine-accueil">${jours
+      .map((j, i) => {
+        const liste = duJour(j);
+        const nom = i === 0 ? "Auj." : i === 1 ? "Demain" : j.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
+        return `<div class="jour-semaine ${i === 0 ? "aujourdhui" : ""} ${liste.length ? "" : "libre"}">
+          <span class="nom-jour-semaine">${esc(nom[0].toUpperCase() + nom.slice(1))}<small>${j.getDate()}</small></span>
+          <span class="puces-jour">${liste.length ? liste.map(puce).join("") : `<em>libre</em>`}</span></div>`;
+      })
+      .join("")}</div>`;
+}
+
 // À faire : ce qui demande l'attention de l'artisan, le plus urgent d'abord (argent en jeu, puis clients qui attendent).
 function htmlAFaire(docs) {
   if (!docs.length) return "";
@@ -652,7 +680,7 @@ function rendreAccueil() {
   grille.classList.toggle("en-perso", persoAccueil);
   grille.innerHTML = cases
     .map((b) => {
-      const contenu = htmlCase(b.id);
+      const contenu = htmlCase(b.id, b.taille);
       if (!contenu && !persoAccueil) return ""; // accueil intelligent : rien à montrer, pas de place perdue
       return `<div class="case-accueil ${b.taille}" data-case="${b.id}">
         ${persoAccueil ? `<div class="outils-case"><span class="poignee" aria-hidden="true">⠿</span><button type="button" data-taille-case="${b.id}" aria-label="Changer la taille">${b.taille === "large" ? "↙︎ Petite" : "↗︎ Grande"}</button><button type="button" data-masquer-case="${b.id}" aria-label="Retirer">✕</button></div>` : ""}
