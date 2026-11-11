@@ -15,6 +15,7 @@
 <body>
   <header class="barre no-print">
     <h1 class="logo"><button type="button" id="logo-accueil" class="logo-bouton" aria-label="Cagot – retour à l'accueil"><img class="logo-image" src="/marque/logo-cagot-barre.png" alt="Cagot" width="62" height="60"><span>Pro</span></button></h1>
+    <div id="salut-barre" class="salut-barre" hidden><b id="bonjour-barre"></b><small id="entreprise-barre"></small></div>
     <button type="button" id="btn-reglages" class="btn-reglages" data-vue="parametres" aria-label="Réglages" hidden>⚙️</button>
   </header>
   <button type="button" id="compagnon" class="compagnon no-print" hidden aria-label="Besoin d'aide ? Cagot t'aide">
@@ -76,7 +77,7 @@
 
   <!-- ===== Accueil ===== -->
   <main id="vue-accueil" class="vue" hidden>
-    <section class="accueil-entete">
+    <section class="accueil-entete" hidden>
       <h2 id="bonjour">Bonjour 👋</h2>
       <p><span id="date-accueil"></span> · <span id="nom-entreprise-accueil"></span></p>
     </section>
@@ -483,6 +484,8 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <h3 class="titre-reglage">Barre du bas</h3>
       <p class="aide">Tes 3 raccourcis préférés (le bouton « Plus » reste toujours à droite).</p>
       <div id="choix-raccourcis" class="choix-raccourcis"></div>
+      <h3 class="titre-reglage">Escargot d'aide</h3>
+      <label class="case-accord"><input type="checkbox" id="compagnon-actif"> Afficher l'escargot d'aide en bas des écrans (jamais sur l'accueil). Sinon, l'aide reste dans Plus → Aide.</label>
       <h3 class="titre-reglage">Page d'accueil</h3>
       <p class="aide">Range les cases au doigt, agrandis-les, retire celles qui ne te servent pas ou ajoutes-en d'autres (devis à relancer, factures en retard, actions rapides…).</p>
       <button type="button" id="organiser-accueil" class="btn-secondaire">✏️ Organiser mon accueil</button>

@@ -27,6 +27,7 @@ export const RACCOURCIS = {
 export const BLOCS_ACCUEIL = {
   planning: { nom: "Mon planning (chantiers du jour)", icone: "🗓️", taille: "large" },
   "a-faire": { nom: "À faire (relances, factures…)", icone: "👉", taille: "large" },
+  reprendre: { nom: "Reprendre ma note / Devis à envoyer", icone: "📝", taille: "large" },
   "mon-activite": { nom: "Mon activité (chiffres)", icone: "📊", taille: "large" },
   envoye: { nom: "Devis en attente", icone: "⏳", taille: "petit" },
   accepte: { nom: "Devis acceptés", icone: "✅", taille: "petit" },
@@ -69,9 +70,11 @@ export const INTERFACE_DEFAUT = {
   taille: "normale",
   raccourcis: ["accueil", "chantiers", "clients"],
   // Accueil « intelligent » : ce qu'il y a à faire d'abord, les chiffres ensuite ; un bloc vide ne s'affiche pas.
-  versionAccueil: 2,
+  versionAccueil: 3,
+  compagnon: true,
   accueil: [
     { id: "nouveau", visible: true, taille: "large" },
+    { id: "reprendre", visible: true, taille: "large" },
     { id: "planning", visible: true, taille: "large" },
     { id: "a-faire", visible: true, taille: "large" },
     { id: "mon-activite", visible: true, taille: "large" },
@@ -95,8 +98,10 @@ export const INTERFACE_DEFAUT = {
 export function interfaceValide(i) {
   const v = { ...INTERFACE_DEFAUT, ...(i && typeof i === "object" ? i : {}) };
   // Nouvel accueil (v2) : les anciens réglages d'accueil laissent place à la nouvelle disposition, une fois.
-  if (!(Number(i?.versionAccueil) >= INTERFACE_DEFAUT.versionAccueil)) v.accueil = structuredClone(INTERFACE_DEFAUT.accueil);
+  const version = Number(i?.versionAccueil) || 0;
+  if (version < 2) v.accueil = structuredClone(INTERFACE_DEFAUT.accueil);
   v.versionAccueil = INTERFACE_DEFAUT.versionAccueil;
+  v.compagnon = v.compagnon !== false;
   if (!THEMES.some((t) => t.id === v.theme)) v.theme = INTERFACE_DEFAUT.theme;
   if (!["auto", "clair", "sombre"].includes(v.mode)) v.mode = "auto";
   if (!(v.taille in TAILLES)) v.taille = "normale";
@@ -120,6 +125,14 @@ export function interfaceValide(i) {
       taille: ["petit", "large"].includes(b.taille) ? b.taille : BLOCS_ACCUEIL[b.id].taille,
       ...(AFFICHAGES_CASE[b.id]?.some((x) => x.id === b.affichage) ? { affichage: b.affichage } : {}),
     });
+  }
+  // v3 : nouvelle case « Reprendre ma note / Devis à envoyer », placée sous « Nouveau chantier » sans toucher au reste.
+  if (version >= 2 && version < 3) {
+    const k = v.accueil.findIndex((x) => x.id === "reprendre");
+    const [rep] = v.accueil.splice(k, 1);
+    rep.visible = true;
+    const n = v.accueil.findIndex((x) => x.id === "nouveau");
+    v.accueil.splice(n + 1, 0, rep);
   }
   return v;
 }

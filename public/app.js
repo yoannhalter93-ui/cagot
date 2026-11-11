@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Cases réglables";
+const VERSION_APPLI = "11 nov. 2026 · Reprendre ma note";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -392,7 +392,7 @@ window.addEventListener("popstate", async (e) => {
 let contexteAide = null; // écran d'où l'aide a été ouverte (salut, actions et questions adaptées)
 let suggestionsAide = true;
 let compagnonPresente = false;
-const VUES_COMPAGNON = ["accueil", "chantiers", "fiche", "clients", "documents", "document", "agenda", "journal", "parametres", "notes"];
+const VUES_COMPAGNON = ["chantiers", "fiche", "clients", "documents", "document", "agenda", "journal", "parametres", "notes"];
 function afficherVue(nom) {
   const demande = nom;
   // « devis » et « factures » : même écran, filtré par type
@@ -429,6 +429,7 @@ function afficherVue(nom) {
   window.scrollTo(0, 0);
   noterDansHistorique(nom === "documents" ? (typeDocs === "facture" ? "factures" : "devis") : demande, nom);
   majCompagnon(nom);
+  $("#salut-barre").hidden = nom !== "accueil"; // « Bonjour » dans la barre du haut : un en-tête de moins
 }
 // Logo Cagot en haut à gauche : retour à l'accueil (une fois connecté).
 $("#logo-accueil").onclick = () => {
@@ -462,13 +463,16 @@ async function afficherAccueil() {
   $("#bonjour").textContent = `Bonjour${prenom ? ` ${prenom[0].toUpperCase()}${prenom.slice(1)}` : ""} 👋`;
   const jour = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   $("#date-accueil").textContent = jour[0].toUpperCase() + jour.slice(1);
+  $("#bonjour-barre").textContent = $("#bonjour").textContent;
+  $("#entreprise-barre").textContent = e.nom || "";
   $("#nom-entreprise-accueil").textContent = e.nom || "";
   rendreAccueil();
   proposerNotifications();
   afficherSignaturesRecentes().catch(console.error);
-  const [docs, chantiers, rdvAccueil] = await Promise.all([
+  const [docs, chantiers, notesRecentes, rdvAccueil] = await Promise.all([
     sb.from("documents").select("id, type, statut, numero, date_document, contenu, devis_id, created_at, updated_at").limit(500),
-    sb.from("chantiers").select("id, titre, document_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(100),
+    sb.from("chantiers").select("id, titre, document_id, note_id, updated_at, created_at").order("updated_at", { ascending: false }).limit(100),
+    sb.from("notes").select("*").order("updated_at", { ascending: false }).limit(10),
     sb.from("rendez_vous").select("*").gte("fin", new Date().toISOString()).lt("debut", new Date(Date.now() + 14 * 864e5).toISOString()).order("debut").limit(40),
   ]);
   // Comme la page Chantiers : un devis = un seul chantier (le plus ancien s'il y a eu un doublon).
@@ -478,7 +482,12 @@ async function afficherAccueil() {
     .filter((c) => !c.document_id || (!vus.has(c.document_id) && vus.add(c.document_id)))
     .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
     .slice(0, 6);
-  donneesAccueil = { docs: docs.data ?? [], chantiers: uniques, erreurChantiers: !!chantiers.error, rdv: (rdvAccueil.data ?? []).map((x) => ({ ...x, debut: new Date(x.debut), fin: new Date(x.fin) })) };
+  // Dernière note d'un chantier qui n'a pas encore de devis : « Reprendre ma note ».
+  const tousChantiers = chantiers.data ?? [];
+  const brouillonNote = (notesRecentes.data ?? [])
+    .map((n) => ({ note: n, ch: tousChantiers.find((c) => c.note_id === n.id && !c.document_id) }))
+    .find((x) => x.ch);
+  donneesAccueil = { brouillonNote, docs: docs.data ?? [], chantiers: uniques, erreurChantiers: !!chantiers.error, rdv: (rdvAccueil.data ?? []).map((x) => ({ ...x, debut: new Date(x.debut), fin: new Date(x.fin) })) };
   rendreAccueil();
 }
 
@@ -504,6 +513,21 @@ function htmlCase(id, taille = "large", affichage = AFFICHAGES_CASE[id]?.[0]?.id
   switch (id) {
     case "planning":
       return affichage === "bande" ? htmlSemaine() : affichage === "semaine" ? htmlSemaineLignes() : htmlPlanning();
+    case "reprendre": {
+      const b = donneesAccueil.brouillonNote;
+      const aEnvoyer = docs.filter((d) => d.type === "devis" && d.statut === "brouillon");
+      if (!b && !aEnvoyer.length) return "";
+      const extrait = b ? (String(b.note.contenu ?? "").split("\n").map((l) => l.trim()).find(Boolean) || b.note.titre || "Note sans titre").slice(0, 60) : "";
+      return `<div class="duo-reprendre ${b && aEnvoyer.length ? "" : "seul"}">${
+        b
+          ? `<button type="button" class="carte-reprendre note" data-reprendre-note><span class="icone-reprendre">📝</span><span><strong>Reprendre ma note</strong><small>${esc(extrait && extrait !== b.ch.titre ? extrait : b.ch.titre || "")}</small><small>${esc(b.ch.titre || "")} · ${esc(ilYa(b.note.updated_at))}</small><em>Brouillon</em></span></button>`
+          : ""
+      }${
+        aEnvoyer.length
+          ? `<button type="button" class="carte-reprendre envoi" data-devis-a-envoyer><span class="icone-reprendre">📤</span><span><strong>Devis à envoyer <b class="compteur">${aEnvoyer.length}</b></strong><small>${aEnvoyer.length > 1 ? `${aEnvoyer.length} devis prêts` : esc(aEnvoyer[0].contenu?.client_nom || "1 devis prêt")}</small></span></button>`
+          : ""
+      }</div>`;
+    }
     case "a-faire":
       return htmlAFaire(docs, Number(affichage) || 4);
     case "mon-activite": {
@@ -558,8 +582,8 @@ function htmlCase(id, taille = "large", affichage = AFFICHAGES_CASE[id]?.[0]?.id
     case "nouveau":
       return `<div class="carte-ia">
           <p class="carte-ia-titre">Tes notes de chantier deviennent un devis</p>
-          <p class="carte-ia-texte">Dicte, écris ou prends en photo : l'IA rédige le devis avec tes prix, prêt à signer.</p>
-          <button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouveau chantier</button>
+          <p class="carte-ia-texte">Dicte, écris ou prends une photo : Cagot rédige le devis avec tes prix.</p>
+          <button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouvelle note de chantier</button>
         </div>`;
     case "raccourcis":
       return `<div class="titre-section"><h3>⚡ Actions rapides</h3></div><div class="actions-rapides">
@@ -688,6 +712,7 @@ function htmlAFaire(docs, nombre = 4) {
       .map((d) => ({ d, icone: "⏰", texte: `Relancer ${qui(d)}`, detail: `devis envoyé ${ilYa(dateSuivi(d, "envoye") || d.updated_at)}` })),
     ...docs
       .filter((d) => d.type === "devis" && d.statut === "brouillon" && Number(d.contenu?.total_ht) > 0)
+      .filter(() => !reglagesInterface.accueil.find((x) => x.id === "reprendre")?.visible) // déjà dans « Devis à envoyer »
       .map((d) => ({ d, icone: "📤", texte: `Envoyer le devis de ${qui(d)}`, detail: "prêt, pas encore envoyé" })),
   ];
   if (!taches.length) return `<p class="rien-a-faire">✅ Rien d'urgent. Bonne journée sur le chantier !</p>`;
@@ -730,6 +755,23 @@ function rendreAccueil() {
   }
   for (const b of grille.querySelectorAll("[data-ouvrir-chantier]")) b.onclick = () => ouvrirFiche(b.dataset.ouvrirChantier);
   for (const b of grille.querySelectorAll("[data-ouvrir-doc]")) b.onclick = () => ouvrirDocument(b.dataset.ouvrirDoc);
+  for (const b of grille.querySelectorAll("[data-reprendre-note]")) {
+    b.onclick = () => {
+      const x = donneesAccueil.brouillonNote;
+      if (!x) return;
+      ficheCourante = x.ch.id;
+      afficherEditeurNote(x.note);
+    };
+  }
+  for (const b of grille.querySelectorAll("[data-devis-a-envoyer]")) {
+    b.onclick = () => {
+      const liste = donneesAccueil.docs.filter((d) => d.type === "devis" && d.statut === "brouillon");
+      if (liste.length === 1) return ouvrirDocument(liste[0].id);
+      afficherVue("devis");
+      filtreDocs = "a-envoyer";
+      afficherListe();
+    };
+  }
   for (const b of grille.querySelectorAll("[data-jour-bande]")) {
     b.onclick = () => {
       jourBandeAccueil = Number(b.dataset.jourBande);
@@ -1150,6 +1192,7 @@ function rendreReglagesInterface() {
   for (const p of $("#choix-themes").querySelectorAll("[data-couleur]")) p.style.background = p.dataset.couleur; // (CSP : pas de style en ligne)
   for (const r of document.querySelectorAll("[name=mode-interface]")) r.checked = r.value === i.mode;
   for (const r of document.querySelectorAll("[name=taille-interface]")) r.checked = r.value === i.taille;
+  $("#compagnon-actif").checked = i.compagnon !== false;
   const options = (choisi) => Object.entries(RACCOURCIS).map(([id, r]) => `<option value="${id}" ${id === choisi ? "selected" : ""}>${esc(r.nom)}</option>`).join("");
   $("#choix-raccourcis").innerHTML = i.raccourcis.map((id, n) => `<label>Raccourci ${n + 1}<select data-raccourci-choix="${n}">${options(id)}</select></label>`).join("");
 }
@@ -1160,6 +1203,7 @@ $("#vue-parametres").addEventListener("change", (ev) => {
   if (c.name === "theme-interface") i.theme = c.value;
   else if (c.name === "mode-interface") i.mode = c.value;
   else if (c.name === "taille-interface") i.taille = c.value;
+  else if (c.id === "compagnon-actif") i.compagnon = c.checked;
   else if (c.dataset.raccourciChoix !== undefined) {
     const n = Number(c.dataset.raccourciChoix);
     const ancien = i.raccourcis[n];
@@ -4872,7 +4916,7 @@ $("#effacer-aide").onclick = () => {
 
 function majCompagnon(nom) {
   const b = $("#compagnon");
-  const visible = !!utilisateur && !!profil?.infos?.nom && VUES_COMPAGNON.includes(nom); // pas pendant la toute première configuration
+  const visible = !!utilisateur && !!profil?.infos?.nom && reglagesInterface.compagnon !== false && VUES_COMPAGNON.includes(nom); // pas pendant la toute première configuration
   b.hidden = !visible;
   b.dataset.vue = nom;
   if (visible) placerCompagnon();

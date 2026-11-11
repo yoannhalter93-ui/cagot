@@ -990,3 +990,23 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .lien.danger { color: var(--rouge); }
 .reglages-case .bouton-retirer { background: none; border: 0; color: var(--rouge); font: inherit; font-weight: 600; padding: 8px 4px; cursor: pointer; box-shadow: none; }
 .compagnon.cache-perso { display: none !important; }
+
+/* « Bonjour » dans la barre du haut (accueil) */
+.salut-barre { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding-left: 12px; margin-left: 4px; border-left: 1px solid rgba(255,255,255,.35); color: #fff; line-height: 1.15; }
+.salut-barre[hidden], .accueil-entete[hidden] { display: none; }
+.salut-barre b { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.salut-barre small { font-size: .78rem; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 380px) { .barre .logo span { display: none; } }
+#vue-accueil { padding-top: 4px; }
+/* Reprendre ma note / Devis à envoyer */
+.duo-reprendre { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.duo-reprendre.seul { grid-template-columns: 1fr; }
+.carte-reprendre { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; text-align: left; border-radius: 14px; border: 1px solid var(--bord); background: var(--surface); color: var(--texte); font: inherit; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+.carte-reprendre.note { background: color-mix(in srgb, var(--bleu) 6%, var(--surface)); }
+.carte-reprendre.envoi { background: color-mix(in srgb, #f07c1e 7%, var(--surface)); }
+.carte-reprendre > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.carte-reprendre strong { font-size: .92rem; }
+.carte-reprendre small { color: var(--gris); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carte-reprendre em { align-self: flex-start; font-style: normal; font-size: .7rem; font-weight: 700; color: var(--bleu); background: color-mix(in srgb, var(--bleu) 12%, var(--surface)); border-radius: 999px; padding: 1px 8px; margin-top: 2px; }
+.icone-reprendre { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--surface); font-size: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.rien-a-faire { padding: 6px 10px; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
