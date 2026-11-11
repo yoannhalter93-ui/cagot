@@ -295,6 +295,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
           <button id="lien-signature">✍️ Lien de signature pour le client</button>
           <button id="en-facture">🧾 Créer la facture</button>
           <button id="facture-acompte" hidden>💰 Facture d'acompte</button>
+          <button id="facture-situation" hidden>📊 Situation de travaux</button>
           <button id="emettre">✅ Émettre la facture</button>
           <button id="payee">💶 Marquer payée</button>
           <button id="faire-avoir">↩️ Faire un avoir (annuler la facture)</button>
@@ -366,6 +367,9 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <label>Validité des devis (jours) <input name="validite" type="number" min="1" value="30"></label>
       <label>Acompte demandé à la signature (%) <input name="acompte" type="number" min="0" max="100" value="30"></label>
       <label>Délai de paiement des factures (jours) <input name="delai_paiement" type="number" min="0" value="30"></label>
+      <label>Taux horaire de main-d'œuvre (€ HT) <input name="taux_horaire" type="number" min="0" step="0.5" inputmode="decimal" placeholder="45"></label>
+      <label>Marge sur les fournitures (%) <input name="marge_fournitures" type="number" min="0" step="1" inputmode="numeric" placeholder="20"></label>
+      <p class="aide">Ces deux valeurs servent de départ pour les ouvrages de ta grille de prix (fournitures + main-d'œuvre).</p>
       <label>Conditions particulières des devis <textarea name="conditions" rows="3" maxlength="1500" placeholder="Ex : Les fournitures restent la propriété de l'entreprise jusqu'au paiement complet."></textarea></label>
       <label>Conditions particulières des factures <textarea name="conditions_facture" rows="3" maxlength="1500" placeholder="Laisse vide pour reprendre celles des devis."></textarea></label>
       </div>
@@ -432,6 +436,7 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
 
     <div class="carte" data-panneau="tarifs" hidden>
       <p class="aide">L'IA chiffre avec tes prix. Quand un prix manque, elle l'estime et le signale sur le devis : tu peux alors l'ajouter à ta grille en un clic.</p>
+      <p class="aide">🧱 <b>Ouvrages</b> : touche « Détailler » sous un prix pour le calculer à partir de tes fournitures (prix d'achat), du temps passé et de ta marge.</p>
       <div id="grille-tarifs"></div>
       <div class="actions">
         <button id="ajouter-tarif">+ Ajouter un prix</button>

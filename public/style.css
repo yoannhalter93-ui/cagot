@@ -1024,3 +1024,40 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 @media (max-width: 360px) { .carte-ia-titre { font-size: 1.02rem; } .carte-ia-texte { font-size: .68rem; } }
 .carte-ia .btn-note-chantier { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 8px 0 0; padding: 13px 44px; border-radius: 16px; font-size: 1.08rem; font-weight: 800; background: linear-gradient(180deg, #43a84f, #2a8a3a); box-shadow: 0 6px 14px rgba(42,138,58,.35); }
 .btn-note-chantier .baguette { position: absolute; right: 16px; top: 50%; width: 24px; height: 24px; transform: translateY(-50%); }
+
+/* Facture de situation : avancement cumulé par poste */
+.dialogue-situation { max-height: 88vh; overflow: auto; }
+.tout-situation { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
+.tout-situation input, .pct-situation input { width: 64px; padding: 8px; border: 1px solid var(--bord); border-radius: 8px; font: inherit; text-align: right; }
+.lignes-situation { display: flex; flex-direction: column; gap: 6px; }
+.ligne-situation { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--bord); border-radius: 10px; background: var(--surface); }
+.ligne-situation > span:first-child { min-width: 0; display: flex; flex-direction: column; }
+.ligne-situation small { color: var(--gris); font-size: .78rem; }
+.pct-situation { flex: none; white-space: nowrap; }
+.total-situation { margin: 10px 0 4px; font-size: .92rem; }
+
+/* Ouvrages (grille de prix) */
+.detailler-ouvrage { display: block; margin-top: 6px; font-size: .85rem; }
+.ouvrage { margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--bord); border-radius: 10px; background: color-mix(in srgb, var(--bleu) 4%, var(--surface)); }
+.ouvrage summary { cursor: pointer; font-size: .85rem; }
+.fourniture { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--bord); font-size: .85rem; }
+.fourniture > input[data-of="designation"] { grid-column: 1 / -1; }
+.fourniture input, .ligne-ouvrage input { padding: 6px 8px; border: 1px solid var(--bord); border-radius: 8px; font: inherit; background: var(--surface); color: var(--texte); }
+.fourniture label input, .ligne-ouvrage input { width: 70px; text-align: right; }
+.fourniture .unite-fourniture { width: 60px; }
+.fourniture { grid-template-columns: auto auto auto 1fr auto; }
+.fourniture .suppr-fourniture { border: 0; background: none; color: var(--rouge); font-size: 1rem; cursor: pointer; justify-self: end; }
+.ligne-ouvrage { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0; font-size: .85rem; align-items: center; }
+.calcul-ouvrage { margin: 6px 0; font-size: .82rem; color: var(--gris); }
+.calcul-ouvrage b { color: var(--texte); }
+.champ-prix.calcule input { background: color-mix(in srgb, var(--bleu) 8%, var(--surface)); }
+.ouvrage label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 500; white-space: nowrap; }
+.ouvrage label input, .ouvrage .ligne-ouvrage input { width: 70px !important; min-width: 0; margin: 0; }
+.ouvrage .fourniture .unite-fourniture { width: 56px !important; margin: 0; }
+.ouvrage .fourniture input[data-of="designation"] { width: 100% !important; margin: 0; }
+.ouvrage summary { display: list-item; }
+.ouvrage .fourniture { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.ouvrage .fourniture input[data-of="designation"] { flex: 1 1 100%; }
+.ouvrage .fourniture label input { width: 58px !important; }
+.ouvrage .fourniture .suppr-fourniture { margin-left: auto; }
+.ouvrage { overflow: hidden; }

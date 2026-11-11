@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Carte note de chantier";
+const VERSION_APPLI = "11 nov. 2026 · Situations et ouvrages";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2685,7 +2685,7 @@ async function ouvrirFiche(id) {
   if (devis) {
     const { data: f } = await sb.from("documents").select("*").eq("devis_id", devis.id).eq("type", "facture").limit(50);
     facture = (f ?? []).find(estFactureFinale) ?? null;
-    acomptes = (f ?? []).filter((x) => x.contenu?.acompte);
+    acomptes = (f ?? []).filter((x) => x.contenu?.acompte || x.contenu?.situation);
   }
   // Lien de signature : ouvert ? signé ? (pour dire clairement où en est le client)
   let partage = null;
@@ -2741,14 +2741,16 @@ function rendreFiche() {
     },
     {
       n: 4, titre: "Facture", etat: etat(paye, accepte && !paye),
-      detail: `${acomptes.map((a) => `💰 Acompte ${esc(a.numero || "brouillon")} · ${LIBELLES_STATUT[a.statut]} · ${euros(montantDoc(a))}<br>`).join("")}${
+      detail: `${acomptes.map((a) => `${a.contenu.situation ? `📊 Situation n° ${a.contenu.situation.numero} (${nombre(a.contenu.situation.pct_global)} %)` : "💰 Acompte"} ${esc(a.numero || "brouillon")} · ${LIBELLES_STATUT[a.statut]} · ${euros(montantDoc(a))}<br>`).join("")}${
         facture ? `${esc(facture.numero || "brouillon")} · ${LIBELLES_STATUT[facture.statut]} · <strong>${euros(montantDoc(facture))}</strong>` : accepte ? "Devis accepté : tu peux facturer (acompte ou facture finale)." : "Une fois le devis accepté."
       }`,
       actions:
-        acomptes.map((a) => bouton(`voir-${a.id}`, `💰 Voir l'acompte ${a.numero || "(brouillon)"}`)).join("") +
+        acomptes.map((a) => bouton(`voir-${a.id}`, a.contenu.situation ? `📊 Voir la situation n° ${a.contenu.situation.numero}` : `💰 Voir l'acompte ${a.numero || "(brouillon)"}`)).join("") +
         (facture
           ? bouton("facture", facture.statut === "brouillon" ? "Vérifier et émettre" : "Voir la facture", facture.statut === "brouillon") + (facture.statut === "emise" ? bouton("payee", "💶 Payée", true) : "")
-          : accepte ? bouton("facturer", acomptes.length ? "🧾 Facture finale (acomptes déduits)" : "🧾 Créer la facture", true) + bouton("acompte", "💰 Facture d'acompte") : ""),
+          : accepte
+            ? bouton("facturer", acomptes.length ? "🧾 Facture finale (déjà facturé déduit)" : "🧾 Créer la facture", true) + bouton("acompte", "💰 Facture d'acompte") + bouton("situation", "📊 Situation de travaux")
+            : ""),
     },
   ];
   $("#etapes-fiche").innerHTML = etapes
@@ -2803,6 +2805,7 @@ async function actionFiche(a) {
     return $("#en-facture").click();
   }
   if (a === "acompte") return creerFactureAcompte(devis);
+  if (a === "situation") return creerFactureSituation(devis);
   if (a.startsWith("voir-")) return ouvrirDocument(a.slice(5));
   if (a === "payee") {
     if (!(await demander(`Marquer ${facture.numero} comme payée (${euros(montantDoc(facture))}) ?`, { ok: "Payée 💶" }))) return;
@@ -3181,10 +3184,10 @@ async function choisirClient() {
 // ---------------------------------------------------------------------------
 // Liste des documents
 // ---------------------------------------------------------------------------
-const nomDoc = (d) => (d.type === "devis" ? "Devis" : d.contenu?.avoir ? "Avoir" : d.contenu?.acompte ? "Facture d'acompte" : "Facture");
+const nomDoc = (d) => (d.type === "devis" ? "Devis" : d.contenu?.avoir ? "Avoir" : d.contenu?.acompte ? "Facture d'acompte" : d.contenu?.situation ? "Facture de situation" : "Facture");
 // Facture « finale » d'un devis (ni facture d'acompte, ni avoir).
 function estFactureFinale(d) {
-  return d.type === "facture" && !!d.devis_id && !d.contenu?.acompte && !d.contenu?.avoir;
+  return d.type === "facture" && !!d.devis_id && !d.contenu?.acompte && !d.contenu?.avoir && !d.contenu?.situation;
 }
 const LIBELLES_STATUT = {
   brouillon: "brouillon",
@@ -3465,7 +3468,8 @@ function elementsDocument(d, e = profil.infos) {
   const v = d.contenu;
   const facture = d.type === "facture";
   const franchise = !!e.franchise_tva;
-  const tauxTva = franchise ? 0 : v.taux_tva;
+  // Un seul taux réellement présent : c'est lui qu'on affiche (pas forcément le taux par défaut du document).
+  const tauxTva = franchise ? 0 : ventilationTva(v).length === 1 ? Number(ventilationTva(v)[0].taux) : v.taux_tva;
   const tva = franchise ? 0 : v.montant_tva;
   const ttc = franchise ? v.total_ht : v.total_ttc;
   const acompte = Number(e.acompte || 0);
@@ -3476,7 +3480,9 @@ function elementsDocument(d, e = profil.infos) {
     : facture
     ? [
         d.statut !== "brouillon" ? `Date d'échéance : ${dateFr(ajouterJours(d.date_document, e.delai_paiement || 30))}.` : "",
-        v.acompte
+        v.situation
+          ? `Facture de situation n° ${v.situation.numero} sur le devis n° ${v.situation.devis_numero} : montant du marché ${euros(v.situation.montant_marche_ht)} HT, avancement cumulé ${nombre(v.situation.pct_global)} %, soit ${euros(v.situation.cumul_ht)} HT, dont ${euros(v.situation.deja_ht)} HT déjà facturés par les situations précédentes. Le solde sera facturé à la fin des travaux.`
+          : v.acompte
           ? `Facture d'acompte de ${nombre(v.acompte.pourcentage)} % sur le devis n° ${v.acompte.devis_numero}${v.acompte.devis_ttc ? ` (montant total ${euros(v.acompte.devis_ttc)}${franchise ? "" : " TTC"})` : ""}. Le solde sera facturé à la fin des travaux, déduction faite des acomptes versés.`
           : v.devis_numero ? `Facture établie selon le devis n° ${v.devis_numero}.` : "",
         "En cas de retard de paiement, pénalités au taux de 3 fois le taux d'intérêt légal, et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.",
@@ -3496,7 +3502,7 @@ function elementsDocument(d, e = profil.infos) {
   const conditions = conditionsDe(e, d.type);
   if (conditions) mentions.push(conditions);
 
-  const nom = avoir ? "AVOIR" : v.acompte ? "FACTURE D'ACOMPTE" : "FACTURE";
+  const nom = avoir ? "AVOIR" : v.acompte ? "FACTURE D'ACOMPTE" : v.situation ? `FACTURE DE SITUATION N° ${v.situation.numero}` : "FACTURE";
   const titre = facture ? (d.numero ? `${nom} n° ${d.numero}` : `${nom} (brouillon, non numéroté${avoir ? "" : "e"})`) : `DEVIS n° ${d.numero}`;
   return { franchise, tauxTva, tva, ttc, mentions: mentions.filter(Boolean), titre };
 }
@@ -3517,6 +3523,7 @@ function rendreDocument() {
   $("#payee").hidden = !(facture && d.statut === "emise");
   $("#faire-avoir").hidden = !(facture && !v.avoir && d.statut !== "brouillon");
   $("#facture-acompte").hidden = !(d.type === "devis" && d.statut === "accepte");
+  $("#facture-situation").hidden = !(d.type === "devis" && d.statut === "accepte");
   $("#supprimer").hidden = verrouille;
   $(".menu-plus").open = false;
   $("#numero-document").textContent = `${nomDoc(d)} ${d.numero || "brouillon"}`;
@@ -5028,9 +5035,10 @@ function contexteCompagnon(vue) {
           ligne: `Bravo, devis accepté${qui} 🎉 On passe à la facture ?`,
           actions: [
             { texte: "💰 Faire une facture d'acompte", faire: surDocument(d.id, "#facture-acompte") },
+            { texte: "📊 Facturer l'avancement (situation)", faire: surDocument(d.id, "#facture-situation") },
             { texte: "🧾 Créer la facture", faire: surDocument(d.id, "#en-facture") },
           ],
-          questions: ["C'est quoi une facture d'acompte ?", "Quand puis-je demander un paiement au client ?"],
+          questions: ["C'est quoi une facture d'acompte ?", "Comment facturer l'avancement du chantier ?", "Quand puis-je demander un paiement au client ?"],
           pourIa: base,
         };
       return { ...generique, ligne: "Ce devis est refusé. Je peux t'aider à en refaire un ou à comprendre une fonction.", pourIa: base };
@@ -5254,7 +5262,13 @@ $("#en-facture").onclick = async () => {
   // Acomptes déjà facturés (émis) : déduits taux par taux de la facture finale.
   const { data: liees } = await sb.from("documents").select("id, numero, statut, date_document, contenu").eq("devis_id", docCourant.id).eq("type", "facture").limit(50);
   const acomptesEmis = (liees ?? []).filter((f) => f.contenu?.acompte && ["emise", "payee"].includes(f.statut));
-  if ((liees ?? []).some((f) => f.contenu?.acompte && f.statut === "brouillon")) notifier("Une facture d'acompte est encore en brouillon : elle n'est pas déduite. Émets-la d'abord si elle doit l'être.", "erreur");
+  if ((liees ?? []).some((f) => (f.contenu?.acompte || f.contenu?.situation) && f.statut === "brouillon")) notifier("Une facture d'acompte ou de situation est encore en brouillon : elle n'est pas déduite. Émets-la d'abord si elle doit l'être.", "erreur");
+  const situationsEmises = (liees ?? []).filter((f) => f.contenu?.situation && ["emise", "payee"].includes(f.statut));
+  if (situationsEmises.length) {
+    contenu.sections = [...(contenu.sections ?? []), { titre: "Situations déjà facturées", lignes: lignesDeductionSituations(situationsEmises) }];
+    contenu.situations_deduites = situationsEmises.map((f) => ({ id: f.id, numero: f.numero, date: f.date_document }));
+    contenu = calculerTotaux(contenu);
+  }
   if (acomptesEmis.length) {
     contenu.sections = [
       ...(contenu.sections ?? []),
@@ -5340,6 +5354,151 @@ async function enregistrerPaiement(d) {
 }
 
 // Avoir : nouvelle facture (brouillon) aux montants négatifs, qui annule la facture émise.
+// Factures de situation : on facture l'avancement réel du chantier, ligne par ligne (en % cumulé).
+// Chaque situation reprend le cumul réalisé et déduit les situations déjà émises, taux de TVA par taux de TVA.
+const compteLigne = (l) => !l.option || l.option_retenue === true;
+const cleLigne = (si, li) => `${si}-${li}`;
+
+// Ce qui a déjà été facturé par des situations : la somme de leurs bases HT, par taux.
+function lignesDeductionSituations(situations) {
+  const parTaux = new Map();
+  for (const f of situations) for (const v of ventilationTva(f.contenu)) parTaux.set(Number(v.taux), (parTaux.get(Number(v.taux)) ?? 0) + Number(v.base_ht || 0));
+  const numeros = situations.map((f) => f.numero).filter(Boolean).join(", ");
+  return [...parTaux]
+    .filter(([, base]) => Math.abs(base) >= 0.005)
+    .map(([taux, base]) => ({
+      designation: `Situations déjà facturées${numeros ? ` (n° ${numeros})` : ""}${parTaux.size > 1 ? ` – TVA ${nombre(taux)} %` : ""}`,
+      detail: "",
+      quantite: -1, // prix positif, quantité négative (norme Factur-X)
+      unite: "forfait",
+      prix_unitaire_ht: Math.round(base * 100) / 100,
+      prix_source: "artisan",
+      calcul: "",
+      taux_tva: taux,
+      deduction_situation: true,
+    }));
+}
+
+function demanderAvancements(devis, precedents) {
+  const c = devis.contenu;
+  const lignes = [];
+  (c.sections ?? []).forEach((sec, si) =>
+    (sec.lignes ?? []).forEach((l, li) => {
+      if (!compteLigne(l)) return;
+      const total = Math.round(Number(l.quantite || 0) * Number(l.prix_unitaire_ht || 0) * 100) / 100;
+      if (total > 0) lignes.push({ cle: cleLigne(si, li), section: sec.titre || "", designation: l.designation || "Ligne", total, avant: Number(precedents[cleLigne(si, li)] ?? 0) });
+    }),
+  );
+  return new Promise((resolve) => {
+    const fond = document.createElement("div");
+    fond.className = "dialogue-fond";
+    fond.innerHTML = `<form class="dialogue dialogue-situation">
+      <h3>📊 Situation de travaux</h3>
+      <p class="aide">Indique l'avancement <b>cumulé</b> de chaque poste depuis le début du chantier (pas seulement ce mois-ci). Cagot déduit tout seul ce qui a déjà été facturé.</p>
+      <div class="tout-situation"><label>Tout mettre à <input type="number" min="0" max="100" step="1" id="pct-tout" inputmode="numeric"> %</label><button type="button" id="appliquer-tout" class="btn-secondaire">Appliquer</button></div>
+      <div class="lignes-situation">${lignes
+        .map(
+          (l) => `<label class="ligne-situation"><span><b>${esc(l.designation)}</b><small>${esc(l.section)}${l.section ? " · " : ""}${euros(l.total)} HT${l.avant ? ` · déjà ${nombre(l.avant)} %` : ""}</small></span>
+          <span class="pct-situation"><input type="number" min="${l.avant}" max="100" step="1" inputmode="numeric" data-cle="${esc(l.cle)}" value="${l.avant}"> %</span></label>`,
+        )
+        .join("")}</div>
+      <p class="total-situation" id="total-situation"></p>
+      <div class="dialogue-actions"><button type="button" class="annuler">Annuler</button><button class="valider btn-principal">Créer la situation</button></div>
+    </form>`;
+    const champs = () => [...fond.querySelectorAll("[data-cle]")];
+    const majTotal = () => {
+      let cumul = 0;
+      let avant = 0;
+      for (const ch of champs()) {
+        const l = lignes.find((x) => x.cle === ch.dataset.cle);
+        cumul += (l.total * Math.min(100, Math.max(0, Number(ch.value) || 0))) / 100;
+        avant += (l.total * l.avant) / 100;
+      }
+      const marche = lignes.reduce((t, l) => t + l.total, 0);
+      fond.querySelector("#total-situation").innerHTML = `Avancement global <b>${nombre(marche ? (100 * cumul) / marche : 0)} %</b> · cette situation : <b>${euros(cumul - avant)} HT</b>`;
+    };
+    fond.addEventListener("input", majTotal);
+    fond.querySelector("#appliquer-tout").onclick = () => {
+      const v = Number(fond.querySelector("#pct-tout").value);
+      if (!(v >= 0 && v <= 100)) return;
+      for (const ch of champs()) ch.value = Math.max(v, Number(ch.min) || 0);
+      majTotal();
+    };
+    const fermer = (r) => {
+      fond.remove();
+      resolve(r);
+    };
+    fond.querySelector(".annuler").onclick = () => fermer(null);
+    fond.querySelector("form").onsubmit = (e) => {
+      e.preventDefault();
+      const pct = {};
+      for (const ch of champs()) {
+        const l = lignes.find((x) => x.cle === ch.dataset.cle);
+        const v = Number(ch.value);
+        if (!(v >= l.avant && v <= 100)) return erreur(`« ${l.designation} » : entre ${nombre(l.avant)} et 100 % (l'avancement est cumulé, il ne peut pas baisser).`);
+        pct[l.cle] = v;
+      }
+      fermer({ pct, lignes });
+    };
+    document.body.appendChild(fond);
+    majTotal();
+  });
+}
+
+async function creerFactureSituation(devis) {
+  const c = devis.contenu;
+  const { data: liees } = await sb.from("documents").select("id, numero, statut, date_document, contenu").eq("devis_id", devis.id).eq("type", "facture").limit(50);
+  const situations = (liees ?? []).filter((f) => f.contenu?.situation).sort((a, b) => a.contenu.situation.numero - b.contenu.situation.numero);
+  if (situations.some((f) => f.statut === "brouillon")) return erreur("Une situation est encore en brouillon : émets-la (ou supprime-la) avant d'en créer une nouvelle.");
+  if ((liees ?? []).some((f) => estFactureFinale(f))) return erreur("La facture finale de ce devis existe déjà.");
+  const derniere = situations.at(-1);
+  const choix = await demanderAvancements(devis, derniere?.contenu.situation.lignes ?? {});
+  if (!choix) return;
+  const { pct, lignes } = choix;
+  const marche = Math.round(lignes.reduce((t, l) => t + l.total, 0) * 100) / 100;
+  const cumul = Math.round(lignes.reduce((t, l) => t + (l.total * pct[l.cle]) / 100, 0) * 100) / 100;
+  const pctGlobal = marche ? Math.round((1000 * cumul) / marche) / 10 : 0;
+  const deja = situations.reduce((t, f) => t + ventilationTva(f.contenu).reduce((x, v) => x + Number(v.base_ht || 0), 0), 0);
+  if (cumul - deja < 0.01) return erreur("Rien de nouveau à facturer : augmente l'avancement d'au moins un poste.");
+  const numero = situations.length + 1;
+  const { suivi, signature_client, hors_etablissement, date_debut, hypotheses, sections, ...base } = structuredClone(c);
+  const tauxDoc = { ...c, taux_tva: c.taux_tva ?? 10 };
+  const nouvelles = (c.sections ?? [])
+    .map((sec, si) => ({
+      titre: sec.titre || "Travaux",
+      lignes: (sec.lignes ?? []).flatMap((l, li) => {
+        const p = pct[cleLigne(si, li)];
+        if (!p) return [];
+        const total = Math.round(Number(l.quantite || 0) * Number(l.prix_unitaire_ht || 0) * 100) / 100;
+        return [{
+          designation: l.designation,
+          detail: `Marché ${euros(total)} HT · avancement cumulé ${nombre(p)} %`,
+          quantite: 1,
+          unite: "forfait",
+          prix_unitaire_ht: Math.round(total * p) / 100,
+          prix_source: "artisan",
+          calcul: "",
+          taux_tva: tauxLigne(l, tauxDoc),
+        }];
+      }),
+    }))
+    .filter((sec) => sec.lignes.length);
+  if (situations.length) nouvelles.push({ titre: "Situations précédentes", lignes: lignesDeductionSituations(situations) });
+  const contenu = calculerTotaux({
+    ...base,
+    hypotheses: [],
+    titre: `Situation n° ${numero} – ${c.titre || "travaux"}`,
+    devis_numero: devis.numero,
+    situation: { numero, devis_id: devis.id, devis_numero: devis.numero, montant_marche_ht: marche, pct_global: pctGlobal, cumul_ht: cumul, deja_ht: Math.round(deja * 100) / 100, lignes: pct },
+    sections: nouvelles,
+  });
+  const { data, error } = await sb.from("documents").insert({ type: "facture", devis_id: devis.id, contenu }).select("id").single();
+  if (error) return erreur("Situation non créée.", error);
+  notifier(`Situation n° ${numero} créée en brouillon (${nombre(pctGlobal)} % cumulé) : vérifie-la puis émets-la.`);
+  ouvrirDocument(data.id);
+}
+$("#facture-situation").onclick = () => creerFactureSituation(docCourant);
+
 // Facture d'acompte sur un devis accepté : un pourcentage (ou un montant) du devis, taux de TVA par taux.
 async function creerFactureAcompte(devis) {
   const c = devis.contenu;
@@ -5644,6 +5803,111 @@ function ajusterHauteur(champ) {
 const ajusterNomsTarifs = () => document.querySelectorAll("#grille-tarifs textarea[data-k]").forEach(ajusterHauteur);
 window.addEventListener("resize", ajusterNomsTarifs);
 
+// ---------------------------------------------------------------------------
+// Ouvrages : un prix de la grille calculé depuis ses fournitures (prix d'achat), le temps passé et la marge.
+// prix de vente HT par unité = fournitures × (1 + marge %) + heures × taux horaire
+// ---------------------------------------------------------------------------
+const tauxHoraireDefaut = () => lireNombre(profil.infos.taux_horaire) || 45;
+const margeDefaut = () => (profil.infos.marge_fournitures === undefined || profil.infos.marge_fournitures === "" ? 20 : lireNombre(profil.infos.marge_fournitures));
+const ouvertsOuvrage = new Set();
+
+function calculOuvrage(c) {
+  const fournitures = (c.fournitures ?? []).reduce((t, f) => t + Number(f.quantite || 0) * Number(f.prix_achat || 0), 0);
+  const vente = fournitures * (1 + Number(c.marge || 0) / 100);
+  const mo = Number(c.heures || 0) * Number(c.taux_horaire || 0);
+  return { fournitures, vente, mo, prix: Math.round((vente + mo) * 100) / 100 };
+}
+
+function htmlOuvrage(t) {
+  const c = t.composition;
+  const ouvert = ouvertsOuvrage.has(t.id);
+  if (!c) return `<button type="button" class="lien detailler-ouvrage" data-ouvrage-creer="${esc(t.id)}">🧱 Détailler (fournitures + main-d'œuvre)</button>`;
+  const k = calculOuvrage(c);
+  const u = esc(t.unite || "u");
+  return `<details class="ouvrage" data-ouvrage="${esc(t.id)}" ${ouvert ? "open" : ""}>
+    <summary>🧱 Ouvrage : ${euros(k.vente)} fournitures + ${euros(k.mo)} main-d'œuvre = <b>${euros(k.prix)} HT / ${u}</b></summary>
+    <p class="petit-titre">Fournitures (pour 1 ${u})</p>
+    ${(c.fournitures ?? [])
+      .map(
+        (f, i) => `<div class="fourniture">
+        <input data-of="designation" data-i="${i}" value="${esc(f.designation ?? "")}" placeholder="Ex. : plaque BA13" maxlength="120">
+        <label>Qté <input data-of="quantite" data-i="${i}" inputmode="decimal" value="${nombre(f.quantite ?? 0)}"></label>
+        <input data-of="unite" data-i="${i}" value="${esc(f.unite ?? "u")}" class="unite-fourniture" maxlength="12" aria-label="Unité">
+        <label>Achat <input data-of="prix_achat" data-i="${i}" inputmode="decimal" value="${nombre(f.prix_achat ?? 0)}"> € HT</label>
+        <button type="button" class="suppr-fourniture" data-of-suppr="${i}" aria-label="Retirer cette fourniture">✕</button>
+      </div>`,
+      )
+      .join("")}
+    <button type="button" class="lien" data-of-ajout>+ Ajouter une fourniture</button>
+    <div class="ligne-ouvrage">
+      <label>Marge fournitures <input data-oc="marge" inputmode="decimal" value="${nombre(c.marge ?? 0)}"> %</label>
+    </div>
+    <div class="ligne-ouvrage">
+      <label>Temps <input data-oc="heures" inputmode="decimal" value="${nombre(c.heures ?? 0)}"> h par ${u}</label>
+      <label>× <input data-oc="taux_horaire" inputmode="decimal" value="${nombre(c.taux_horaire ?? 0)}"> € HT / h</label>
+    </div>
+    <p class="calcul-ouvrage">Fournitures ${euros(k.fournitures)} + ${nombre(c.marge ?? 0)} % = ${euros(k.vente)} · Main-d'œuvre ${nombre(c.heures ?? 0)} h × ${euros(c.taux_horaire ?? 0)} = ${euros(k.mo)} · <b>Prix de vente ${euros(k.prix)} HT / ${u}</b></p>
+    <button type="button" class="lien danger" data-ouvrage-retirer>Retirer le détail (garder le prix)</button>
+  </details>`;
+}
+
+async function enregistrerOuvrage(id, composition) {
+  const prix = composition ? calculOuvrage(composition).prix : undefined;
+  const { data, error } = await sb.from("tarifs").update({ composition, ...(prix !== undefined ? { prix } : {}) }).eq("id", id).select("*").single();
+  if (error) return erreur("Ouvrage non enregistré.", error);
+  tarifs = tarifs.map((t) => (t.id === data.id ? data : t));
+  rendreTarifs();
+}
+
+function activerOuvrages(zone) {
+  for (const b of zone.querySelectorAll("[data-ouvrage-creer]")) {
+    b.onclick = () => {
+      const t = tarifs.find((x) => x.id === b.dataset.ouvrageCreer);
+      ouvertsOuvrage.add(t.id);
+      // Départ : tout le prix actuel en main-d'œuvre, à répartir par l'artisan.
+      const taux = tauxHoraireDefaut();
+      enregistrerOuvrage(t.id, { fournitures: [{ designation: "", quantite: 1, unite: "u", prix_achat: 0 }], marge: margeDefaut(), heures: taux ? Math.round((Number(t.prix || 0) / taux) * 100) / 100 : 0, taux_horaire: taux });
+    };
+  }
+  for (const d of zone.querySelectorAll("details[data-ouvrage]")) {
+    const id = d.dataset.ouvrage;
+    const t = () => tarifs.find((x) => x.id === id);
+    d.ontoggle = () => (d.open ? ouvertsOuvrage.add(id) : ouvertsOuvrage.delete(id));
+    for (const ch of d.querySelectorAll("[data-of]")) {
+      ch.onchange = () => {
+        const c = structuredClone(t().composition);
+        const f = c.fournitures[Number(ch.dataset.i)];
+        f[ch.dataset.of] = ["quantite", "prix_achat"].includes(ch.dataset.of) ? lireNombre(ch.value) : ch.value.trim();
+        enregistrerOuvrage(id, c);
+      };
+    }
+    for (const ch of d.querySelectorAll("[data-oc]")) {
+      ch.onchange = () => {
+        const c = structuredClone(t().composition);
+        c[ch.dataset.oc] = lireNombre(ch.value);
+        enregistrerOuvrage(id, c);
+      };
+    }
+    for (const b of d.querySelectorAll("[data-of-suppr]")) {
+      b.onclick = () => {
+        const c = structuredClone(t().composition);
+        c.fournitures.splice(Number(b.dataset.ofSuppr), 1);
+        enregistrerOuvrage(id, c);
+      };
+    }
+    d.querySelector("[data-of-ajout]").onclick = () => {
+      const c = structuredClone(t().composition);
+      (c.fournitures ??= []).push({ designation: "", quantite: 1, unite: "u", prix_achat: 0 });
+      enregistrerOuvrage(id, c);
+    };
+    d.querySelector("[data-ouvrage-retirer]").onclick = async () => {
+      if (!(await demander("Retirer le détail de cet ouvrage ? Le prix actuel est gardé.", { ok: "Retirer" }))) return;
+      ouvertsOuvrage.delete(id);
+      enregistrerOuvrage(id, null);
+    };
+  }
+}
+
 function rendreTarifs() {
   const zone = $("#grille-tarifs");
   if (!tarifs.length) {
@@ -5678,12 +5942,13 @@ function rendreTarifs() {
               <textarea data-id="${esc(t.id)}" data-k="designation" rows="1" maxlength="300" placeholder="Nom de la prestation (ex : Pose de placo BA13)">${esc(t.designation)}</textarea>
               ${comptes.get(`${normaliser(t.designation)}|${t.unite}`) > 1 && t.designation ? `<p class="doublon">⚠️ En double : supprime celui en trop avec 🗑️</p>` : ""}
               <div class="ligne-prix">
-                <label class="champ-prix"><input data-id="${esc(t.id)}" data-k="prix" inputmode="decimal" value="${nombre(t.prix)}" aria-label="Prix HT"><span>€ HT</span></label>
+                <label class="champ-prix ${t.composition ? "calcule" : ""}"><input data-id="${esc(t.id)}" data-k="prix" inputmode="decimal" value="${nombre(t.prix)}" aria-label="Prix HT" ${t.composition ? 'readonly title="Calculé depuis le détail de l\'ouvrage"' : ""}><span>€ HT</span></label>
                 <span class="par">par</span>
                 <select data-id="${esc(t.id)}" data-k="unite" aria-label="Unité">${unites(t.unite)}</select>
                 <button class="suppr-tarif" data-suppr-tarif="${esc(t.id)}" aria-label="Supprimer ce prix">🗑️</button>
               </div>
               <select data-id="${esc(t.id)}" data-k="corps_etat" class="choix-metier" aria-label="Métier">${optionsCorps(t.corps_etat).replace("— Autre —", "Métier : à choisir")}</select>
+              ${htmlOuvrage(t)}
             </div>`,
             )
             .join("")}
@@ -5724,6 +5989,7 @@ function rendreTarifs() {
       notifier("Prix enregistré ✓");
     };
   }
+  activerOuvrages(zone);
   for (const b of zone.querySelectorAll("[data-suppr-tarif]")) {
     b.onclick = async () => {
       const t = tarifs.find((x) => x.id === b.dataset.supprTarif);

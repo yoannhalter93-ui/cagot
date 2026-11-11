@@ -36,7 +36,9 @@ export function calculerTotaux(devis) {
   // TVA calculée par taux (arrondie par taux, comme sur une facture électronique)
   const ventilation = [...bases]
     .map(([taux, base]) => ({ taux, base_ht: arrondi(base), montant_tva: arrondi((arrondi(base) * taux) / 100) }))
-    .sort((a, b) => b.taux - a.taux);
+    .sort((a, b) => b.taux - a.taux)
+    // Un taux dont tout s'annule (ex. : facture finale après situations) n'a rien à afficher.
+    .filter((v, _i, toutes) => toutes.length === 1 || v.base_ht !== 0 || v.montant_tva !== 0);
   const tva = arrondi(ventilation.reduce((s, v) => s + v.montant_tva, 0));
   return {
     ...devis,
