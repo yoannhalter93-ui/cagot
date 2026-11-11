@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Tri des clients";
+const VERSION_APPLI = "11 nov. 2026 · Carte note de chantier";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -581,9 +581,41 @@ function htmlCase(id, taille = "large", affichage = AFFICHAGES_CASE[id]?.[0]?.id
     }
     case "nouveau":
       return `<div class="carte-ia">
-          <p class="carte-ia-titre">Tes notes de chantier deviennent un devis</p>
-          <p class="carte-ia-texte">Dicte, écris ou prends une photo : Cagot rédige le devis avec tes prix.</p>
-          <button type="button" class="btn-devis-rapide" data-action-accueil="chantier">＋ Nouvelle note de chantier</button>
+          <div class="carte-ia-haut">
+            <div class="carte-ia-textes">
+              <p class="carte-ia-titre">Tes notes de chantier<br>deviennent un devis</p>
+              <svg class="carte-ia-trait" viewBox="0 0 70 8" aria-hidden="true"><path d="M2 6 C 20 1.5, 45 1.5, 68 4" fill="none" stroke="#2f9e44" stroke-width="3" stroke-linecap="round"/></svg>
+              <p class="carte-ia-texte">Dicte, écris ou prends une photo :<br>Cagot rédige le devis avec tes prix.</p>
+            </div>
+            <svg class="carte-ia-carnet" viewBox="0 0 170 104" aria-hidden="true">
+              <g stroke="#c9d8ea" stroke-width=".6">
+                <rect x="34" y="0" width="136" height="104" fill="#eef4fb" stroke="none"/>
+                <path d="M34 13H170M34 26H170M34 39H170M34 52H170M34 65H170M34 78H170M34 91H170M47 0V104M60 0V104M73 0V104M86 0V104M99 0V104M112 0V104M125 0V104M138 0V104M151 0V104M164 0V104"/>
+              </g>
+              <g fill="none" stroke="#9fb6d3" stroke-width="1.3"><path d="M40 8H75V40H40Z"/><path d="M40 60H70V98"/><path d="M150 10V60H168"/></g>
+              <g transform="rotate(-7 100 55)">
+                <rect x="49" y="9" width="108" height="92" rx="3" fill="#cf9a5c"/>
+                <rect x="52" y="8" width="102" height="90" rx="2" fill="#fffdf7" stroke="#e8dfca"/>
+                <path d="M58 37H150M58 57H150M58 77H150" stroke="#dbe4ef" stroke-width="1"/>
+                <rect x="57.0" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="65.2" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="73.4" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="81.6" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="89.8" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="98.0" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="106.2" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="114.4" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="122.6" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="130.8" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="139.0" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/><rect x="147.2" y="3" width="3.2" height="12" rx="1.6" fill="#3a3a3a"/>
+                <g fill="#fff" stroke="#8a97a8" stroke-width="1"><rect x="58" y="24" width="10" height="10" rx="1.5"/><rect x="58" y="44" width="10" height="10" rx="1.5"/><rect x="58" y="64" width="10" height="10" rx="1.5"/></g>
+                <g fill="none" stroke="#2f9e44" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M57 28l4 5 9-11"/><path d="M57 48l4 5 9-11"/><path d="M57 68l4 5 9-11"/></g>
+                <g fill="#1f2a44" font-family="'Segoe Print','Bradley Hand','Comic Sans MS','Chalkboard SE',cursive" font-size="9.5" font-style="italic">
+                  <text x="74" y="33">Préparer support</text><text x="74" y="53">Peinture murs</text><text x="74" y="73">Plafond</text>
+                </g>
+              </g>
+              <g transform="rotate(-58 152 86)">
+                <rect x="112" y="82" width="56" height="8" rx="4" fill="#1d2f57"/>
+                <rect x="140" y="82" width="5" height="8" fill="#c9a24a"/>
+                <path d="M168 82l9 4-9 4z" fill="#c9a24a"/><path d="M174.5 84.8l2.5 1.2-2.5 1.2z" fill="#222"/>
+                <rect x="116" y="83.5" width="20" height="1.6" rx=".8" fill="#4a64a0"/>
+              </g>
+            </svg>
+          </div>
+          <button type="button" class="btn-devis-rapide btn-note-chantier" data-action-accueil="chantier"><span>＋ Nouvelle note de chantier</span>
+            <svg class="baguette" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 22L16 10" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 11l2-2" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+              <path d="M19 2l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z M23 10l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z M11 3l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="#fff"/></svg>
+          </button>
         </div>`;
     case "raccourcis":
       return `<div class="titre-section"><h3>⚡ Actions rapides</h3></div><div class="actions-rapides">

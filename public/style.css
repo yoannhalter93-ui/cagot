@@ -1012,3 +1012,15 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .rien-a-faire { padding: 6px 10px; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .barre-tri-clients { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 2px 8px; }
 .barre-tri-clients .aide { margin: 0; }
+
+/* Carte « Tes notes de chantier deviennent un devis » (fidèle à la maquette) */
+.carte-ia { position: relative; overflow: hidden; padding: 14px 12px 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--bord); box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+.carte-ia-haut { position: relative; display: flex; min-height: 92px; }
+.carte-ia-textes { position: relative; z-index: 1; flex: 1; min-width: 0; padding-right: 4px; }
+.carte-ia-titre { margin: 0; font-size: 1.16rem; line-height: 1.15; font-weight: 800; letter-spacing: -.4px; color: var(--texte); white-space: nowrap; }
+.carte-ia-trait { display: block; width: 52px; height: 7px; margin: 3px 0 4px 3px; }
+.carte-ia-texte { margin: 0; color: var(--gris); font-size: .74rem; line-height: 1.35; white-space: nowrap; }
+.carte-ia-carnet { position: absolute; right: -14px; top: -14px; width: 50%; max-width: 200px; height: auto; -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26%), linear-gradient(to top, transparent 0, #000 12%); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent 0, #000 26%), linear-gradient(to top, transparent 0, #000 12%); mask-composite: intersect; }
+@media (max-width: 360px) { .carte-ia-titre { font-size: 1.02rem; } .carte-ia-texte { font-size: .68rem; } }
+.carte-ia .btn-note-chantier { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 8px 0 0; padding: 13px 44px; border-radius: 16px; font-size: 1.08rem; font-weight: 800; background: linear-gradient(180deg, #43a84f, #2a8a3a); box-shadow: 0 6px 14px rgba(42,138,58,.35); }
+.btn-note-chantier .baguette { position: absolute; right: 16px; top: 50%; width: 24px; height: 24px; transform: translateY(-50%); }
