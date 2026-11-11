@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Reprendre ma note";
+const VERSION_APPLI = "11 nov. 2026 · Tri des clients";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -2947,6 +2947,9 @@ async function memoriserClient(v) {
 }
 
 let rechercheClients = "";
+let triClients = local.lire("tri-clients", "nom");
+// Ville d'une adresse française : ce qui suit le code postal (« 69400 Villefranche-sur-Saône »).
+const villeDe = (adresse) => (String(adresse ?? "").match(/\b\d{5}\s+([^\n,]+)/)?.[1] ?? "").trim();
 
 async function afficherClients() {
   const zone = $("#liste-clients");
@@ -2954,7 +2957,7 @@ async function afficherClients() {
   if (!clients) zone.innerHTML = `<p class="aide">Chargement…</p>`;
   let docs = [];
   try {
-    const [, res] = await Promise.all([chargerClients(), sb.from("documents").select("type, statut, contenu").limit(1000)]);
+    const [, res] = await Promise.all([chargerClients(), sb.from("documents").select("type, statut, contenu, created_at, updated_at").limit(1000)]);
     docs = res.data ?? [];
   } catch (err) {
     zone.innerHTML = `<p class="aide">Impossible de charger les clients (connexion ?).</p>`;
@@ -2968,22 +2971,38 @@ async function afficherClients() {
     });
     const devis = siens.filter((d) => d.type === "devis");
     const payees = siens.filter((d) => d.type === "facture" && d.statut === "payee");
-    return { devis: devis.length, acceptes: devis.filter((d) => d.statut === "accepte").length, encaisse: payees.reduce((t, d) => t + montantDoc(d), 0) };
+    const derniere = siens.reduce((t, d) => Math.max(t, new Date(d.updated_at || d.created_at || 0).getTime()), 0);
+    return { devis: devis.length, acceptes: devis.filter((d) => d.statut === "accepte").length, encaisse: payees.reduce((t, d) => t + montantDoc(d), 0), derniere };
   };
+  const statsDe = new Map(clients.map((c) => [c.id, stats(c)]));
   const filtre = normaliser(rechercheClients);
-  const liste = clients.filter((c) => !filtre || [c.nom, c.telephone, c.email, c.adresse].some((x) => normaliser(x).includes(filtre)));
+  const parNom = (a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { sensitivity: "base" });
+  const tris = {
+    nom: parNom,
+    "nom-desc": (a, b) => parNom(b, a),
+    recent: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+    activite: (a, b) => statsDe.get(b.id).derniere - statsDe.get(a.id).derniere || parNom(a, b),
+    encaisse: (a, b) => statsDe.get(b.id).encaisse - statsDe.get(a.id).encaisse || parNom(a, b),
+    devis: (a, b) => statsDe.get(b.id).devis - statsDe.get(a.id).devis || parNom(a, b),
+    // Ville : les clients sans ville à la fin
+    ville: (a, b) => (villeDe(a.adresse) ? 0 : 1) - (villeDe(b.adresse) ? 0 : 1) || villeDe(a.adresse).localeCompare(villeDe(b.adresse), "fr", { sensitivity: "base" }) || parNom(a, b),
+  };
+  $("#tri-clients").value = tris[triClients] ? triClients : "nom";
+  const liste = clients.filter((c) => !filtre || [c.nom, c.telephone, c.email, c.adresse].some((x) => normaliser(x).includes(filtre))).sort(tris[triClients] ?? parNom);
+  $("#nombre-clients").textContent = clients.length ? `${filtre ? `${liste.length} sur ` : ""}${clients.length} client${clients.length > 1 ? "s" : ""}` : "";
   zone.innerHTML = !clients.length
     ? `<div class="vide-clients"><p><strong>Ton carnet de clients est vide.</strong></p><p class="aide">Ajoute un client avec « + Client ». Les clients de tes devis s'y ajoutent aussi tout seuls.</p></div>`
     : liste.length
-      ? `<p class="aide">${clients.length} client${clients.length > 1 ? "s" : ""}</p>` +
-        liste
+      ? liste
           .map((c) => {
-            const st = stats(c);
+            const st = statsDe.get(c.id);
             const carte = encodeURIComponent(c.adresse.replace(/\n/g, " "));
             return `<div class="carte-client" data-client="${esc(c.id)}">
           <div class="client-entete"><span class="avatar">${esc((c.nom.trim()[0] || "?").toUpperCase())}</span>
             <div><strong>${esc(c.nom || "Sans nom")}</strong>
-            <small>${st.devis ? `${st.devis} devis${st.acceptes ? ` · ${st.acceptes} accepté${st.acceptes > 1 ? "s" : ""}` : ""}${st.encaisse ? ` · ${euros(st.encaisse)} encaissés` : ""}` : "Pas encore de devis"}</small></div></div>
+            <small>${
+              [st.devis ? `${st.devis} devis` : "", st.acceptes ? `${st.acceptes} accepté${st.acceptes > 1 ? "s" : ""}` : "", st.encaisse ? `${euros(st.encaisse)} encaissés` : ""].filter(Boolean).join(" · ") || "Pas encore de devis"
+            }</small></div></div>
           <div class="client-coordonnees">
             ${c.telephone ? `<a href="tel:${esc(c.telephone.replace(/[^\d+]/g, ""))}">📞 ${esc(c.telephone)}</a>` : ""}
             ${c.email ? `<a href="mailto:${esc(c.email)}">✉️ ${esc(c.email)}</a>` : ""}
@@ -3011,6 +3030,11 @@ async function afficherClients() {
 
 $("#recherche-clients").oninput = (e) => {
   rechercheClients = e.target.value;
+  afficherClients();
+};
+$("#tri-clients").onchange = (e) => {
+  triClients = e.target.value;
+  local.ecrire("tri-clients", triClients);
   afficherClients();
 };
 $("#nouveau-client").onclick = () => editerClient(null);

@@ -265,6 +265,18 @@ ratisser, poncer, peindre murs + plafond blanc"></textarea>
       <button type="button" id="nouveau-client" class="btn-principal">+ Client</button>
     </div>
     <button type="button" id="contact-telephone" class="btn-secondaire contact-telephone" hidden>📇 Ajouter depuis les contacts du téléphone</button>
+    <div class="barre-tri-clients">
+      <span id="nombre-clients" class="aide"></span>
+      <label class="tri-chantiers">Trier <select id="tri-clients">
+        <option value="nom">Nom (A → Z)</option>
+        <option value="nom-desc">Nom (Z → A)</option>
+        <option value="activite">Activité récente</option>
+        <option value="recent">Ajoutés récemment</option>
+        <option value="encaisse">Meilleurs clients (encaissé)</option>
+        <option value="devis">Nombre de devis</option>
+        <option value="ville">Ville</option>
+      </select></label>
+    </div>
     <div id="liste-clients"></div>
   </main>
 

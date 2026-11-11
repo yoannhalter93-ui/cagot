@@ -56,7 +56,7 @@ Numérotation : continue, sans trou ni doublon. Réglages → Numérotation : fo
 Factures émises par période, TVA par taux, encaissé, impayés, export Excel, impression. Vérification d'intégrité (journal sécurisé), archive scellée à télécharger (à garder 10 ans), clôtures mensuelles et annuelles automatiques, attestation de conformité anti-fraude TVA à télécharger.
 
 # Clients
-Carnet de clients : ajout, modification, appel ou e-mail en un appui, import depuis les contacts du téléphone quand c'est possible. Les clients des devis sont mémorisés tout seuls.
+Carnet de clients : recherche, tri (menu « Trier » : nom A→Z ou Z→A, activité récente, ajoutés récemment, meilleurs clients par montant encaissé, nombre de devis, ville ; le choix est mémorisé), ajout, modification, appel ou e-mail en un appui, import depuis les contacts du téléphone quand c'est possible. Les clients des devis sont mémorisés tout seuls.
 
 # Agenda (Plus → Agenda)
 Vue semaine ou mois. « ＋ Rendez-vous » : visite, chantier (sur une ou plusieurs journées entières), RDV, autre ; lieu, notes, client du carnet (ses coordonnées et son adresse sont reprises), chantier lié. Les échéances de factures et la fin du délai de rétractation des devis signés s'affichent tout seuls.
