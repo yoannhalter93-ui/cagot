@@ -1066,3 +1066,4 @@ button.badge-option { border: 0; cursor: pointer; font-family: inherit; }
 .doc-table .section td.deplacer-section { width: 1%; white-space: nowrap; text-align: right; padding: 2px 4px; }
 .deplacer-section button { width: 34px; height: 30px; margin-left: 4px; border: 1px solid var(--bord); border-radius: 8px; background: var(--surface); color: var(--bleu); font-size: 1rem; font-weight: 700; cursor: pointer; }
 .deplacer-section button:disabled { opacity: .3; cursor: default; }
+.deplacer-section .suppr-section { color: var(--rouge); }

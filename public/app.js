@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "13 nov. 2026 · Blocs du devis déplaçables";
+const VERSION_APPLI = "13 nov. 2026 · Suppression des blocs";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -3594,7 +3594,7 @@ function rendreDocument() {
       <tr class="section"><td colspan="${verrouille || v.sections.length < 2 ? 5 : 4}" ${editable} data-champ="section" data-s="${si}">${esc(s.titre)}</td>${
         verrouille || v.sections.length < 2
           ? ""
-          : `<td class="deplacer-section no-print"><button type="button" data-monter-section="${si}" ${si === 0 ? "disabled" : ""} aria-label="Monter ce bloc">↑</button><button type="button" data-descendre-section="${si}" ${si === v.sections.length - 1 ? "disabled" : ""} aria-label="Descendre ce bloc">↓</button></td>`
+          : `<td class="deplacer-section no-print"><button type="button" data-monter-section="${si}" ${si === 0 ? "disabled" : ""} aria-label="Monter ce bloc">↑</button><button type="button" data-descendre-section="${si}" ${si === v.sections.length - 1 ? "disabled" : ""} aria-label="Descendre ce bloc">↓</button><button type="button" class="suppr-section" data-suppr-section="${si}" aria-label="Supprimer ce bloc">✕</button></td>`
       }</tr>
       ${s.lignes
         .map((l, li) => {
@@ -3835,7 +3835,20 @@ function rendreDocument() {
   for (const b of $("#document").querySelectorAll("[data-suppr]")) {
     b.onclick = () => {
       const [s, l] = b.dataset.suppr.split("-").map(Number);
-      majDocument((dv) => dv.sections[s].lignes.splice(l, 1));
+      majDocument((dv) => {
+        dv.sections[s].lignes.splice(l, 1);
+        // Plus aucune ligne dans ce bloc : son titre part avec (on garde toujours au moins un bloc).
+        if (!dv.sections[s].lignes.length && dv.sections.length > 1) dv.sections.splice(s, 1);
+      });
+    };
+  }
+  for (const b of $("#document").querySelectorAll("[data-suppr-section]")) {
+    b.onclick = async () => {
+      const i = Number(b.dataset.supprSection);
+      const sec = docCourant.contenu.sections[i];
+      const n = sec?.lignes?.length ?? 0;
+      if (n && !(await demander(`Supprimer le bloc « ${sec.titre || "sans titre"} » et ${n > 1 ? `ses ${n} lignes` : "sa ligne"} ?`, { ok: "Supprimer", danger: true }))) return;
+      majDocument((dv) => dv.sections.length > 1 && dv.sections.splice(i, 1));
     };
   }
   // Ranger les blocs du devis (ex. « Murs séjour » avant « Murs cage d'escalier »).
