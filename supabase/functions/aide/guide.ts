@@ -30,6 +30,7 @@ Le champ de saisie grandit quand on écrit ; la case « L'IA me parle » lit les
 
 Options : sous une ligne, « Proposer en option ». Une option est incluse dans le prix envoyé ; le client peut la décocher avant de signer et le total baisse. Appuyer sur l'étiquette de l'option la passe en « non incluse » (le client peut alors l'ajouter).
 TVA : chaque ligne peut avoir son taux (20 %, 10 %, 5,5 %, 0 %) en touchant « TVA … » sous la ligne. Le total affiche la TVA taux par taux.
+Blocs du devis (ex. « Murs séjour », « Murs cage d'escalier ») : les flèches ↑ ↓ à droite du titre d'un bloc le montent ou le descendent ; le titre se modifie en le touchant (devis pas encore signé).
 Date de début des travaux : champ en bas du devis.
 
 # Envoyer et faire signer

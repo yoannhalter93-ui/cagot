@@ -167,7 +167,7 @@ function demanderDestinataires(initiales) {
 // ---------------------------------------------------------------------------
 // Connexion (Supabase Auth)
 // ---------------------------------------------------------------------------
-const VERSION_APPLI = "11 nov. 2026 · Situations et ouvrages";
+const VERSION_APPLI = "13 nov. 2026 · Blocs du devis déplaçables";
 const plateforme = await demarrerPlateforme();
 const { sb } = plateforme;
 $("#bandeau-demo").hidden = !plateforme.demo;
@@ -3591,7 +3591,11 @@ function rendreDocument() {
   const lignes = v.sections
     .map(
       (s, si) => `
-      <tr class="section"><td colspan="5" ${editable} data-champ="section" data-s="${si}">${esc(s.titre)}</td></tr>
+      <tr class="section"><td colspan="${verrouille || v.sections.length < 2 ? 5 : 4}" ${editable} data-champ="section" data-s="${si}">${esc(s.titre)}</td>${
+        verrouille || v.sections.length < 2
+          ? ""
+          : `<td class="deplacer-section no-print"><button type="button" data-monter-section="${si}" ${si === 0 ? "disabled" : ""} aria-label="Monter ce bloc">↑</button><button type="button" data-descendre-section="${si}" ${si === v.sections.length - 1 ? "disabled" : ""} aria-label="Descendre ce bloc">↓</button></td>`
+      }</tr>
       ${s.lignes
         .map((l, li) => {
           const estime = l.prix_source === "estime" && !verrouille;
@@ -3834,6 +3838,15 @@ function rendreDocument() {
       majDocument((dv) => dv.sections[s].lignes.splice(l, 1));
     };
   }
+  // Ranger les blocs du devis (ex. « Murs séjour » avant « Murs cage d'escalier »).
+  const deplacerSection = (i, sens) =>
+    majDocument((dv) => {
+      const j = i + sens;
+      if (j < 0 || j >= dv.sections.length) return;
+      [dv.sections[i], dv.sections[j]] = [dv.sections[j], dv.sections[i]];
+    });
+  for (const b of $("#document").querySelectorAll("[data-monter-section]")) b.onclick = () => deplacerSection(Number(b.dataset.monterSection), -1);
+  for (const b of $("#document").querySelectorAll("[data-descendre-section]")) b.onclick = () => deplacerSection(Number(b.dataset.descendreSection), 1);
   for (const b of $("#document").querySelectorAll("[data-ajout]")) {
     b.onclick = () =>
       majDocument((dv) =>
